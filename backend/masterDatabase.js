@@ -127,23 +127,40 @@ _masterRaw.exec(`
 `);
 
 // ── Seed default super-admin ──────────────────────────────────────────────────
-// In production, remove the default super-admin seed and provision credentials
-// via a secure out-of-band process (e.g. a one-time setup script with a random
-// password printed once and never stored in code).
+// In production, credentials are supplied via environment variables on first boot:
+//   SUPER_ADMIN_EMAIL     — e.g. admin@yourdomain.com
+//   SUPER_ADMIN_PASSWORD  — strong password; change after first login
+// These env vars are only used when no super-admin row exists yet (first boot).
+// After the first boot they are ignored — you may remove them from Railway.
 const hasSuperAdmin = masterDb.prepare('SELECT id FROM super_admins LIMIT 1').get();
 if (!hasSuperAdmin) {
+  const seedEmail    = process.env.SUPER_ADMIN_EMAIL;
+  const seedPassword = process.env.SUPER_ADMIN_PASSWORD;
+
   if (process.env.NODE_ENV === 'production') {
-    console.error('[FATAL] No super-admin found and NODE_ENV=production.');
-    console.error('        Run the setup script to create the first super-admin securely.');
-    process.exit(1);
+    if (!seedEmail || !seedPassword) {
+      console.error('[FATAL] No super-admin found and NODE_ENV=production.');
+      console.error('        Set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD env vars');
+      console.error('        in Railway to seed the first super-admin on startup.');
+      process.exit(1);
+    }
+    const hash = bcrypt.hashSync(seedPassword, 10);
+    masterDb.prepare(
+      'INSERT INTO super_admins (name, email, password_hash) VALUES (?, ?, ?)'
+    ).run('HireIQ Super Admin', seedEmail, hash);
+    console.log(`✅ Super-admin created: ${seedEmail}`);
+    console.warn('⚠️  You may now remove SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD from Railway env vars.');
+  } else {
+    // Development/testing only — hardcoded seed for local use
+    const devEmail = seedEmail || 'superadmin@hireiq.com';
+    const devPass  = seedPassword || 'superadmin123';
+    const hash = bcrypt.hashSync(devPass, 10);
+    masterDb.prepare(
+      'INSERT INTO super_admins (name, email, password_hash) VALUES (?, ?, ?)'
+    ).run('HireIQ Super Admin', devEmail, hash);
+    console.log(`✅ Super-admin created (dev): ${devEmail} / ${devPass}`);
+    console.warn('⚠️  Change this password immediately — never use in production!');
   }
-  // Development/testing only — hardcoded seed for local use
-  const hash = bcrypt.hashSync('superadmin123', 10);
-  masterDb.prepare(
-    'INSERT INTO super_admins (name, email, password_hash) VALUES (?, ?, ?)'
-  ).run('HireIQ Super Admin', 'superadmin@hireiq.com', hash);
-  console.log('✅ Super-admin created (dev): superadmin@hireiq.com / superadmin123');
-  console.warn('⚠️  Change this password immediately — never use in production!');
 }
 
 // ── Seed default "hireiq" tenant ──────────────────────────────────────────────
