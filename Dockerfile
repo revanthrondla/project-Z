@@ -20,9 +20,6 @@ RUN npm run build
 # ── Stage 2: Production runtime ──────────────────────────────────────────────
 FROM node:22-alpine AS production
 
-# Security: run as non-root
-RUN addgroup -S hireiq && adduser -S hireiq -G hireiq
-
 WORKDIR /app
 
 # Install backend production dependencies only
@@ -35,21 +32,16 @@ COPY backend/ ./
 # Copy built frontend from stage 1 into the location Express expects
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Persistent data volume mount point
-# All SQLite databases (master.db + per-tenant DBs) live here
-RUN mkdir -p /data && chown hireiq:hireiq /data
-
-# Uploads directory
-RUN mkdir -p /data/uploads && chown hireiq:hireiq /data/uploads
-
-# Switch to non-root user
-USER hireiq
+# Pre-create the data directories inside the WORKDIR so the process
+# always has write access regardless of how the volume is mounted.
+# Railway mounts the volume here, preserving the directory ownership.
+RUN mkdir -p /app/data/tenants /app/data/uploads
 
 # Environment defaults (override at runtime via platform env vars)
 ENV NODE_ENV=production \
     PORT=3001 \
-    HIREIQ_DATA_DIR=/data \
-    HIREIQ_DB_PATH=/data/hireiq.db
+    HIREIQ_DATA_DIR=/app/data \
+    HIREIQ_DB_PATH=/app/data/hireiq.db
 
 EXPOSE 3001
 
