@@ -43,7 +43,7 @@ function notifyTenantUserByEmail(tenantSlug, email, type, title, message, refId)
 
 // ── POST /api/platform-support/tickets ───────────────────────────────────────
 // Tenant admin or client submits a platform-level ticket
-router.post('/tickets', injectTenantDb, (req, res) => {
+router.post('/tickets', injectTenantDb, async (req, res) => {
   const { role, email, tenantSlug } = req.user;
   if (!['admin', 'client', 'candidate'].includes(role)) {
     return res.status(403).json({ error: 'Only tenant users can submit platform support tickets' });
@@ -53,18 +53,18 @@ router.post('/tickets', injectTenantDb, (req, res) => {
     return res.status(400).json({ error: 'Subject and description are required' });
   }
 
-  const result = masterDb.prepare(`
+  const result = await masterDb.prepare(`
     INSERT INTO platform_support_tickets (tenant_slug, submitted_by, submitter_role, subject, description, priority)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(tenantSlug, email, role, subject.trim(), description.trim(), priority);
 
-  const ticket = masterDb.prepare('SELECT * FROM platform_support_tickets WHERE id = ?').get(result.lastInsertRowid);
+  const ticket = await masterDb.prepare('SELECT * FROM platform_support_tickets WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(ticket);
 });
 
 // ── GET /api/platform-support/tickets ─────────────────────────────────────────
 // Super-admin: list all tickets (with filters)
-router.get('/tickets', requireSuperAdmin, (req, res) => {
+router.get('/tickets', requireSuperAdmin, async (req, res) => {
   const { status, priority, tenant, page = 1, limit = 50 } = req.query;
   const offset = (Math.max(1, parseInt(page)) - 1) * Math.min(100, parseInt(limit) || 50);
 
@@ -74,8 +74,8 @@ router.get('/tickets', requireSuperAdmin, (req, res) => {
   if (priority) { where += ' AND t.priority = ?';    params.push(priority); }
   if (tenant)   { where += ' AND t.tenant_slug = ?'; params.push(tenant); }
 
-  const total = masterDb.prepare(`SELECT COUNT(*) as c FROM platform_support_tickets t ${where}`).get(...params);
-  const tickets = masterDb.prepare(`
+  const total = await masterDb.prepare(`SELECT COUNT(*) as c FROM platform_support_tickets t ${where}`).get(...params);
+  const tickets = await masterDb.prepare(`
     SELECT t.*,
            (SELECT COUNT(*) FROM platform_support_messages WHERE ticket_id = t.id) as message_count
     FROM platform_support_tickets t
@@ -91,9 +91,9 @@ router.get('/tickets', requireSuperAdmin, (req, res) => {
 
 // ── GET /api/platform-support/tickets/mine ────────────────────────────────────
 // Tenant user: list their own tickets
-router.get('/tickets/mine', injectTenantDb, (req, res) => {
+router.get('/tickets/mine', injectTenantDb, async (req, res) => {
   const { email, tenantSlug } = req.user;
-  const tickets = masterDb.prepare(`
+  const tickets = await masterDb.prepare(`
     SELECT t.*,
            (SELECT COUNT(*) FROM platform_support_messages WHERE ticket_id = t.id) as message_count
     FROM platform_support_tickets t
@@ -104,9 +104,9 @@ router.get('/tickets/mine', injectTenantDb, (req, res) => {
 });
 
 // ── GET /api/platform-support/tickets/:id ─────────────────────────────────────
-router.get('/tickets/:id', injectTenantDb, (req, res) => {
+router.get('/tickets/:id', injectTenantDb, async (req, res) => {
   const id = parseInt(req.params.id);
-  const ticket = masterDb.prepare('SELECT * FROM platform_support_tickets WHERE id = ?').get(id);
+  const ticket = await masterDb.prepare('SELECT * FROM platform_support_tickets WHERE id = ?').get(id);
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
   // Access: super-admin sees all; tenant users see only their tenant's tickets
@@ -114,7 +114,7 @@ router.get('/tickets/:id', injectTenantDb, (req, res) => {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  const messages = masterDb.prepare(
+  const messages = await masterDb.prepare(
     'SELECT * FROM platform_support_messages WHERE ticket_id = ? ORDER BY created_at ASC'
   ).all(id);
 
@@ -123,17 +123,17 @@ router.get('/tickets/:id', injectTenantDb, (req, res) => {
 
 // ── PUT /api/platform-support/tickets/:id ─────────────────────────────────────
 // Super-admin updates status / priority
-router.put('/tickets/:id', requireSuperAdmin, (req, res) => {
+router.put('/tickets/:id', requireSuperAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
-  const ticket = masterDb.prepare('SELECT * FROM platform_support_tickets WHERE id = ?').get(id);
+  const ticket = await masterDb.prepare('SELECT * FROM platform_support_tickets WHERE id = ?').get(id);
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
   const { status, priority } = req.body;
   const newStatus   = status   || ticket.status;
   const newPriority = priority || ticket.priority;
 
-  masterDb.prepare(`
-    UPDATE platform_support_tickets SET status = ?, priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+  await masterDb.prepare(`
+    UPDATE platform_support_tickets SET status = ?, priority = ?, updated_at = NOW() WHERE id = ?
   `).run(newStatus, newPriority, id);
 
   // Notify submitter in tenant DB
@@ -147,14 +147,14 @@ router.put('/tickets/:id', requireSuperAdmin, (req, res) => {
     id
   );
 
-  res.json(masterDb.prepare('SELECT * FROM platform_support_tickets WHERE id = ?').get(id));
+  res.json(await masterDb.prepare('SELECT * FROM platform_support_tickets WHERE id = ?').get(id));
 });
 
 // ── POST /api/platform-support/tickets/:id/messages ──────────────────────────
 // Super-admin or original submitter adds a message
-router.post('/tickets/:id/messages', injectTenantDb, (req, res) => {
+router.post('/tickets/:id/messages', injectTenantDb, async (req, res) => {
   const id = parseInt(req.params.id);
-  const ticket = masterDb.prepare('SELECT * FROM platform_support_tickets WHERE id = ?').get(id);
+  const ticket = await masterDb.prepare('SELECT * FROM platform_support_tickets WHERE id = ?').get(id);
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
   const { role, email, tenantSlug } = req.user;
@@ -168,13 +168,13 @@ router.post('/tickets/:id/messages', injectTenantDb, (req, res) => {
   const { message } = req.body;
   if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
 
-  masterDb.prepare(`
+  await masterDb.prepare(`
     INSERT INTO platform_support_messages (ticket_id, sender, sender_role, message)
     VALUES (?, ?, ?, ?)
   `).run(id, email, role, message.trim());
 
   // Update ticket timestamp
-  masterDb.prepare('UPDATE platform_support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  await masterDb.prepare('UPDATE platform_support_tickets SET updated_at = NOW() WHERE id = ?').run(id);
 
   if (isSuperAdmin) {
     // Notify submitter
@@ -190,7 +190,7 @@ router.post('/tickets/:id/messages', injectTenantDb, (req, res) => {
     console.log(`[PlatformSupport] Tenant ${tenantSlug} replied to ticket #${id}`);
   }
 
-  const msgs = masterDb.prepare(
+  const msgs = await masterDb.prepare(
     'SELECT * FROM platform_support_messages WHERE ticket_id = ? ORDER BY created_at ASC'
   ).all(id);
   res.status(201).json({ messages: msgs });
@@ -198,8 +198,8 @@ router.post('/tickets/:id/messages', injectTenantDb, (req, res) => {
 
 // ── GET /api/platform-support/stats ─────────────────────────────────────────
 // Super-admin: summary counts
-router.get('/stats', requireSuperAdmin, (req, res) => {
-  const stats = masterDb.prepare(`
+router.get('/stats', requireSuperAdmin, async (req, res) => {
+  const stats = await masterDb.prepare(`
     SELECT
       COUNT(*) as total,
       SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open,

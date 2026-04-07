@@ -64,26 +64,30 @@ function resolveRequiredSigners(signatureType, signers) {
 }
 
 /** After a new signature is saved, recalculate document status */
-function recalcDocumentStatus(db, documentId) {
-  const doc = db.prepare('SELECT required_signers FROM documents WHERE id = ?').get(documentId);
-  if (!doc) return;
+async function recalcDocumentStatus(db, documentId) {
+  try {
+    const doc = await db.prepare('SELECT required_signers FROM documents WHERE id = ?').get(documentId);
+    if (!doc) return;
 
-  const required = doc.required_signers ? doc.required_signers.split(',') : [];
-  if (required.length === 0) {
-    db.prepare("UPDATE documents SET status='completed', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(documentId);
-    return;
+    const required = doc.required_signers ? doc.required_signers.split(',') : [];
+    if (required.length === 0) {
+      await db.prepare("UPDATE documents SET status='completed', updated_at=NOW() WHERE id=?").run(documentId);
+      return;
+    }
+
+    const sigs = await db.prepare(
+      "SELECT signer_role, status FROM document_signatures WHERE document_id = ?"
+    ).all(documentId);
+
+    const signedRoles = sigs.filter(s => s.status === 'signed').map(s => s.signer_role);
+    const allSigned = required.every(r => signedRoles.includes(r));
+    const anySigned = required.some(r => signedRoles.includes(r));
+
+    const newStatus = allSigned ? 'completed' : anySigned ? 'partial' : 'pending';
+    await db.prepare('UPDATE documents SET status=?, updated_at=NOW() WHERE id=?').run(newStatus, documentId);
+  } catch (err) {
+    console.error('recalcDocumentStatus error:', err.message);
   }
-
-  const sigs = db.prepare(
-    "SELECT signer_role, status FROM document_signatures WHERE document_id = ?"
-  ).all(documentId);
-
-  const signedRoles = sigs.filter(s => s.status === 'signed').map(s => s.signer_role);
-  const allSigned = required.every(r => signedRoles.includes(r));
-  const anySigned = required.some(r => signedRoles.includes(r));
-
-  const newStatus = allSigned ? 'completed' : anySigned ? 'partial' : 'pending';
-  db.prepare('UPDATE documents SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(newStatus, documentId);
 }
 
 /** Check if current user is allowed to access a document */
@@ -95,7 +99,7 @@ function canAccess(user, doc) {
 }
 
 // ── GET /api/documents — list documents visible to the current user ────────────
-router.get('/', authenticate, injectTenantDb, (req, res) => {
+router.get('/', authenticate, injectTenantDb, async (req, res) => {
   const { candidate_id, client_id, status } = req.query;
   const user = req.user;
 
@@ -130,12 +134,16 @@ router.get('/', authenticate, injectTenantDb, (req, res) => {
   if (status) { sql += ' AND d.status = ?'; params.push(status); }
   sql += ' ORDER BY d.created_at DESC';
 
-  const docs = req.db.prepare(sql).all(...params);
-  res.json(docs);
+  try {
+    const docs = await req.db.prepare(sql).all(...params);
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── POST /api/documents — upload a new document ───────────────────────────────
-router.post('/', authenticate, injectTenantDb, upload.single('file'), (req, res) => {
+router.post('/', authenticate, injectTenantDb, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'File is required' });
 
   // Validate magic bytes to prevent MIME-type spoofing
@@ -189,7 +197,7 @@ router.post('/', authenticate, injectTenantDb, upload.single('file'), (req, res)
   if (signature_type === 'two_way'   && signerList.length !== 2) return res.status(400).json({ error: 'two_way requires exactly 2 signers' });
   if (signature_type === 'three_way' && signerList.length !== 3) return res.status(400).json({ error: 'three_way requires exactly 3 signers' });
 
-  const result = req.db.prepare(`
+  const result = await req.db.prepare(`
     INSERT INTO documents
       (title, description, file_name, file_path, file_size, mime_type,
        uploaded_by, candidate_id, client_id, signature_type, required_signers, status)
@@ -213,7 +221,7 @@ router.post('/', authenticate, injectTenantDb, upload.single('file'), (req, res)
 
   // Create pending signature records for each required signer
   if (signerList.length > 0) {
-    const insertSig = req.db.prepare(`
+    const insertSig = await req.db.prepare(`
       INSERT INTO document_signatures (document_id, signer_role, status)
       VALUES (?, ?, 'pending')
     `);
@@ -222,13 +230,13 @@ router.post('/', authenticate, injectTenantDb, upload.single('file'), (req, res)
     }
   }
 
-  const doc = req.db.prepare('SELECT * FROM documents WHERE id = ?').get(docId);
+  const doc = await req.db.prepare('SELECT * FROM documents WHERE id = ?').get(docId);
   res.status(201).json(doc);
 });
 
 // ── GET /api/documents/:id — document detail with signatures ──────────────────
-router.get('/:id', authenticate, injectTenantDb, (req, res) => {
-  const doc = req.db.prepare(`
+router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
+  const doc = await req.db.prepare(`
     SELECT d.*,
       u.name  AS uploaded_by_name,
       c.name  AS candidate_name, c.email AS candidate_email,
@@ -243,7 +251,7 @@ router.get('/:id', authenticate, injectTenantDb, (req, res) => {
   if (!doc) return res.status(404).json({ error: 'Document not found' });
   if (!canAccess(req.user, doc)) return res.status(403).json({ error: 'Access denied' });
 
-  const signatures = req.db.prepare(`
+  const signatures = await req.db.prepare(`
     SELECT ds.*, u.name AS user_name, u.email AS user_email
     FROM document_signatures ds
     LEFT JOIN users u ON u.id = ds.signer_user_id
@@ -255,8 +263,8 @@ router.get('/:id', authenticate, injectTenantDb, (req, res) => {
 });
 
 // ── GET /api/documents/:id/file — serve the actual file ──────────────────────
-router.get('/:id/file', authenticate, injectTenantDb, (req, res) => {
-  const doc = req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+router.get('/:id/file', authenticate, injectTenantDb, async (req, res) => {
+  const doc = await req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
   if (!doc) return res.status(404).json({ error: 'Document not found' });
   if (!canAccess(req.user, doc)) return res.status(403).json({ error: 'Access denied' });
 
@@ -283,7 +291,7 @@ router.get('/:id/file', authenticate, injectTenantDb, (req, res) => {
 });
 
 // ── POST /api/documents/:id/sign — submit a signature ────────────────────────
-router.post('/:id/sign', authenticate, injectTenantDb, (req, res) => {
+router.post('/:id/sign', authenticate, injectTenantDb, async (req, res) => {
   const { signature_data } = req.body;
   if (!signature_data) return res.status(400).json({ error: 'signature_data is required' });
   // Validate signature_data is a data-URL and within a reasonable size (max ~2MB base64)
@@ -294,7 +302,7 @@ router.post('/:id/sign', authenticate, injectTenantDb, (req, res) => {
     return res.status(400).json({ error: 'Signature image is too large (max 2MB)' });
   }
 
-  const doc = req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+  const doc = await req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
   if (!doc) return res.status(404).json({ error: 'Document not found' });
   if (doc.status === 'completed') return res.status(409).json({ error: 'Document is already fully signed' });
   if (doc.status === 'voided')    return res.status(400).json({ error: 'Document has been voided' });
@@ -310,7 +318,7 @@ router.post('/:id/sign', authenticate, injectTenantDb, (req, res) => {
   if (!canAccess(user, doc)) return res.status(403).json({ error: 'Access denied' });
 
   // Find the pending signature slot for this role
-  const sigSlot = req.db.prepare(`
+  const sigSlot = await req.db.prepare(`
     SELECT * FROM document_signatures
     WHERE document_id = ? AND signer_role = ? AND status = 'pending'
     LIMIT 1
@@ -318,7 +326,7 @@ router.post('/:id/sign', authenticate, injectTenantDb, (req, res) => {
 
   if (!sigSlot) {
     // Check if already signed
-    const already = req.db.prepare(`
+    const already = await req.db.prepare(`
       SELECT * FROM document_signatures
       WHERE document_id = ? AND signer_role = ? AND status = 'signed'
     `).get(doc.id, signerRole);
@@ -328,18 +336,18 @@ router.post('/:id/sign', authenticate, injectTenantDb, (req, res) => {
 
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || null;
 
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE document_signatures
     SET signer_user_id = ?, signer_name = ?, signer_email = ?,
-        signature_data = ?, signed_at = CURRENT_TIMESTAMP,
+        signature_data = ?, signed_at = NOW(),
         status = 'signed', ip_address = ?
     WHERE id = ?
   `).run(user.id, user.name, user.email, signature_data, ip, sigSlot.id);
 
   recalcDocumentStatus(req.db, doc.id);
 
-  const updated = req.db.prepare('SELECT * FROM documents WHERE id = ?').get(doc.id);
-  const signatures = req.db.prepare(
+  const updated = await req.db.prepare('SELECT * FROM documents WHERE id = ?').get(doc.id);
+  const signatures = await req.db.prepare(
     'SELECT * FROM document_signatures WHERE document_id = ? ORDER BY id'
   ).all(doc.id);
 
@@ -347,10 +355,10 @@ router.post('/:id/sign', authenticate, injectTenantDb, (req, res) => {
 });
 
 // ── POST /api/documents/:id/reject — reject signing ──────────────────────────
-router.post('/:id/reject', authenticate, injectTenantDb, (req, res) => {
+router.post('/:id/reject', authenticate, injectTenantDb, async (req, res) => {
   const { reason } = req.body;
 
-  const doc = req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+  const doc = await req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
   if (!doc) return res.status(404).json({ error: 'Document not found' });
   if (doc.status === 'voided') return res.status(400).json({ error: 'Document already voided' });
 
@@ -359,7 +367,7 @@ router.post('/:id/reject', authenticate, injectTenantDb, (req, res) => {
 
   if (!canAccess(user, doc)) return res.status(403).json({ error: 'Access denied' });
 
-  const sigSlot = req.db.prepare(`
+  const sigSlot = await req.db.prepare(`
     SELECT * FROM document_signatures
     WHERE document_id = ? AND signer_role = ? AND status = 'pending'
     LIMIT 1
@@ -367,22 +375,22 @@ router.post('/:id/reject', authenticate, injectTenantDb, (req, res) => {
 
   if (!sigSlot) return res.status(400).json({ error: 'No pending signature slot for your role' });
 
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE document_signatures
-    SET signer_user_id = ?, signer_name = ?, status = 'rejected', signed_at = CURRENT_TIMESTAMP
+    SET signer_user_id = ?, signer_name = ?, status = 'rejected', signed_at = NOW()
     WHERE id = ?
   `).run(user.id, user.name, sigSlot.id);
 
   // Void the document when anyone rejects
-  req.db.prepare("UPDATE documents SET status='voided', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(doc.id);
+  await req.db.prepare("UPDATE documents SET status='voided', updated_at=NOW() WHERE id=?").run(doc.id);
 
-  const updatedDoc = req.db.prepare('SELECT * FROM documents WHERE id = ?').get(doc.id);
+  const updatedDoc = await req.db.prepare('SELECT * FROM documents WHERE id = ?').get(doc.id);
   res.json({ message: 'Document signing rejected', reason: reason || null, document: updatedDoc });
 });
 
 // ── DELETE /api/documents/:id — admin or uploader can delete ─────────────────
-router.delete('/:id', authenticate, injectTenantDb, (req, res) => {
-  const doc = req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+router.delete('/:id', authenticate, injectTenantDb, async (req, res) => {
+  const doc = await req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
   if (!doc) return res.status(404).json({ error: 'Document not found' });
 
   const user = req.user;
@@ -396,26 +404,26 @@ router.delete('/:id', authenticate, injectTenantDb, (req, res) => {
     try { fs.unlinkSync(filePath); } catch (_) {}
   }
 
-  req.db.prepare('DELETE FROM documents WHERE id = ?').run(doc.id);
+  await req.db.prepare('DELETE FROM documents WHERE id = ?').run(doc.id);
   res.json({ message: 'Document deleted' });
 });
 
 // ── PATCH /api/documents/:id/void — admin can void a document ────────────────
 router.patch('/:id/void', authenticate, requireAdmin, injectTenantDb, (req, res) => {
-  const doc = req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+  const doc = await req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
   if (!doc) return res.status(404).json({ error: 'Document not found' });
 
-  req.db.prepare("UPDATE documents SET status='voided', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(doc.id);
+  await req.db.prepare("UPDATE documents SET status='voided', updated_at=NOW() WHERE id=?").run(doc.id);
   res.json({ message: 'Document voided' });
 });
 
 // ── GET /api/documents/:id/audit — full audit trail ──────────────────────────
-router.get('/:id/audit', authenticate, injectTenantDb, (req, res) => {
-  const doc = req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+router.get('/:id/audit', authenticate, injectTenantDb, async (req, res) => {
+  const doc = await req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
   if (!doc) return res.status(404).json({ error: 'Document not found' });
   if (!canAccess(req.user, doc)) return res.status(403).json({ error: 'Access denied' });
 
-  const signatures = req.db.prepare(`
+  const signatures = await req.db.prepare(`
     SELECT ds.*, u.name AS user_name, u.email AS user_email
     FROM document_signatures ds
     LEFT JOIN users u ON u.id = ds.signer_user_id

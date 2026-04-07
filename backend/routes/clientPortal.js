@@ -13,7 +13,7 @@ function requireClient(req, res, next) {
 
 // ── Admin: create a login for a client ───────────────────────────────────
 // POST /api/client-portal/admin/clients/:id/create-login
-router.post('/admin/clients/:id/create-login', authenticate, requireAdmin, injectTenantDb, (req, res) => {
+router.post('/admin/clients/:id/create-login', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   const clientId = parseInt(req.params.id);
   const { email, name, password } = req.body;
 
@@ -21,7 +21,7 @@ router.post('/admin/clients/:id/create-login', authenticate, requireAdmin, injec
     return res.status(400).json({ error: 'email, name, and password are required' });
   }
 
-  const client = req.db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
+  const client = await req.db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
   if (!client) return res.status(404).json({ error: 'Client not found' });
 
   // Check not already linked
@@ -30,47 +30,47 @@ router.post('/admin/clients/:id/create-login', authenticate, requireAdmin, injec
   }
 
   // Check email unique
-  const existing = req.db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
+  const existing = await req.db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
   if (existing) return res.status(400).json({ error: 'Email already in use' });
 
-  const hash = bcrypt.hashSync(password, 10);
-  const userResult = req.db.prepare(
+  const hash = await bcrypt.hash(password, 10);
+  const userResult = await req.db.prepare(
     "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'client')"
   ).run(name.trim(), email.toLowerCase(), hash);
 
-  req.db.prepare('UPDATE clients SET user_id = ? WHERE id = ?').run(userResult.lastInsertRowid, clientId);
+  await req.db.prepare('UPDATE clients SET user_id = ? WHERE id = ?').run(userResult.lastInsertRowid, clientId);
 
   res.json({ message: 'Client login created', userId: userResult.lastInsertRowid });
 });
 
 // ── Admin: remove client login ────────────────────────────────────────────
-router.delete('/admin/clients/:id/remove-login', authenticate, requireAdmin, injectTenantDb, (req, res) => {
+router.delete('/admin/clients/:id/remove-login', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   const clientId = parseInt(req.params.id);
-  const client = req.db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
+  const client = await req.db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
   if (!client) return res.status(404).json({ error: 'Client not found' });
   if (!client.user_id) return res.status(400).json({ error: 'No login to remove' });
 
-  req.db.prepare('DELETE FROM users WHERE id = ?').run(client.user_id);
-  req.db.prepare('UPDATE clients SET user_id = NULL WHERE id = ?').run(clientId);
+  await req.db.prepare('DELETE FROM users WHERE id = ?').run(client.user_id);
+  await req.db.prepare('UPDATE clients SET user_id = NULL WHERE id = ?').run(clientId);
 
   res.json({ message: 'Client login removed' });
 });
 
 // ── Client: get own profile + client record ───────────────────────────────
 // GET /api/client-portal/me
-router.get('/me', authenticate, requireClient, injectTenantDb, (req, res) => {
-  const client = req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
+router.get('/me', authenticate, requireClient, injectTenantDb, async (req, res) => {
+  const client = await req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
   if (!client) return res.status(404).json({ error: 'No client record linked to this account' });
   res.json({ user: req.user, client });
 });
 
 // ── Client: dashboard — candidates working for this client ───────────────
 // GET /api/client-portal/dashboard
-router.get('/dashboard', authenticate, requireClient, injectTenantDb, (req, res) => {
-  const client = req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
+router.get('/dashboard', authenticate, requireClient, injectTenantDb, async (req, res) => {
+  const client = await req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
   if (!client) return res.status(404).json({ error: 'No client record found' });
 
-  const candidates = req.db.prepare(`
+  const candidates = await req.db.prepare(`
     SELECT
       c.id, c.name, c.email, c.phone, c.role, c.hourly_rate,
       c.start_date, c.end_date, c.status, c.contract_type,
@@ -84,7 +84,7 @@ router.get('/dashboard', authenticate, requireClient, injectTenantDb, (req, res)
     ORDER BY c.name
   `).all(client.id);
 
-  const recentTimesheets = req.db.prepare(`
+  const recentTimesheets = await req.db.prepare(`
     SELECT te.*, cand.name AS candidate_name
     FROM time_entries te
     JOIN candidates cand ON te.candidate_id = cand.id
@@ -93,7 +93,7 @@ router.get('/dashboard', authenticate, requireClient, injectTenantDb, (req, res)
     LIMIT 20
   `).all(client.id);
 
-  const kpis = req.db.prepare(`
+  const kpis = await req.db.prepare(`
     SELECT
       COUNT(DISTINCT c.id) AS total_candidates,
       COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 0) AS total_approved_hours,
@@ -109,11 +109,11 @@ router.get('/dashboard', authenticate, requireClient, injectTenantDb, (req, res)
 
 // ── Client: list invoices for this client ─────────────────────────────────
 // GET /api/client-portal/invoices
-router.get('/invoices', authenticate, requireClient, injectTenantDb, (req, res) => {
-  const client = req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
+router.get('/invoices', authenticate, requireClient, injectTenantDb, async (req, res) => {
+  const client = await req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
   if (!client) return res.status(404).json({ error: 'No client record found' });
 
-  const invoices = req.db.prepare(`
+  const invoices = await req.db.prepare(`
     SELECT i.*, cand.name AS candidate_name, cand.role AS candidate_role
     FROM invoices i
     JOIN candidates cand ON i.candidate_id = cand.id
@@ -126,11 +126,11 @@ router.get('/invoices', authenticate, requireClient, injectTenantDb, (req, res) 
 
 // ── Client: get a single invoice + line items ────────────────────────────
 // GET /api/client-portal/invoices/:id
-router.get('/invoices/:id', authenticate, requireClient, injectTenantDb, (req, res) => {
-  const client = req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
+router.get('/invoices/:id', authenticate, requireClient, injectTenantDb, async (req, res) => {
+  const client = await req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
   if (!client) return res.status(404).json({ error: 'No client record found' });
 
-  const invoice = req.db.prepare(`
+  const invoice = await req.db.prepare(`
     SELECT i.*, cand.name AS candidate_name, cand.role AS candidate_role, cand.hourly_rate
     FROM invoices i
     JOIN candidates cand ON i.candidate_id = cand.id
@@ -139,7 +139,7 @@ router.get('/invoices/:id', authenticate, requireClient, injectTenantDb, (req, r
 
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-  const lineItems = req.db.prepare(
+  const lineItems = await req.db.prepare(
     'SELECT * FROM invoice_line_items WHERE invoice_id = ? ORDER BY date'
   ).all(invoice.id);
 
@@ -148,12 +148,12 @@ router.get('/invoices/:id', authenticate, requireClient, injectTenantDb, (req, r
 
 // ── Client: update a line item (date, description, hours) ────────────────
 // PUT /api/client-portal/invoices/:id/line-items/:lineId
-router.put('/invoices/:id/line-items/:lineId', authenticate, requireClient, injectTenantDb, (req, res) => {
-  const client = req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
+router.put('/invoices/:id/line-items/:lineId', authenticate, requireClient, injectTenantDb, async (req, res) => {
+  const client = await req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
   if (!client) return res.status(404).json({ error: 'No client record found' });
 
   // Verify invoice belongs to this client and is in reviewable state
-  const invoice = req.db.prepare(
+  const invoice = await req.db.prepare(
     "SELECT * FROM invoices WHERE id = ? AND client_id = ?"
   ).get(req.params.id, client.id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
@@ -163,7 +163,7 @@ router.put('/invoices/:id/line-items/:lineId', authenticate, requireClient, inje
     return res.status(400).json({ error: `Cannot edit line items on a ${invoice.status} invoice` });
   }
 
-  const lineItem = req.db.prepare(
+  const lineItem = await req.db.prepare(
     'SELECT * FROM invoice_line_items WHERE id = ? AND invoice_id = ?'
   ).get(req.params.lineId, req.params.id);
   if (!lineItem) return res.status(404).json({ error: 'Line item not found' });
@@ -176,39 +176,39 @@ router.put('/invoices/:id/line-items/:lineId', authenticate, requireClient, inje
 
   const newAmount = parseFloat((newHours * lineItem.rate).toFixed(2));
 
-  req.db.prepare(
+  await req.db.prepare(
     'UPDATE invoice_line_items SET date = ?, description = ?, hours = ?, amount = ? WHERE id = ?'
   ).run(date || lineItem.date, description ?? lineItem.description, newHours, newAmount, lineItem.id);
 
   // Recalculate invoice totals from line items
-  const totals = req.db.prepare(`
+  const totals = await req.db.prepare(`
     SELECT COALESCE(SUM(hours), 0) AS total_hours, COALESCE(SUM(amount), 0) AS total_amount
     FROM invoice_line_items WHERE invoice_id = ?
   `).get(invoice.id);
 
-  req.db.prepare(
-    "UPDATE invoices SET total_hours = ?, total_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+  await req.db.prepare(
+    "UPDATE invoices SET total_hours = ?, total_amount = ?, updated_at = NOW() WHERE id = ?"
   ).run(totals.total_hours, totals.total_amount, invoice.id);
 
-  const updatedLineItem = req.db.prepare('SELECT * FROM invoice_line_items WHERE id = ?').get(lineItem.id);
-  const updatedInvoice = req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice.id);
+  const updatedLineItem = await req.db.prepare('SELECT * FROM invoice_line_items WHERE id = ?').get(lineItem.id);
+  const updatedInvoice = await req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice.id);
 
   res.json({ lineItem: updatedLineItem, invoice: updatedInvoice });
 });
 
 // ── Client: add a note on invoice ────────────────────────────────────────
 // PUT /api/client-portal/invoices/:id/notes
-router.put('/invoices/:id/notes', authenticate, requireClient, injectTenantDb, (req, res) => {
-  const client = req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
+router.put('/invoices/:id/notes', authenticate, requireClient, injectTenantDb, async (req, res) => {
+  const client = await req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
   if (!client) return res.status(404).json({ error: 'No client record found' });
 
-  const invoice = req.db.prepare(
+  const invoice = await req.db.prepare(
     'SELECT * FROM invoices WHERE id = ? AND client_id = ?'
   ).get(req.params.id, client.id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-  req.db.prepare(
-    "UPDATE invoices SET client_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+  await req.db.prepare(
+    "UPDATE invoices SET client_notes = ?, updated_at = NOW() WHERE id = ?"
   ).run(req.body.client_notes ?? '', invoice.id);
 
   res.json({ message: 'Notes saved' });
@@ -216,11 +216,11 @@ router.put('/invoices/:id/notes', authenticate, requireClient, injectTenantDb, (
 
 // ── Client: approve invoice ───────────────────────────────────────────────
 // POST /api/client-portal/invoices/:id/approve
-router.post('/invoices/:id/approve', authenticate, requireClient, injectTenantDb, (req, res) => {
-  const client = req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
+router.post('/invoices/:id/approve', authenticate, requireClient, injectTenantDb, async (req, res) => {
+  const client = await req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
   if (!client) return res.status(404).json({ error: 'No client record found' });
 
-  const invoice = req.db.prepare(
+  const invoice = await req.db.prepare(
     'SELECT * FROM invoices WHERE id = ? AND client_id = ?'
   ).get(req.params.id, client.id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
@@ -230,21 +230,21 @@ router.post('/invoices/:id/approve', authenticate, requireClient, injectTenantDb
     return res.status(400).json({ error: `Cannot approve an invoice with status: ${invoice.status}` });
   }
 
-  req.db.prepare(
-    "UPDATE invoices SET status = 'client_approved', client_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+  await req.db.prepare(
+    "UPDATE invoices SET status = 'client_approved', client_notes = ?, updated_at = NOW() WHERE id = ?"
   ).run(req.body.client_notes ?? invoice.client_notes ?? null, invoice.id);
 
-  const updated = req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice.id);
+  const updated = await req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice.id);
   res.json({ message: 'Invoice approved by client', invoice: updated });
 });
 
 // ── Client: reject / request revision ────────────────────────────────────
 // POST /api/client-portal/invoices/:id/reject
-router.post('/invoices/:id/reject', authenticate, requireClient, injectTenantDb, (req, res) => {
-  const client = req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
+router.post('/invoices/:id/reject', authenticate, requireClient, injectTenantDb, async (req, res) => {
+  const client = await req.db.prepare('SELECT * FROM clients WHERE user_id = ?').get(req.user.id);
   if (!client) return res.status(404).json({ error: 'No client record found' });
 
-  const invoice = req.db.prepare(
+  const invoice = await req.db.prepare(
     'SELECT * FROM invoices WHERE id = ? AND client_id = ?'
   ).get(req.params.id, client.id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
@@ -254,11 +254,11 @@ router.post('/invoices/:id/reject', authenticate, requireClient, injectTenantDb,
     return res.status(400).json({ error: `Cannot reject an invoice with status: ${invoice.status}` });
   }
 
-  req.db.prepare(
-    "UPDATE invoices SET status = 'sent', client_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+  await req.db.prepare(
+    "UPDATE invoices SET status = 'sent', client_notes = ?, updated_at = NOW() WHERE id = ?"
   ).run(req.body.client_notes ?? null, invoice.id);
 
-  const updated = req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice.id);
+  const updated = await req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice.id);
   res.json({ message: 'Invoice sent back for revision', invoice: updated });
 });
 

@@ -24,46 +24,50 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 // ── Helper: read tenant AI settings ──────────────────────────────────────────
 
-function getTenantAISettings(db) {
-  try { return db.prepare('SELECT * FROM ai_settings WHERE id=1').get(); } catch { return null; }
+async function getTenantAISettings(db) {
+  try { return await db.prepare('SELECT * FROM ai_settings WHERE id=1').get(); } catch { return null; }
 }
 
-function getPlatformAIConfig() {
-  try { return masterDb.prepare('SELECT * FROM platform_ai_config WHERE id=1').get(); } catch { return null; }
+async function getPlatformAIConfig() {
+  try { return await masterDb.prepare('SELECT * FROM platform_ai_config WHERE id=1').get(); } catch { return null; }
 }
 
-/** FTS document search — returns top-3 relevant snippets */
-function searchDocuments(db, query) {
+/** FTS document search — returns top-3 relevant snippets (PostgreSQL tsvector) */
+async function searchDocuments(db, query) {
   try {
-    const rows = db.prepare(`
-      SELECT d.title, snippet(ai_documents_fts, 1, '', '', '…', 32) AS excerpt
-      FROM ai_documents_fts f
-      JOIN ai_documents d ON d.id = f.rowid
-      WHERE ai_documents_fts MATCH ?
-      ORDER BY rank
+    // Strip characters that aren't valid in websearch_to_tsquery
+    const safeQuery = query.replace(/[^a-zA-Z0-9 ]/g, ' ').trim();
+    if (!safeQuery) return [];
+    const rows = await db.prepare(`
+      SELECT d.title,
+             ts_headline('english', d.content, websearch_to_tsquery('english', ?),
+               'MaxWords=35, MinWords=15, StartSel=, StopSel=, HighlightAll=FALSE') AS excerpt
+      FROM ai_documents d
+      WHERE d.search_vector @@ websearch_to_tsquery('english', ?)
+      ORDER BY ts_rank(d.search_vector, websearch_to_tsquery('english', ?)) DESC
       LIMIT 3
-    `).all(query.replace(/[^a-zA-Z0-9 ]/g, ' ').trim() + '*');
+    `).all(safeQuery, safeQuery, safeQuery);
     return rows;
   } catch { return []; }
 }
 
 /** Pull a concise snapshot of tenant data the AI can use as context */
-function buildDataContext(db) {
+async function buildDataContext(db) {
   try {
-    const employees = db.prepare(`
-      SELECT name, job_title, hourly_rate, status
+    const employees = await db.prepare(`
+      SELECT name, role AS job_title, hourly_rate, status
       FROM candidates WHERE deleted_at IS NULL LIMIT 20
     `).all();
 
-    const clients = db.prepare(`
+    const clients = await db.prepare(`
       SELECT name, contact_name, email FROM clients LIMIT 10
     `).all();
 
-    const pendingTS = db.prepare(`
+    const pendingTS = await db.prepare(`
       SELECT COUNT(*) as count FROM time_entries WHERE status='pending'
     `).get();
 
-    const pendingAbs = db.prepare(`
+    const pendingAbs = await db.prepare(`
       SELECT COUNT(*) as count FROM absences WHERE status='pending'
     `).get();
 
@@ -195,34 +199,34 @@ const TOOLS = [
 
 // ── Tool executor ─────────────────────────────────────────────────────────────
 
-function executeTool(db, toolName, input, userId) {
+async function executeTool(db, toolName, input, userId) {
   try {
     switch (toolName) {
       case 'get_headcount': {
-        const total   = db.prepare("SELECT COUNT(*) as c FROM candidates WHERE deleted_at IS NULL").get();
-        const active  = db.prepare("SELECT COUNT(*) as c FROM candidates WHERE deleted_at IS NULL AND status='active'").get();
-        const byTitle = db.prepare(`
-          SELECT job_title, COUNT(*) as count FROM candidates
-          WHERE deleted_at IS NULL AND job_title IS NOT NULL AND job_title != ''
-          GROUP BY job_title ORDER BY count DESC LIMIT 8
+        const total   = await db.prepare("SELECT COUNT(*) as c FROM candidates WHERE deleted_at IS NULL").get();
+        const active  = await db.prepare("SELECT COUNT(*) as c FROM candidates WHERE deleted_at IS NULL AND status='active'").get();
+        const byTitle = await db.prepare(`
+          SELECT role AS job_title, COUNT(*) as count FROM candidates
+          WHERE deleted_at IS NULL AND role IS NOT NULL AND role != ''
+          GROUP BY role ORDER BY count DESC LIMIT 8
         `).all();
         return { total: total?.c || 0, active: active?.c || 0, inactive: (total?.c || 0) - (active?.c || 0), by_job_title: byTitle };
       }
 
       case 'list_employees': {
         const { status, job_title, limit = 10 } = input;
-        let sql = `SELECT name, email, job_title, hourly_rate, status, phone FROM candidates WHERE deleted_at IS NULL`;
+        let sql = `SELECT name, email, role AS job_title, hourly_rate, status, phone FROM candidates WHERE deleted_at IS NULL`;
         const params = [];
         if (status) { sql += ` AND status = ?`; params.push(status); }
-        if (job_title) { sql += ` AND job_title LIKE ?`; params.push(`%${job_title}%`); }
+        if (job_title) { sql += ` AND role ILIKE ?`; params.push(`%${job_title}%`); }
         sql += ` ORDER BY name LIMIT ?`;
         params.push(Math.min(limit, 50));
-        return { employees: db.prepare(sql).all(...params) };
+        return { employees: await db.prepare(sql).all(...params) };
       }
 
       case 'list_clients': {
         const { limit = 10 } = input;
-        const clients = db.prepare(
+        const clients = await db.prepare(
           `SELECT name, contact_name, email, phone FROM clients ORDER BY name LIMIT ?`
         ).all(Math.min(limit, 50));
         return { clients };
@@ -231,7 +235,7 @@ function executeTool(db, toolName, input, userId) {
       case 'get_timesheet_summary': {
         const { employee_name } = input;
         const month = new Date().toISOString().slice(0, 7);
-        let pending = db.prepare(`
+        let pending = await db.prepare(`
           SELECT te.id, c.name as employee, te.date, te.hours, te.status, te.project
           FROM time_entries te JOIN candidates c ON te.candidate_id = c.id
           WHERE te.status = 'pending'
@@ -239,13 +243,13 @@ function executeTool(db, toolName, input, userId) {
           ORDER BY te.date DESC LIMIT 10
         `).all(...(employee_name ? [`%${employee_name}%`] : []));
 
-        const monthlyHours = db.prepare(`
+        const monthlyHours = await db.prepare(`
           SELECT COALESCE(SUM(te.hours),0) as hours, COUNT(*) as entries
           FROM time_entries te
           ${employee_name ? 'JOIN candidates c ON te.candidate_id=c.id' : ''}
-          WHERE te.date LIKE ? AND te.status != 'rejected'
+          WHERE TO_CHAR(te.date, 'YYYY-MM') = ? AND te.status != 'rejected'
           ${employee_name ? 'AND c.name LIKE ?' : ''}
-        `).get(...[`${month}%`, ...(employee_name ? [`%${employee_name}%`] : [])]);
+        `).get(...[month, ...(employee_name ? [`%${employee_name}%`] : [])]);
 
         return { pending_approvals: pending, monthly_hours: monthlyHours?.hours || 0, monthly_entries: monthlyHours?.entries || 0 };
       }
@@ -261,27 +265,27 @@ function executeTool(db, toolName, input, userId) {
         if (status !== 'all') { sql += ` AND a.status = ?`; params.push(status); }
         if (employee_name) { sql += ` AND c.name LIKE ?`; params.push(`%${employee_name}%`); }
         sql += ` ORDER BY a.created_at DESC LIMIT 15`;
-        return { absences: db.prepare(sql).all(...params) };
+        return { absences: await db.prepare(sql).all(...params) };
       }
 
       case 'get_revenue_report': {
         const now = new Date();
         const month = now.toISOString().slice(0, 7);
         const year  = now.getFullYear();
-        const totals = db.prepare(`
+        const totals = await db.prepare(`
           SELECT
             COUNT(*) as total_invoices,
             COALESCE(SUM(total_amount),0) as total_billed,
             COALESCE(SUM(CASE WHEN status='paid' THEN total_amount ELSE 0 END),0) as total_paid,
             COALESCE(SUM(CASE WHEN status IN ('sent','viewed') THEN total_amount ELSE 0 END),0) as outstanding
-          FROM invoices WHERE period_start LIKE ?
-        `).get(`${month}%`);
-        const byClient = db.prepare(`
+          FROM invoices WHERE TO_CHAR(period_start, 'YYYY-MM') = ?
+        `).get(month);
+        const byClient = await db.prepare(`
           SELECT cl.name as client, COALESCE(SUM(i.total_amount),0) as billed, i.status
           FROM invoices i JOIN clients cl ON i.client_id = cl.id
-          WHERE i.period_start LIKE ?
+          WHERE TO_CHAR(i.period_start, 'YYYY-MM') = ?
           GROUP BY cl.name, i.status ORDER BY billed DESC LIMIT 8
-        `).all(`${month}%`);
+        `).all(month);
         return { period: `${month} (current month)`, ...totals, by_client: byClient };
       }
 
@@ -289,22 +293,22 @@ function executeTool(db, toolName, input, userId) {
         const { name, email, hourly_rate, job_title = '', phone = '', start_date = null } = input;
 
         // Check duplicate email
-        const existing = db.prepare('SELECT id FROM candidates WHERE email = ?').get(email);
+        const existing = await db.prepare('SELECT id FROM candidates WHERE email = ?').get(email);
         if (existing) return { success: false, error: `An employee with email ${email} already exists.` };
 
         // Create user account
         const bcrypt = require('bcryptjs');
         const tempPw = `HireIQ_${Math.random().toString(36).slice(2, 10)}`;
-        const hash   = bcrypt.hashSync(tempPw, 10);
+        const hash   = await bcrypt.hash(tempPw, 10);
 
-        const userRes = db.prepare(`
+        const userRes = await db.prepare(`
           INSERT INTO users (name, email, password_hash, role, must_change_password)
-          VALUES (?, ?, ?, 'candidate', 1)
+          VALUES (?, ?, ?, 'candidate', TRUE)
         `).run(name, email, hash);
         const userId = userRes.lastInsertRowid;
 
-        db.prepare(`
-          INSERT INTO candidates (user_id, name, email, phone, job_title, hourly_rate, status, start_date)
+        await db.prepare(`
+          INSERT INTO candidates (user_id, name, email, phone, role, hourly_rate, status, start_date)
           VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
         `).run(userId, name, email, phone, job_title, hourly_rate, start_date);
 
@@ -319,16 +323,16 @@ function executeTool(db, toolName, input, userId) {
         const { client_name, description, hours_worked, rate, period_start, period_end } = input;
 
         // Find client
-        const client = db.prepare(`SELECT id, name FROM clients WHERE name LIKE ? LIMIT 1`).get(`%${client_name}%`);
+        const client = await db.prepare(`SELECT id, name FROM clients WHERE name LIKE ? LIMIT 1`).get(`%${client_name}%`);
         if (!client) return { success: false, error: `No client found matching "${client_name}". Use list_clients to see available clients.` };
 
         const total_amount = parseFloat((hours_worked * rate).toFixed(2));
         const now = new Date().toISOString().slice(0, 10);
         const invoiceNum = `INV-${Date.now().toString().slice(-6)}`;
 
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO invoices (invoice_number, client_id, description, hours, rate, total_amount, status, period_start, period_end, due_date)
-          VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, date('now', '+30 days'))
+          VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, CURRENT_DATE + INTERVAL '30 days')
         `).run(invoiceNum, client.id, description, hours_worked, rate, total_amount,
                period_start || now, period_end || now);
 
@@ -345,13 +349,13 @@ function executeTool(db, toolName, input, userId) {
 
         let data = {};
         if (report_type === 'headcount') {
-          data = executeTool(db, 'get_headcount', {}, userId);
+          data = await executeTool(db, 'get_headcount', {}, userId);
         } else if (report_type === 'timesheets') {
-          data = executeTool(db, 'get_timesheet_summary', {}, userId);
+          data = await executeTool(db, 'get_timesheet_summary', {}, userId);
         } else if (report_type === 'absences') {
-          data = executeTool(db, 'get_absence_summary', { status: 'all' }, userId);
+          data = await executeTool(db, 'get_absence_summary', { status: 'all' }, userId);
         } else if (report_type === 'revenue' || report_type === 'invoices') {
-          data = executeTool(db, 'get_revenue_report', { period }, userId);
+          data = await executeTool(db, 'get_revenue_report', { period }, userId);
         }
         return { report_type, period: period || `current month (${month})`, data };
       }
@@ -367,44 +371,48 @@ function executeTool(db, toolName, input, userId) {
 
 // ── GET /api/ai-chat/settings  (admin) ───────────────────────────────────────
 
-router.get('/settings', requireAdmin, (req, res) => {
-  const s = getTenantAISettings(req.db) || {};
-  const platform = getPlatformAIConfig() || {};
-  res.json({
-    provider:             s.provider             || platform.provider || 'anthropic',
-    model:                s.model                || platform.model    || 'claude-haiku-4-5-20251001',
-    has_api_key:          !!s.api_key,
-    system_prompt_suffix: s.system_prompt_suffix || '',
-    // UI helpers
-    available_providers:  PROVIDER_MODELS,
-    platform_provider:    platform.provider || 'anthropic',
-    platform_model:       platform.model    || 'claude-haiku-4-5-20251001',
-    platform_has_key:     !!platform.api_key,
-    allow_tenant_keys:    platform.allow_tenant_keys !== 0,
-  });
+router.get('/settings', requireAdmin, async (req, res) => {
+  try {
+    const s = await getTenantAISettings(req.db) || {};
+    const platform = await getPlatformAIConfig() || {};
+    res.json({
+      provider:             s.provider             || platform.provider || 'anthropic',
+      model:                s.model                || platform.model    || 'claude-haiku-4-5-20251001',
+      has_api_key:          !!s.api_key,
+      system_prompt_suffix: s.system_prompt_suffix || '',
+      // UI helpers
+      available_providers:  PROVIDER_MODELS,
+      platform_provider:    platform.provider || 'anthropic',
+      platform_model:       platform.model    || 'claude-haiku-4-5-20251001',
+      platform_has_key:     !!platform.api_key,
+      allow_tenant_keys:    platform.allow_tenant_keys !== 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── PUT /api/ai-chat/settings  (admin) ───────────────────────────────────────
 
-router.put('/settings', requireAdmin, (req, res) => {
-  const { provider, model, api_key, system_prompt_suffix, clear_api_key } = req.body;
-
-  const validProviders = Object.keys(PROVIDER_MODELS);
-  if (provider && !validProviders.includes(provider)) {
-    return res.status(400).json({ error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` });
-  }
-  if (model && provider) {
-    const models = PROVIDER_MODELS[provider].map(m => m.id);
-    if (!models.includes(model)) {
-      return res.status(400).json({ error: `Invalid model for provider ${provider}. Valid models: ${models.join(', ')}` });
-    }
-  }
-
+router.put('/settings', requireAdmin, async (req, res) => {
   try {
-    const current = getTenantAISettings(req.db);
+    const { provider, model, api_key, system_prompt_suffix, clear_api_key } = req.body;
+
+    const validProviders = Object.keys(PROVIDER_MODELS);
+    if (provider && !validProviders.includes(provider)) {
+      return res.status(400).json({ error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` });
+    }
+    if (model && provider) {
+      const models = PROVIDER_MODELS[provider].map(m => m.id);
+      if (!models.includes(model)) {
+        return res.status(400).json({ error: `Invalid model for provider ${provider}. Valid models: ${models.join(', ')}` });
+      }
+    }
+
+    const current = await getTenantAISettings(req.db);
     if (!current) {
       // Seed the row first
-      req.db.prepare('INSERT OR IGNORE INTO ai_settings (id) VALUES (1)').run();
+      await req.db.prepare('INSERT INTO ai_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING').run();
     }
 
     const updates = [];
@@ -416,9 +424,10 @@ router.put('/settings', requireAdmin, (req, res) => {
     if (clear_api_key)         { updates.push('api_key=NULL'); }
 
     if (updates.length) {
-      updates.push('updated_at=CURRENT_TIMESTAMP', 'updated_by=?');
-      params.push(req.user.id, 1);
-      req.db.prepare(`UPDATE ai_settings SET ${updates.join(',')} WHERE id=?`).run(...params);
+      updates.push('updated_at=NOW()');
+      params.push(req.user.id);
+      params.push(1);
+      await req.db.prepare(`UPDATE ai_settings SET ${updates.join(',')} WHERE id=?`).run(...params);
     }
 
     res.json({ ok: true });
@@ -437,8 +446,8 @@ router.post('/message', async (req, res) => {
   const userId = req.user.id;
 
   // ── Resolve AI config for this tenant ─────────────────────────────────────
-  const tenantAI   = getTenantAISettings(db);
-  const platformAI = getPlatformAIConfig();
+  const tenantAI   = await getTenantAISettings(db);
+  const platformAI = await getPlatformAIConfig();
   const aiConfig   = resolveAIConfig(tenantAI, platformAI);
 
   if (!aiConfig) {
@@ -454,30 +463,30 @@ router.post('/message', async (req, res) => {
   let convId = conversationId;
   if (!convId) {
     const title = message.slice(0, 60) + (message.length > 60 ? '…' : '');
-    const r = db.prepare(
+    const r = await db.prepare(
       `INSERT INTO ai_conversations (user_id, title) VALUES (?, ?)`
     ).run(userId, title);
     convId = r.lastInsertRowid;
   } else {
-    const conv = db.prepare('SELECT id FROM ai_conversations WHERE id=? AND user_id=?').get(convId, userId);
+    const conv = await db.prepare('SELECT id FROM ai_conversations WHERE id=? AND user_id=?').get(convId, userId);
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
-    db.prepare(`UPDATE ai_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(convId);
+    await db.prepare(`UPDATE ai_conversations SET updated_at=NOW() WHERE id=?`).run(convId);
   }
 
   // ── 2. Load history ────────────────────────────────────────────────────────
-  const history = db.prepare(`
+  const history = (await db.prepare(`
     SELECT role, content FROM ai_messages
     WHERE conversation_id=? ORDER BY id DESC LIMIT 20
-  `).all(convId).reverse();
+  `).all(convId)).reverse();
 
   // ── 3. Document context via FTS ───────────────────────────────────────────
-  const docHits = searchDocuments(db, message);
+  const docHits = await searchDocuments(db, message);
   const docCtx  = docHits.length
     ? '\n\nRelevant knowledge-base excerpts:\n' + docHits.map(d => `[${d.title}]: ${d.excerpt}`).join('\n')
     : '';
 
   // ── 4. Live tenant data snapshot ──────────────────────────────────────────
-  const snap    = buildDataContext(db);
+  const snap    = await buildDataContext(db);
   const dataCtx = `
 Current organisation snapshot:
 - Employees: ${snap.employees.length} shown (${snap.employees.map(e => e.name).join(', ')})
@@ -539,8 +548,8 @@ GUIDELINES:
   if (!finalText) finalText = "I wasn't able to generate a response. Please try again.";
 
   // ── 8. Persist messages ───────────────────────────────────────────────────
-  db.prepare(`INSERT INTO ai_messages (conversation_id, role, content) VALUES (?, 'user', ?)`).run(convId, message);
-  db.prepare(`INSERT INTO ai_messages (conversation_id, role, content, tool_data) VALUES (?, 'assistant', ?, ?)`).run(
+  await db.prepare(`INSERT INTO ai_messages (conversation_id, role, content) VALUES (?, 'user', ?)`).run(convId, message);
+  await db.prepare(`INSERT INTO ai_messages (conversation_id, role, content, tool_data) VALUES (?, 'assistant', ?, ?)`).run(
     convId, finalText, toolCallsAccum.length ? JSON.stringify(toolCallsAccum) : null
   );
 
@@ -554,59 +563,79 @@ GUIDELINES:
 
 // ── GET /api/ai-chat/conversations ────────────────────────────────────────────
 
-router.get('/conversations', (req, res) => {
-  const rows = req.db.prepare(`
-    SELECT id, title, created_at, updated_at,
-           (SELECT content FROM ai_messages WHERE conversation_id=ai_conversations.id AND role='assistant' ORDER BY id DESC LIMIT 1) as last_reply
-    FROM ai_conversations WHERE user_id=? ORDER BY updated_at DESC LIMIT 30
-  `).all(req.user.id);
-  res.json(rows);
+router.get('/conversations', async (req, res) => {
+  try {
+    const rows = await req.db.prepare(`
+      SELECT id, title, created_at, updated_at,
+             (SELECT content FROM ai_messages WHERE conversation_id=ai_conversations.id AND role='assistant' ORDER BY id DESC LIMIT 1) as last_reply
+      FROM ai_conversations WHERE user_id=? ORDER BY updated_at DESC LIMIT 30
+    `).all(req.user.id);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.get('/conversations/:id', (req, res) => {
-  const conv = req.db.prepare(
-    'SELECT id,title,created_at FROM ai_conversations WHERE id=? AND user_id=?'
-  ).get(req.params.id, req.user.id);
-  if (!conv) return res.status(404).json({ error: 'Not found' });
+router.get('/conversations/:id', async (req, res) => {
+  try {
+    const conv = await req.db.prepare(
+      'SELECT id,title,created_at FROM ai_conversations WHERE id=? AND user_id=?'
+    ).get(req.params.id, req.user.id);
+    if (!conv) return res.status(404).json({ error: 'Not found' });
 
-  const messages = req.db.prepare(
-    'SELECT id, role, content, tool_data, created_at FROM ai_messages WHERE conversation_id=? ORDER BY id ASC'
-  ).all(req.params.id);
+    const messages = await req.db.prepare(
+      'SELECT id, role, content, tool_data, created_at FROM ai_messages WHERE conversation_id=? ORDER BY id ASC'
+    ).all(req.params.id);
 
-  res.json({ ...conv, messages });
+    res.json({ ...conv, messages });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.delete('/conversations/:id', (req, res) => {
-  const conv = req.db.prepare(
-    'SELECT id FROM ai_conversations WHERE id=? AND user_id=?'
-  ).get(req.params.id, req.user.id);
-  if (!conv) return res.status(404).json({ error: 'Not found' });
-  req.db.prepare('DELETE FROM ai_conversations WHERE id=?').run(req.params.id);
-  res.json({ ok: true });
+router.delete('/conversations/:id', async (req, res) => {
+  try {
+    const conv = await req.db.prepare(
+      'SELECT id FROM ai_conversations WHERE id=? AND user_id=?'
+    ).get(req.params.id, req.user.id);
+    if (!conv) return res.status(404).json({ error: 'Not found' });
+    await req.db.prepare('DELETE FROM ai_conversations WHERE id=?').run(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── GET /api/ai-chat/config ───────────────────────────────────────────────────
 
-router.get('/config', (req, res) => {
-  const tenantAI   = getTenantAISettings(req.db);
-  const platformAI = getPlatformAIConfig();
-  const aiConfig   = resolveAIConfig(tenantAI, platformAI);
-  res.json({
-    configured: !!aiConfig,
-    provider:   aiConfig?.provider || null,
-    model:      aiConfig?.model    || null,
-  });
+router.get('/config', async (req, res) => {
+  try {
+    const tenantAI   = await getTenantAISettings(req.db);
+    const platformAI = await getPlatformAIConfig();
+    const aiConfig   = resolveAIConfig(tenantAI, platformAI);
+    res.json({
+      configured: !!aiConfig,
+      provider:   aiConfig?.provider || null,
+      model:      aiConfig?.model    || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── GET /api/ai-chat/documents ────────────────────────────────────────────────
 
-router.get('/documents', requireAdmin, (req, res) => {
-  const docs = req.db.prepare(`
-    SELECT d.id, d.title, d.file_name, d.file_type, d.file_size, d.created_at, u.name as uploaded_by_name
-    FROM ai_documents d JOIN users u ON d.uploaded_by = u.id
-    ORDER BY d.created_at DESC
-  `).all();
-  res.json(docs);
+router.get('/documents', requireAdmin, async (req, res) => {
+  try {
+    const docs = await req.db.prepare(`
+      SELECT d.id, d.title, d.file_name, d.file_type, d.file_size, d.created_at, u.name as uploaded_by_name
+      FROM ai_documents d JOIN users u ON d.uploaded_by = u.id
+      ORDER BY d.created_at DESC
+    `).all();
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── POST /api/ai-chat/documents ───────────────────────────────────────────────
@@ -635,7 +664,7 @@ router.post('/documents', requireAdmin, upload.single('file'), async (req, res) 
 
   if (!content.trim()) return res.status(400).json({ error: 'Document has no readable content' });
 
-  const r = req.db.prepare(`
+  const r = await req.db.prepare(`
     INSERT INTO ai_documents (title, content, file_name, file_type, file_size, uploaded_by)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(
@@ -652,11 +681,15 @@ router.post('/documents', requireAdmin, upload.single('file'), async (req, res) 
 
 // ── DELETE /api/ai-chat/documents/:id ─────────────────────────────────────────
 
-router.delete('/documents/:id', requireAdmin, (req, res) => {
-  const doc = req.db.prepare('SELECT id FROM ai_documents WHERE id=?').get(req.params.id);
-  if (!doc) return res.status(404).json({ error: 'Document not found' });
-  req.db.prepare('DELETE FROM ai_documents WHERE id=?').run(req.params.id);
-  res.json({ ok: true });
+router.delete('/documents/:id', requireAdmin, async (req, res) => {
+  try {
+    const doc = await req.db.prepare('SELECT id FROM ai_documents WHERE id=?').get(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+    await req.db.prepare('DELETE FROM ai_documents WHERE id=?').run(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

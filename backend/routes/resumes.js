@@ -17,17 +17,17 @@ function parseJson(str, fallback) {
 
 // ── Candidate self-service routes (/me) ──────────────────────────────────────
 
-function getCandidateForUser(db, userId) {
+async function getCandidateForUser(db, userId) {
   return db.prepare('SELECT * FROM candidates WHERE user_id = ?').get(userId);
 }
 
 // GET /api/resumes/me
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   if (req.user.role !== 'candidate') return res.status(403).json({ error: 'Candidate only' });
-  const candidate = getCandidateForUser(req.db, req.user.id);
+  const candidate = await getCandidateForUser(req.db, req.user.id);
   if (!candidate) return res.status(404).json({ error: 'Candidate profile not found' });
 
-  let resume = req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidate.id);
+  let resume = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidate.id);
   if (!resume) {
     return res.json({
       candidate_id: candidate.id, candidate_name: candidate.name,
@@ -46,20 +46,20 @@ router.get('/me', (req, res) => {
 });
 
 // PUT /api/resumes/me
-router.put('/me', (req, res) => {
+router.put('/me', async (req, res) => {
   if (req.user.role !== 'candidate') return res.status(403).json({ error: 'Candidate only' });
-  const candidate = getCandidateForUser(req.db, req.user.id);
+  const candidate = await getCandidateForUser(req.db, req.user.id);
   if (!candidate) return res.status(404).json({ error: 'Candidate profile not found' });
 
   const { headline, summary, experience, education, skills, certifications, languages } = req.body;
-  req.db.prepare(`
+  await req.db.prepare(`
     INSERT INTO candidate_resumes (candidate_id, headline, summary, experience, education, skills, certifications, languages, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ON CONFLICT(candidate_id) DO UPDATE SET
       headline = excluded.headline, summary = excluded.summary,
       experience = excluded.experience, education = excluded.education,
       skills = excluded.skills, certifications = excluded.certifications,
-      languages = excluded.languages, updated_at = CURRENT_TIMESTAMP
+      languages = excluded.languages, updated_at = NOW()
   `).run(
     candidate.id, headline || null, summary || null,
     JSON.stringify(Array.isArray(experience) ? experience : []),
@@ -69,7 +69,7 @@ router.put('/me', (req, res) => {
     JSON.stringify(Array.isArray(languages)  ? languages  : []),
   );
 
-  const saved = req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidate.id);
+  const saved = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidate.id);
   res.json({
     ...saved, candidate_name: candidate.name,
     experience:     parseJson(saved.experience, []),
@@ -81,12 +81,12 @@ router.put('/me', (req, res) => {
 });
 
 // GET /api/resumes/me/pdf
-router.get('/me/pdf', (req, res) => {
+router.get('/me/pdf', async (req, res) => {
   if (req.user.role !== 'candidate') return res.status(403).json({ error: 'Candidate only' });
-  const candidate = getCandidateForUser(req.db, req.user.id);
+  const candidate = await getCandidateForUser(req.db, req.user.id);
   if (!candidate) return res.status(404).json({ error: 'Candidate profile not found' });
 
-  const resume = req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidate.id);
+  const resume = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidate.id);
   const exp    = parseJson(resume?.experience, []);
   const edu    = parseJson(resume?.education, []);
   const skills = parseJson(resume?.skills, []);
@@ -159,20 +159,20 @@ function buildResumePdf(doc, candidate, resume, exp, edu, skills, certs) {
 // ── Admin / shared routes ─────────────────────────────────────────────────────
 
 // GET /api/resumes/:candidateId
-router.get('/:candidateId', (req, res) => {
+router.get('/:candidateId', async (req, res) => {
   const { candidateId } = req.params;
-  const candidate = req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
+  const candidate = await req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
   if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
 
   // Candidates can only read their own resume
   if (req.user.role === 'candidate') {
-    const me = req.db.prepare('SELECT id FROM candidates WHERE user_id = ?').get(req.user.id);
+    const me = await req.db.prepare('SELECT id FROM candidates WHERE user_id = ?').get(req.user.id);
     if (!me || String(me.id) !== String(candidateId)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
   }
 
-  let resume = req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidateId);
+  let resume = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidateId);
   if (!resume) {
     // Return an empty template
     return res.json({
@@ -195,14 +195,14 @@ router.get('/:candidateId', (req, res) => {
 });
 
 // PUT /api/resumes/:candidateId — create or full replace
-router.put('/:candidateId', (req, res) => {
+router.put('/:candidateId', async (req, res) => {
   const { candidateId } = req.params;
-  const candidate = req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
+  const candidate = await req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
   if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
 
   // Candidate can update own resume; admin can update any
   if (req.user.role === 'candidate') {
-    const me = req.db.prepare('SELECT id FROM candidates WHERE user_id = ?').get(req.user.id);
+    const me = await req.db.prepare('SELECT id FROM candidates WHERE user_id = ?').get(req.user.id);
     if (!me || String(me.id) !== String(candidateId)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
@@ -210,9 +210,9 @@ router.put('/:candidateId', (req, res) => {
 
   const { headline, summary, experience, education, skills, certifications, languages } = req.body;
 
-  req.db.prepare(`
+  await req.db.prepare(`
     INSERT INTO candidate_resumes (candidate_id, headline, summary, experience, education, skills, certifications, languages, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ON CONFLICT(candidate_id) DO UPDATE SET
       headline       = excluded.headline,
       summary        = excluded.summary,
@@ -221,7 +221,7 @@ router.put('/:candidateId', (req, res) => {
       skills         = excluded.skills,
       certifications = excluded.certifications,
       languages      = excluded.languages,
-      updated_at     = CURRENT_TIMESTAMP
+      updated_at     = NOW()
   `).run(
     candidateId,
     headline || null,
@@ -233,7 +233,7 @@ router.put('/:candidateId', (req, res) => {
     JSON.stringify(Array.isArray(languages)  ? languages  : []),
   );
 
-  const saved = req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidateId);
+  const saved = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidateId);
   res.json({
     ...saved,
     candidate_name: candidate.name,
@@ -246,12 +246,12 @@ router.put('/:candidateId', (req, res) => {
 });
 
 // GET /api/resumes/:candidateId/pdf
-router.get('/:candidateId/pdf', (req, res) => {
+router.get('/:candidateId/pdf', async (req, res) => {
   const { candidateId } = req.params;
-  const candidate = req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
+  const candidate = await req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
   if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
 
-  const resume = req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidateId);
+  const resume = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidateId);
   const exp    = parseJson(resume?.experience, []);
   const edu    = parseJson(resume?.education, []);
   const skills = parseJson(resume?.skills, []);

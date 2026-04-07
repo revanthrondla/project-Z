@@ -15,7 +15,7 @@ router.use(authenticate, requireAdmin, injectTenantDb);
  * Total hours (and revenue) per candidate, filtered by date range + optional candidate.
  * Query params: start_date, end_date, candidate_id, status (all|pending|approved|rejected)
  */
-router.get('/hours', (req, res) => {
+router.get('/hours', async (req, res) => {
   try {
     // Validate + sanitize query params to prevent unexpected DB queries
     const start_date   = sanitizeQueryDate(req.query.start_date, 'start_date');
@@ -37,7 +37,7 @@ router.get('/hours', (req, res) => {
     const whereClause = where.join(' AND ');
 
     // Per-candidate summary
-    const summary = req.db.prepare(`
+    const summary = await req.db.prepare(`
       SELECT
         c.id          AS candidate_id,
         c.name        AS candidate_name,
@@ -60,7 +60,7 @@ router.get('/hours', (req, res) => {
     `).all(...params);
 
     // Daily breakdown (for chart)
-    const daily = req.db.prepare(`
+    const daily = await req.db.prepare(`
       SELECT
         te.date,
         ROUND(SUM(te.hours), 2)  AS hours,
@@ -74,7 +74,7 @@ router.get('/hours', (req, res) => {
     `).all(...params);
 
     // Totals row
-    const totals = req.db.prepare(`
+    const totals = await req.db.prepare(`
       SELECT
         ROUND(SUM(te.hours), 2)  AS total_hours,
         ROUND(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 2) AS approved_hours,
@@ -100,7 +100,7 @@ router.get('/hours', (req, res) => {
  * Absence days per candidate, grouped by type, filtered by date range.
  * Query params: start_date, end_date, candidate_id, status, type
  */
-router.get('/absences', (req, res) => {
+router.get('/absences', async (req, res) => {
   try {
     const start_date   = sanitizeQueryDate(req.query.start_date, 'start_date');
     const end_date     = sanitizeQueryDate(req.query.end_date,   'end_date');
@@ -122,7 +122,7 @@ router.get('/absences', (req, res) => {
     const whereClause = where.join(' AND ');
 
     // Per-candidate summary
-    const summary = req.db.prepare(`
+    const summary = await req.db.prepare(`
       SELECT
         c.id    AS candidate_id,
         c.name  AS candidate_name,
@@ -145,7 +145,7 @@ router.get('/absences', (req, res) => {
     `).all(...params);
 
     // Detail rows
-    const detail = req.db.prepare(`
+    const detail = await req.db.prepare(`
       SELECT
         a.id, a.start_date, a.end_date, a.type, a.status, a.notes,
         CAST((julianday(a.end_date) - julianday(a.start_date) + 1) AS INTEGER) AS days,
@@ -157,7 +157,7 @@ router.get('/absences', (req, res) => {
     `).all(...params);
 
     // Totals — join candidates so c.client_id filter works
-    const totals = req.db.prepare(`
+    const totals = await req.db.prepare(`
       SELECT
         COUNT(a.id) AS absence_count,
         SUM(CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER)) AS total_days,
@@ -180,7 +180,7 @@ router.get('/absences', (req, res) => {
  * Invoice & billable revenue summary.
  * Query params: start_date, end_date, candidate_id
  */
-router.get('/revenue', (req, res) => {
+router.get('/revenue', async (req, res) => {
   try {
     const start_date   = sanitizeQueryDate(req.query.start_date, 'start_date');
     const end_date     = sanitizeQueryDate(req.query.end_date,   'end_date');
@@ -196,7 +196,7 @@ router.get('/revenue', (req, res) => {
     if (client_id)    { teWhere.push('c.client_id = ?');     teParams.push(client_id); }
 
     // Billable hours revenue per candidate
-    const billable = req.db.prepare(`
+    const billable = await req.db.prepare(`
       SELECT
         c.id    AS candidate_id,
         c.name  AS candidate_name,
@@ -222,7 +222,7 @@ router.get('/revenue', (req, res) => {
     if (candidate_id) { invWhere.push('i.candidate_id = ?'); invParams.push(candidate_id); }
     if (client_id)    { invWhere.push('c.client_id = ?');    invParams.push(client_id); }
 
-    const invoices = req.db.prepare(`
+    const invoices = await req.db.prepare(`
       SELECT
         c.name  AS candidate_name,
         cl.name AS client_name,
@@ -239,7 +239,7 @@ router.get('/revenue', (req, res) => {
       ORDER BY i.period_start DESC
     `).all(...invParams);
 
-    const invTotals = req.db.prepare(`
+    const invTotals = await req.db.prepare(`
       SELECT
         ROUND(SUM(CASE WHEN i.status='paid'  THEN i.total_amount ELSE 0 END), 2) AS paid,
         ROUND(SUM(CASE WHEN i.status='sent'  THEN i.total_amount ELSE 0 END), 2) AS outstanding,
@@ -263,7 +263,7 @@ router.get('/revenue', (req, res) => {
  * Single-call overview: KPIs + all three report datasets.
  * Used by the dashboard to populate all tabs in one shot.
  */
-router.get('/summary', (req, res) => {
+router.get('/summary', async (req, res) => {
   try {
     const { start_date, end_date, candidate_id } = req.query;
 
@@ -279,7 +279,7 @@ router.get('/summary', (req, res) => {
     const te  = buildWhere('te', 'date');
     const abs = buildWhere('a',  'start_date');
 
-    const kpis = req.db.prepare(`
+    const kpis = await req.db.prepare(`
       SELECT
         ROUND(SUM(te.hours), 2)                                                                  AS total_hours,
         ROUND(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 2)                   AS approved_hours,
@@ -292,7 +292,7 @@ router.get('/summary', (req, res) => {
       WHERE ${te.where}
     `).get(...te.params);
 
-    const absKpi = req.db.prepare(`
+    const absKpi = await req.db.prepare(`
       SELECT
         COUNT(a.id) AS total_absences,
         SUM(CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER)) AS total_absence_days

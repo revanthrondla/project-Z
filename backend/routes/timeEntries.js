@@ -5,7 +5,7 @@ const { createNotification } = require('./notifications');
 const router = express.Router();
 
 // GET /api/time-entries
-router.get('/', authenticate, injectTenantDb, (req, res) => {
+router.get('/', authenticate, injectTenantDb, async (req, res) => {
   const { candidate_id, start_date, end_date, status, month } = req.query;
   let query = `
     SELECT te.*, c.name as candidate_name, c.hourly_rate
@@ -27,16 +27,16 @@ router.get('/', authenticate, injectTenantDb, (req, res) => {
   if (start_date) { query += ' AND te.date >= ?'; params.push(start_date); }
   if (end_date) { query += ' AND te.date <= ?'; params.push(end_date); }
   if (status) { query += ' AND te.status = ?'; params.push(status); }
-  if (month) { query += ' AND te.date LIKE ?'; params.push(`${month}%`); }
+  if (month) { query += " AND TO_CHAR(te.date, 'YYYY-MM') = ?"; params.push(month); }
 
   query += ' ORDER BY te.date DESC, te.id DESC';
 
-  const entries = req.db.prepare(query).all(...params);
+  const entries = await req.db.prepare(query).all(...params);
   res.json(entries);
 });
 
 // POST /api/time-entries
-router.post('/', authenticate, injectTenantDb, (req, res) => {
+router.post('/', authenticate, injectTenantDb, async (req, res) => {
   const { candidate_id, date, hours, description, project } = req.body;
 
   // Validate
@@ -55,19 +55,19 @@ router.post('/', authenticate, injectTenantDb, (req, res) => {
   if (!cid) return res.status(400).json({ error: 'Candidate ID required' });
 
   // Check for duplicate date entry (same candidate, same date)
-  const existing = req.db.prepare(
+  const existing = await req.db.prepare(
     'SELECT id FROM time_entries WHERE candidate_id = ? AND date = ?'
   ).get(cid, date);
   if (existing) {
     return res.status(409).json({ error: 'A time entry already exists for this date' });
   }
 
-  const result = req.db.prepare(`
+  const result = await req.db.prepare(`
     INSERT INTO time_entries (candidate_id, date, hours, description, project, status)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(cid, date, parseFloat(hours), description || null, project || null, 'pending');
 
-  const entry = req.db.prepare(`
+  const entry = await req.db.prepare(`
     SELECT te.*, c.name as candidate_name, c.hourly_rate
     FROM time_entries te JOIN candidates c ON te.candidate_id = c.id
     WHERE te.id = ?
@@ -76,9 +76,9 @@ router.post('/', authenticate, injectTenantDb, (req, res) => {
 });
 
 // PUT /api/time-entries/:id
-router.put('/:id', authenticate, injectTenantDb, (req, res) => {
+router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
   const id = parseInt(req.params.id);
-  const entry = req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(id);
+  const entry = await req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(id);
   if (!entry) return res.status(404).json({ error: 'Time entry not found' });
 
   // Check ownership
@@ -96,12 +96,12 @@ router.put('/:id', authenticate, injectTenantDb, (req, res) => {
   if (req.user.role === 'admin' && status) {
     // Admin can approve/reject
     const approvedAt = (status === 'approved' || status === 'rejected') ? new Date().toISOString() : null;
-    req.db.prepare(`
+    await req.db.prepare(`
       UPDATE time_entries SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?
     `).run(status, req.user.id, approvedAt, id);
 
     // Notify the candidate
-    const candidate = req.db.prepare(`
+    const candidate = await req.db.prepare(`
       SELECT c.user_id, c.name FROM candidates c WHERE c.id = ?
     `).get(entry.candidate_id);
     if (candidate) {
@@ -119,7 +119,7 @@ router.put('/:id', authenticate, injectTenantDb, (req, res) => {
   } else {
     // Candidate edits
     if (hours && (hours <= 0 || hours > 24)) return res.status(400).json({ error: 'Hours must be between 0 and 24' });
-    req.db.prepare(`
+    await req.db.prepare(`
       UPDATE time_entries SET
         date = COALESCE(?, date),
         hours = COALESCE(?, hours),
@@ -129,7 +129,7 @@ router.put('/:id', authenticate, injectTenantDb, (req, res) => {
     `).run(date || null, hours ? parseFloat(hours) : null, description || null, project || null, id);
   }
 
-  const updated = req.db.prepare(`
+  const updated = await req.db.prepare(`
     SELECT te.*, c.name as candidate_name, c.hourly_rate
     FROM time_entries te JOIN candidates c ON te.candidate_id = c.id
     WHERE te.id = ?
@@ -138,9 +138,9 @@ router.put('/:id', authenticate, injectTenantDb, (req, res) => {
 });
 
 // DELETE /api/time-entries/:id
-router.delete('/:id', authenticate, injectTenantDb, (req, res) => {
+router.delete('/:id', authenticate, injectTenantDb, async (req, res) => {
   const id = parseInt(req.params.id);
-  const entry = req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(id);
+  const entry = await req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(id);
   if (!entry) return res.status(404).json({ error: 'Time entry not found' });
 
   if (req.user.role === 'candidate') {
@@ -148,27 +148,27 @@ router.delete('/:id', authenticate, injectTenantDb, (req, res) => {
     if (entry.status !== 'pending') return res.status(400).json({ error: 'Cannot delete approved entries' });
   }
 
-  req.db.prepare('DELETE FROM time_entries WHERE id = ?').run(id);
+  await req.db.prepare('DELETE FROM time_entries WHERE id = ?').run(id);
   res.json({ message: 'Time entry deleted' });
 });
 
 // POST /api/time-entries/bulk-approve — Admin only
-router.post('/bulk-approve', authenticate, requireAdmin, injectTenantDb, (req, res) => {
+router.post('/bulk-approve', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   const { ids, status } = req.body;
   if (!ids || !Array.isArray(ids) || !status) {
     return res.status(400).json({ error: 'IDs array and status required' });
   }
   const approvedAt = new Date().toISOString();
-  const stmt = req.db.prepare('UPDATE time_entries SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?');
+  const stmt = await req.db.prepare('UPDATE time_entries SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?');
   const label = status === 'approved' ? 'approved' : 'rejected';
 
-  req.db.transaction(() => {
+  await req.db.transaction(() => {
     for (const id of ids) {
-      const entry = req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(id);
+      const entry = await req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(id);
       stmt.run(status, req.user.id, approvedAt, id);
       // Notify candidate
       if (entry) {
-        const candidate = req.db.prepare('SELECT user_id FROM candidates WHERE id = ?').get(entry.candidate_id);
+        const candidate = await req.db.prepare('SELECT user_id FROM candidates WHERE id = ?').get(entry.candidate_id);
         if (candidate) {
           createNotification(
             req.db,
@@ -194,7 +194,7 @@ router.post('/bulk-approve', authenticate, requireAdmin, injectTenantDb, (req, r
 // Returns ALL admin-approved entries for the client's candidates,
 // with their client_approval_status (null/pending/approved/rejected).
 // Filtering by status is done client-side.
-router.get('/client-pending', authenticate, injectTenantDb, (req, res) => {
+router.get('/client-pending', authenticate, injectTenantDb, async (req, res) => {
   if (req.user.role !== 'client' && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -216,7 +216,7 @@ router.get('/client-pending', authenticate, injectTenantDb, (req, res) => {
 
   // Clients only see their own candidates
   if (req.user.role === 'client') {
-    const client = req.db.prepare('SELECT id FROM clients WHERE user_id = ?').get(req.user.id);
+    const client = await req.db.prepare('SELECT id FROM clients WHERE user_id = ?').get(req.user.id);
     if (!client) return res.json([]);
     q += ' AND c.client_id = ?';
     p.push(client.id);
@@ -227,13 +227,13 @@ router.get('/client-pending', authenticate, injectTenantDb, (req, res) => {
   if (to)   { q += ' AND te.date <= ?'; p.push(to); }
 
   q += ' ORDER BY te.date DESC';
-  res.json(req.db.prepare(q).all(...p));
+  res.json(await req.db.prepare(q).all(...p));
 });
 
 // Helper — verify the client user owns the candidate linked to this entry
 function assertClientOwnsEntry(db, userId, entryId) {
   // Returns the entry if access is valid; null if forbidden
-  const client = db.prepare('SELECT id FROM clients WHERE user_id = ?').get(userId);
+  const client = await db.prepare('SELECT id FROM clients WHERE user_id = ?').get(userId);
   if (!client) return null;
   return db.prepare(`
     SELECT te.* FROM time_entries te
@@ -243,7 +243,7 @@ function assertClientOwnsEntry(db, userId, entryId) {
 }
 
 // POST /api/time-entries/:id/client-approve
-router.post('/:id/client-approve', authenticate, injectTenantDb, (req, res) => {
+router.post('/:id/client-approve', authenticate, injectTenantDb, async (req, res) => {
   if (req.user.role !== 'client' && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -257,7 +257,7 @@ router.post('/:id/client-approve', authenticate, injectTenantDb, (req, res) => {
     entry = assertClientOwnsEntry(req.db, req.user.id, entryId);
     if (!entry) return res.status(403).json({ error: 'Access denied — this entry does not belong to your candidates' });
   } else {
-    entry = req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId);
+    entry = await req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId);
     if (!entry) return res.status(404).json({ error: 'Time entry not found' });
   }
 
@@ -265,20 +265,20 @@ router.post('/:id/client-approve', authenticate, injectTenantDb, (req, res) => {
     return res.status(400).json({ error: 'Only admin-approved entries can be client-approved' });
   }
 
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE time_entries SET
       client_approval_status = 'approved',
       client_approval_note   = ?,
-      client_approved_at     = CURRENT_TIMESTAMP,
+      client_approved_at     = NOW(),
       client_approved_by     = ?,
-      updated_at             = CURRENT_TIMESTAMP
+      updated_at             = NOW()
     WHERE id = ?
   `).run(note || null, req.user.id, entryId);
-  res.json(req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId));
+  res.json(await req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId));
 });
 
 // POST /api/time-entries/:id/client-reject
-router.post('/:id/client-reject', authenticate, injectTenantDb, (req, res) => {
+router.post('/:id/client-reject', authenticate, injectTenantDb, async (req, res) => {
   if (req.user.role !== 'client' && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -292,7 +292,7 @@ router.post('/:id/client-reject', authenticate, injectTenantDb, (req, res) => {
     entry = assertClientOwnsEntry(req.db, req.user.id, entryId);
     if (!entry) return res.status(403).json({ error: 'Access denied — this entry does not belong to your candidates' });
   } else {
-    entry = req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId);
+    entry = await req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId);
     if (!entry) return res.status(404).json({ error: 'Time entry not found' });
   }
 
@@ -300,16 +300,16 @@ router.post('/:id/client-reject', authenticate, injectTenantDb, (req, res) => {
     return res.status(400).json({ error: 'Only admin-approved entries can be client-rejected' });
   }
 
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE time_entries SET
       client_approval_status = 'rejected',
       client_approval_note   = ?,
-      client_approved_at     = CURRENT_TIMESTAMP,
+      client_approved_at     = NOW(),
       client_approved_by     = ?,
-      updated_at             = CURRENT_TIMESTAMP
+      updated_at             = NOW()
     WHERE id = ?
   `).run(note.trim(), req.user.id, entryId);
-  res.json(req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId));
+  res.json(await req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId));
 });
 
 module.exports = router;

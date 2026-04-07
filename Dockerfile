@@ -5,7 +5,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: Frontend build ──────────────────────────────────────────────────
-FROM node:22-alpine AS frontend-builder
+FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -18,7 +18,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ── Stage 2: Production runtime ──────────────────────────────────────────────
-FROM node:22-alpine AS production
+FROM node:20-alpine AS production
 
 WORKDIR /app
 
@@ -32,16 +32,14 @@ COPY backend/ ./
 # Copy built frontend from stage 1 into the location Express expects
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Pre-create the data directories inside the WORKDIR so the process
-# always has write access regardless of how the volume is mounted.
-# Railway mounts the volume here, preserving the directory ownership.
-RUN mkdir -p /app/data/tenants /app/data/uploads
+# Pre-create the uploads directory inside the WORKDIR.
+# Data is now stored in PostgreSQL; uploads are the only persistent filesystem need.
+RUN mkdir -p /app/uploads
 
 # Environment defaults (override at runtime via platform env vars)
+# DATABASE_URL must be set at runtime — provided by Railway PostgreSQL plugin
 ENV NODE_ENV=production \
-    PORT=3001 \
-    HIREIQ_DATA_DIR=/app/data \
-    HIREIQ_DB_PATH=/app/data/hireiq.db
+    PORT=3001
 
 EXPOSE 3001
 

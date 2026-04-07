@@ -22,7 +22,7 @@ function buildDateFilter(prefix, from, to, params) {
 }
 
 // ── GET /api/payroll/reconciliation ─────────────────────────────────────────
-router.get('/reconciliation', (req, res) => {
+router.get('/reconciliation', async (req, res) => {
   const { from, to, view = 'payroll' } = req.query;
 
   if (view === 'timesheet') {
@@ -39,7 +39,7 @@ function payrollPaymentView(req, res, from, to) {
   const p = [];
   const dateFilter = buildDateFilter('te', from, to, p);
 
-  const hoursRows = req.db.prepare(`
+  const hoursRows = await req.db.prepare(`
     SELECT
       c.id                                              AS candidate_id,
       c.name                                            AS candidate_name,
@@ -60,7 +60,7 @@ function payrollPaymentView(req, res, from, to) {
   if (from) { payDateFilter += ' AND ip.payment_date >= ?'; pp.push(from); }
   if (to)   { payDateFilter += ' AND ip.payment_date <= ?'; pp.push(to); }
 
-  const payRows = req.db.prepare(`
+  const payRows = await req.db.prepare(`
     SELECT
       i.candidate_id,
       COALESCE(SUM(ip.amount), 0) AS total_paid
@@ -105,7 +105,7 @@ function timesheetDiscrepancyView(req, res, from, to) {
   const dateFilter = buildDateFilter('te', from, to, p);
 
   // Per-candidate breakdown of hours at each approval stage
-  const rows = req.db.prepare(`
+  const rows = await req.db.prepare(`
     SELECT
       c.id                 AS candidate_id,
       c.name               AS candidate_name,
@@ -203,16 +203,16 @@ function timesheetDiscrepancyView(req, res, from, to) {
 
 // ── GET /api/payroll/timesheet-detail/:candidateId ─────────────────────────
 // Drilldown: all time entries for a candidate, with both approval statuses
-router.get('/timesheet-detail/:candidateId', (req, res) => {
+router.get('/timesheet-detail/:candidateId', async (req, res) => {
   const { candidateId } = req.params;
   const { from, to } = req.query;
   const p = [candidateId];
   const dateFilter = buildDateFilter('te', from, to, p);
 
-  const candidate = req.db.prepare('SELECT id, name, hourly_rate FROM candidates WHERE id = ?').get(candidateId);
+  const candidate = await req.db.prepare('SELECT id, name, hourly_rate FROM candidates WHERE id = ?').get(candidateId);
   if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
 
-  const entries = req.db.prepare(`
+  const entries = await req.db.prepare(`
     SELECT
       te.id, te.date, te.hours, te.description, te.project,
       te.status AS admin_status,

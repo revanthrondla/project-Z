@@ -18,7 +18,7 @@ const router = express.Router();
 router.use(authenticate, injectTenantDb, requireModule('hr_support'));
 
 // ── POST /api/support/tickets ─────────────────────────────────────────────────
-router.post('/tickets', (req, res) => {
+router.post('/tickets', async (req, res) => {
   const { id: userId, role } = req.user;
   if (!['admin', 'candidate', 'client'].includes(role)) {
     return res.status(403).json({ error: 'Forbidden' });
@@ -29,12 +29,12 @@ router.post('/tickets', (req, res) => {
     return res.status(400).json({ error: 'Subject and description are required' });
   }
 
-  const result = req.db.prepare(`
+  const result = await req.db.prepare(`
     INSERT INTO support_tickets (user_id, subject, description, category, priority)
     VALUES (?, ?, ?, ?, ?)
   `).run(userId, subject.trim(), description.trim(), category, priority);
 
-  const ticket = req.db.prepare(`
+  const ticket = await req.db.prepare(`
     SELECT t.*, u.name as submitter_name, u.email as submitter_email, u.role as submitter_role
     FROM support_tickets t
     JOIN users u ON u.id = t.user_id
@@ -42,7 +42,7 @@ router.post('/tickets', (req, res) => {
   `).get(result.lastInsertRowid);
 
   // Notify all admins of new ticket
-  const admins = req.db.prepare("SELECT id FROM users WHERE role = 'admin'").all();
+  const admins = await req.db.prepare("SELECT id FROM users WHERE role = 'admin'").all();
   for (const a of admins) {
     if (a.id !== userId) {
       createNotification(
@@ -58,7 +58,7 @@ router.post('/tickets', (req, res) => {
 });
 
 // ── GET /api/support/tickets ──────────────────────────────────────────────────
-router.get('/tickets', (req, res) => {
+router.get('/tickets', async (req, res) => {
   const { id: userId, role } = req.user;
   const { status, priority, category, page = 1, limit = 50 } = req.query;
   const offset = (Math.max(1, parseInt(page)) - 1) * Math.min(100, parseInt(limit) || 50);
@@ -70,11 +70,11 @@ router.get('/tickets', (req, res) => {
   if (priority) { where += ' AND t.priority = ?'; params.push(priority); }
   if (category) { where += ' AND t.category = ?'; params.push(category); }
 
-  const total = req.db.prepare(
+  const total = await req.db.prepare(
     `SELECT COUNT(*) as c FROM support_tickets t ${where}`
   ).get(...params);
 
-  const tickets = req.db.prepare(`
+  const tickets = await req.db.prepare(`
     SELECT t.*, u.name as submitter_name, u.email as submitter_email, u.role as submitter_role,
            (SELECT COUNT(*) FROM support_ticket_messages WHERE ticket_id = t.id) as message_count,
            (SELECT COUNT(*) FROM support_ticket_messages WHERE ticket_id = t.id AND is_staff = CASE WHEN '${role}' = 'admin' THEN 0 ELSE 1 END AND
@@ -92,11 +92,11 @@ router.get('/tickets', (req, res) => {
 });
 
 // ── GET /api/support/tickets/:id ─────────────────────────────────────────────
-router.get('/tickets/:id', (req, res) => {
+router.get('/tickets/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   const { id: userId, role } = req.user;
 
-  const ticket = req.db.prepare(`
+  const ticket = await req.db.prepare(`
     SELECT t.*, u.name as submitter_name, u.email as submitter_email, u.role as submitter_role
     FROM support_tickets t
     JOIN users u ON u.id = t.user_id
@@ -108,7 +108,7 @@ router.get('/tickets/:id', (req, res) => {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  const messages = req.db.prepare(`
+  const messages = await req.db.prepare(`
     SELECT m.*, u.name as sender_name, u.role as sender_role
     FROM support_ticket_messages m
     JOIN users u ON u.id = m.user_id
@@ -120,9 +120,9 @@ router.get('/tickets/:id', (req, res) => {
 });
 
 // ── PUT /api/support/tickets/:id ─────────────────────────────────────────────
-router.put('/tickets/:id', requireAdmin, (req, res) => {
+router.put('/tickets/:id', requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
-  const ticket = req.db.prepare('SELECT * FROM support_tickets WHERE id = ?').get(id);
+  const ticket = await req.db.prepare('SELECT * FROM support_tickets WHERE id = ?').get(id);
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
   const { status, priority, category } = req.body;
@@ -130,8 +130,8 @@ router.put('/tickets/:id', requireAdmin, (req, res) => {
   const newPriority = priority || ticket.priority;
   const newCategory = category || ticket.category;
 
-  req.db.prepare(`
-    UPDATE support_tickets SET status = ?, priority = ?, category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+  await req.db.prepare(`
+    UPDATE support_tickets SET status = ?, priority = ?, category = ?, updated_at = NOW() WHERE id = ?
   `).run(newStatus, newPriority, newCategory, id);
 
   // Notify the submitter
@@ -145,7 +145,7 @@ router.put('/tickets/:id', requireAdmin, (req, res) => {
     );
   }
 
-  const updated = req.db.prepare(`
+  const updated = await req.db.prepare(`
     SELECT t.*, u.name as submitter_name, u.email as submitter_email, u.role as submitter_role
     FROM support_tickets t JOIN users u ON u.id = t.user_id WHERE t.id = ?
   `).get(id);
@@ -153,20 +153,20 @@ router.put('/tickets/:id', requireAdmin, (req, res) => {
 });
 
 // ── DELETE /api/support/tickets/:id ──────────────────────────────────────────
-router.delete('/tickets/:id', requireAdmin, (req, res) => {
+router.delete('/tickets/:id', requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
-  const ticket = req.db.prepare('SELECT * FROM support_tickets WHERE id = ?').get(id);
+  const ticket = await req.db.prepare('SELECT * FROM support_tickets WHERE id = ?').get(id);
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
-  req.db.prepare('DELETE FROM support_tickets WHERE id = ?').run(id);
+  await req.db.prepare('DELETE FROM support_tickets WHERE id = ?').run(id);
   res.json({ message: 'Ticket deleted' });
 });
 
 // ── POST /api/support/tickets/:id/messages ────────────────────────────────────
-router.post('/tickets/:id/messages', (req, res) => {
+router.post('/tickets/:id/messages', async (req, res) => {
   const id = parseInt(req.params.id);
   const { id: userId, role } = req.user;
 
-  const ticket = req.db.prepare('SELECT * FROM support_tickets WHERE id = ?').get(id);
+  const ticket = await req.db.prepare('SELECT * FROM support_tickets WHERE id = ?').get(id);
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
   const isAdmin = role === 'admin';
@@ -177,11 +177,11 @@ router.post('/tickets/:id/messages', (req, res) => {
   const { message } = req.body;
   if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
 
-  req.db.prepare(`
+  await req.db.prepare(`
     INSERT INTO support_ticket_messages (ticket_id, user_id, message, is_staff) VALUES (?, ?, ?, ?)
   `).run(id, userId, message.trim(), isAdmin ? 1 : 0);
 
-  req.db.prepare('UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  await req.db.prepare('UPDATE support_tickets SET updated_at = NOW() WHERE id = ?').run(id);
 
   if (isAdmin) {
     // Notify submitter
@@ -193,7 +193,7 @@ router.post('/tickets/:id/messages', (req, res) => {
     );
   } else {
     // Notify all admins
-    const admins = req.db.prepare("SELECT id FROM users WHERE role = 'admin'").all();
+    const admins = await req.db.prepare("SELECT id FROM users WHERE role = 'admin'").all();
     for (const a of admins) {
       createNotification(
         req.db, a.id, 'support_reply',
@@ -204,7 +204,7 @@ router.post('/tickets/:id/messages', (req, res) => {
     }
   }
 
-  const messages = req.db.prepare(`
+  const messages = await req.db.prepare(`
     SELECT m.*, u.name as sender_name, u.role as sender_role
     FROM support_ticket_messages m
     JOIN users u ON u.id = m.user_id
@@ -216,8 +216,8 @@ router.post('/tickets/:id/messages', (req, res) => {
 });
 
 // ── GET /api/support/stats ───────────────────────────────────────────────────
-router.get('/stats', requireAdmin, (req, res) => {
-  const stats = req.db.prepare(`
+router.get('/stats', requireAdmin, async (req, res) => {
+  const stats = await req.db.prepare(`
     SELECT
       COUNT(*) as total,
       SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open,

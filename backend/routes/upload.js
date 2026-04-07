@@ -144,7 +144,7 @@ Cloud DevOps Engineer,Manage AWS infrastructure and CI/CD pipelines,"AWS,Terrafo
 `,
 };
 
-router.get('/template/:type', authenticate, requireAdmin, injectTenantDb, (req, res) => {
+router.get('/template/:type', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   const { type } = req.params;
   if (!TEMPLATES[type]) return res.status(404).json({ error: 'Unknown template type' });
   res.setHeader('Content-Type', 'text/csv');
@@ -156,14 +156,14 @@ router.get('/template/:type', authenticate, requireAdmin, injectTenantDb, (req, 
 // CANDIDATES UPLOAD
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.single('file'), (req, res) => {
+router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.single('file'), async (req, res) => {
   try {
     const rows = parseCSV(req.file.buffer);
     const imported = [], failed = [];
 
     // Build client name → id map
     const clientMap = {};
-    req.db.prepare('SELECT id, name FROM clients').all().forEach(c => {
+    await req.db.prepare('SELECT id, name FROM clients').all().forEach(c => {
       clientMap[c.name.toLowerCase()] = c.id;
     });
 
@@ -200,17 +200,17 @@ router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.si
         if (!validContractTypes.includes(contractType)) throw new Error(`contract_type must be one of: ${validContractTypes.join(', ')}`);
 
         // Check duplicate email
-        const existingUser = req.db.prepare('SELECT id FROM users WHERE email = ?').get(r.email.trim().toLowerCase());
+        const existingUser = await req.db.prepare('SELECT id FROM users WHERE email = ?').get(r.email.trim().toLowerCase());
         if (existingUser) throw new Error(`email already exists: ${r.email}`);
 
         // Create user + candidate
         const password = r.password?.trim() || 'candidate123';
-        const hash = bcrypt.hashSync(password, 10);
-        const userResult = req.db.prepare(
+        const hash = await bcrypt.hash(password, 10);
+        const userResult = await req.db.prepare(
           'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)'
         ).run(r.name.trim(), r.email.trim().toLowerCase(), hash, 'candidate');
 
-        req.db.prepare(
+        await req.db.prepare(
           `INSERT INTO candidates (user_id, name, email, phone, role, hourly_rate, client_id, start_date, end_date, status, contract_type)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
@@ -227,11 +227,11 @@ router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.si
           contractType,
         );
 
-        const candRow = req.db.prepare('SELECT id FROM candidates WHERE email = ?').get(r.email.trim().toLowerCase());
+        const candRow = await req.db.prepare('SELECT id FROM candidates WHERE email = ?').get(r.email.trim().toLowerCase());
 
         // Insert extended contact info if any extended fields provided
         if (candRow && (r.alt_phone || r.personal_email || r.home_street || r.home_city || r.home_state || r.home_postcode || r.home_country)) {
-          req.db.prepare(`
+          await req.db.prepare(`
             INSERT OR IGNORE INTO employee_contact_ext
               (candidate_id, alt_phone, personal_email, home_street, home_city, home_state, home_postcode, home_country)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -269,14 +269,14 @@ router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.si
 // TIMESHEETS UPLOAD
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/timesheets', authenticate, requireAdmin, injectTenantDb, upload.single('file'), (req, res) => {
+router.post('/timesheets', authenticate, requireAdmin, injectTenantDb, upload.single('file'), async (req, res) => {
   try {
     const rows = parseCSV(req.file.buffer);
     const imported = [], failed = [];
 
     // Build email → candidate_id map
     const candidateMap = {};
-    req.db.prepare('SELECT id, email FROM candidates').all().forEach(c => {
+    await req.db.prepare('SELECT id, email FROM candidates').all().forEach(c => {
       candidateMap[c.email.toLowerCase()] = c.id;
     });
 
@@ -298,7 +298,7 @@ router.post('/timesheets', authenticate, requireAdmin, injectTenantDb, upload.si
         const status = r.status?.trim() || 'pending';
         if (!validStatuses.includes(status)) throw new Error(`status must be one of: ${validStatuses.join(', ')}`);
 
-        req.db.prepare(
+        await req.db.prepare(
           'INSERT INTO time_entries (candidate_id, date, hours, description, project, status) VALUES (?, ?, ?, ?, ?, ?)'
         ).run(candidateId, r.date.trim(), hours, r.description?.trim() || null, r.project?.trim() || null, status);
 
@@ -318,13 +318,13 @@ router.post('/timesheets', authenticate, requireAdmin, injectTenantDb, upload.si
 // ABSENCES UPLOAD
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/absences', authenticate, requireAdmin, injectTenantDb, upload.single('file'), (req, res) => {
+router.post('/absences', authenticate, requireAdmin, injectTenantDb, upload.single('file'), async (req, res) => {
   try {
     const rows = parseCSV(req.file.buffer);
     const imported = [], failed = [];
 
     const candidateMap = {};
-    req.db.prepare('SELECT id, email FROM candidates').all().forEach(c => {
+    await req.db.prepare('SELECT id, email FROM candidates').all().forEach(c => {
       candidateMap[c.email.toLowerCase()] = c.id;
     });
 
@@ -348,7 +348,7 @@ router.post('/absences', authenticate, requireAdmin, injectTenantDb, upload.sing
         const candidateId = candidateMap[r.candidate_email.trim().toLowerCase()];
         if (!candidateId) throw new Error(`candidate "${r.candidate_email}" not found`);
 
-        req.db.prepare(
+        await req.db.prepare(
           'INSERT INTO absences (candidate_id, start_date, end_date, type, status, notes) VALUES (?, ?, ?, ?, ?, ?)'
         ).run(candidateId, r.start_date.trim(), r.end_date.trim(), type, status, r.notes?.trim() || null);
 
@@ -368,17 +368,17 @@ router.post('/absences', authenticate, requireAdmin, injectTenantDb, upload.sing
 // JOBS UPLOAD
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/jobs', authenticate, requireAdmin, injectTenantDb, upload.single('file'), (req, res) => {
+router.post('/jobs', authenticate, requireAdmin, injectTenantDb, upload.single('file'), async (req, res) => {
   try {
     const rows = parseCSV(req.file.buffer);
     const imported = [], failed = [];
 
     const clientMap = {};
-    req.db.prepare('SELECT id, name FROM clients').all().forEach(c => {
+    await req.db.prepare('SELECT id, name FROM clients').all().forEach(c => {
       clientMap[c.name.toLowerCase()] = c.id;
     });
 
-    const adminId = req.db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get()?.id;
+    const adminId = await req.db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get()?.id;
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -405,7 +405,7 @@ router.post('/jobs', authenticate, requireAdmin, injectTenantDb, upload.single('
         if (rateMin !== null && isNaN(rateMin)) throw new Error('hourly_rate_min must be a number');
         if (rateMax !== null && isNaN(rateMax)) throw new Error('hourly_rate_max must be a number');
 
-        req.db.prepare(
+        await req.db.prepare(
           `INSERT INTO job_postings (title, description, skills, client_id, location, contract_type, hourly_rate_min, hourly_rate_max, status, created_by)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
@@ -437,7 +437,7 @@ router.post('/jobs', authenticate, requireAdmin, injectTenantDb, upload.single('
 // EMERGENCY CONTACTS UPLOAD
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/emergency-contacts', authenticate, requireAdmin, injectTenantDb, upload.single('file'), (req, res) => {
+router.post('/emergency-contacts', authenticate, requireAdmin, injectTenantDb, upload.single('file'), async (req, res) => {
   try {
     const rows = parseCSV(req.file.buffer);
     const db = req.tenantDb;
@@ -450,10 +450,10 @@ router.post('/emergency-contacts', authenticate, requireAdmin, injectTenantDb, u
         if (!r.name) throw new Error('name is required');
         if (!r.phone1) throw new Error('phone1 is required');
 
-        const cand = db.prepare('SELECT id FROM candidates WHERE email = ? AND deleted_at IS NULL').get(r.employee_email.trim());
+        const cand = await db.prepare('SELECT id FROM candidates WHERE email = ? AND deleted_at IS NULL').get(r.employee_email.trim());
         if (!cand) throw new Error(`No employee found with email: ${r.employee_email}`);
 
-        db.prepare('INSERT INTO emergency_contacts (candidate_id, name, relationship, phone1, phone2) VALUES (?, ?, ?, ?, ?)')
+        await db.prepare('INSERT INTO emergency_contacts (candidate_id, name, relationship, phone1, phone2) VALUES (?, ?, ?, ?, ?)')
           .run(cand.id, r.name.trim(), r.relationship?.trim() || null, r.phone1.trim(), r.phone2?.trim() || null);
 
         imported.push({ row: rowNum, employee: r.employee_email, contact: r.name });
@@ -472,7 +472,7 @@ router.post('/emergency-contacts', authenticate, requireAdmin, injectTenantDb, u
 // EMPLOYMENT HISTORY UPLOAD
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/employment-history', authenticate, requireAdmin, injectTenantDb, upload.single('file'), (req, res) => {
+router.post('/employment-history', authenticate, requireAdmin, injectTenantDb, upload.single('file'), async (req, res) => {
   try {
     const rows = parseCSV(req.file.buffer);
     const db = req.tenantDb;
@@ -486,13 +486,13 @@ router.post('/employment-history', authenticate, requireAdmin, injectTenantDb, u
         if (!r.position_title) throw new Error('position_title is required');
         if (!r.start_date) throw new Error('start_date is required');
 
-        const cand = db.prepare('SELECT id FROM candidates WHERE email = ? AND deleted_at IS NULL').get(r.employee_email.trim());
+        const cand = await db.prepare('SELECT id FROM candidates WHERE email = ? AND deleted_at IS NULL').get(r.employee_email.trim());
         if (!cand) throw new Error(`No employee found with email: ${r.employee_email}`);
 
         const frequency = r.frequency?.trim() || 'annual';
         if (!VALID_FREQ.includes(frequency)) throw new Error(`Invalid frequency. Must be one of: ${VALID_FREQ.join(', ')}`);
 
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO employment_history (candidate_id, position_title, start_date, end_date, remuneration, currency, frequency, notes)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
@@ -522,7 +522,7 @@ router.post('/employment-history', authenticate, requireAdmin, injectTenantDb, u
 // TRAINING RECORDS UPLOAD
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/training-records', authenticate, requireAdmin, injectTenantDb, upload.single('file'), (req, res) => {
+router.post('/training-records', authenticate, requireAdmin, injectTenantDb, upload.single('file'), async (req, res) => {
   try {
     const rows = parseCSV(req.file.buffer);
     const db = req.tenantDb;
@@ -535,10 +535,10 @@ router.post('/training-records', authenticate, requireAdmin, injectTenantDb, upl
         if (!r.training_date)  throw new Error('training_date is required');
         if (!r.name)           throw new Error('name (training name) is required');
 
-        const cand = db.prepare('SELECT id FROM candidates WHERE email = ? AND deleted_at IS NULL').get(r.employee_email.trim());
+        const cand = await db.prepare('SELECT id FROM candidates WHERE email = ? AND deleted_at IS NULL').get(r.employee_email.trim());
         if (!cand) throw new Error(`No employee found with email: ${r.employee_email}`);
 
-        db.prepare('INSERT INTO training_records (candidate_id, training_date, name, content, results) VALUES (?, ?, ?, ?, ?)')
+        await db.prepare('INSERT INTO training_records (candidate_id, training_date, name, content, results) VALUES (?, ?, ?, ?, ?)')
           .run(cand.id, r.training_date.trim(), r.name.trim(), r.content?.trim() || null, r.results?.trim() || null);
 
         imported.push({ row: rowNum, employee: r.employee_email, training: r.name });

@@ -10,9 +10,9 @@ router.use(authenticate, requireAdmin);
  * GET /api/settings
  * Returns current tenant settings from master DB.
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const tenant = masterDb.prepare('SELECT * FROM tenants WHERE slug = ?').get(req.user.tenantSlug);
+    const tenant = await masterDb.prepare('SELECT * FROM tenants WHERE slug = ?').get(req.user.tenantSlug);
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
     // Never expose db_path to the client
     const { db_path, ...safe } = tenant;
@@ -28,7 +28,7 @@ router.get('/', (req, res) => {
  * Update tenant settings.
  * Body: { company_name, company_logo, contact_email, contact_phone }
  */
-router.put('/', (req, res) => {
+router.put('/', async (req, res) => {
   try {
     const { company_name, company_logo, contact_email, contact_phone } = req.body;
 
@@ -36,13 +36,13 @@ router.put('/', (req, res) => {
       return res.status(400).json({ error: 'company_name is required' });
     }
 
-    masterDb.prepare(`
+    await masterDb.prepare(`
       UPDATE tenants SET
         company_name   = ?,
         company_logo   = COALESCE(?, company_logo),
         contact_email  = ?,
         contact_phone  = ?,
-        updated_at     = CURRENT_TIMESTAMP
+        updated_at     = NOW()
       WHERE slug = ?
     `).run(
       company_name.trim(),
@@ -52,7 +52,7 @@ router.put('/', (req, res) => {
       req.user.tenantSlug
     );
 
-    const tenant = masterDb.prepare('SELECT * FROM tenants WHERE slug = ?').get(req.user.tenantSlug);
+    const tenant = await masterDb.prepare('SELECT * FROM tenants WHERE slug = ?').get(req.user.tenantSlug);
     const { db_path, ...safe } = tenant;
     res.json({ message: 'Settings updated', tenant: safe });
   } catch (err) {
@@ -65,10 +65,10 @@ router.put('/', (req, res) => {
  * DELETE /api/settings/logo
  * Remove company logo.
  */
-router.delete('/logo', (req, res) => {
+router.delete('/logo', async (req, res) => {
   try {
-    masterDb.prepare(
-      "UPDATE tenants SET company_logo = NULL, updated_at = CURRENT_TIMESTAMP WHERE slug = ?"
+    await masterDb.prepare(
+      "UPDATE tenants SET company_logo = NULL, updated_at = NOW() WHERE slug = ?"
     ).run(req.user.tenantSlug);
     res.json({ message: 'Logo removed' });
   } catch (err) {
