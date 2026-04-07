@@ -79,6 +79,7 @@ function initializeDatabase(wrapper, raw) {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('admin', 'candidate', 'client')),
+      must_change_password INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS clients (
@@ -229,8 +230,10 @@ function initializeDatabase(wrapper, raw) {
 
 function getDb() {
   const { runMigrations } = require('./migrate');
-  initializeDatabase(defaultDbWrapper, _defaultRaw);
+  // Run migrations first so any schema changes (e.g. ALTER TABLE ADD COLUMN)
+  // are applied before initializeDatabase tries to INSERT using those columns.
   runMigrations(defaultDbWrapper, _defaultRaw);
+  initializeDatabase(defaultDbWrapper, _defaultRaw);
   return defaultDbWrapper;
 }
 
