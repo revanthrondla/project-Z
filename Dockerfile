@@ -11,7 +11,7 @@ WORKDIR /app/frontend
 
 # Copy dependency manifests first (layer cache)
 COPY frontend/package*.json ./
-RUN npm ci --prefer-offline
+RUN npm ci --legacy-peer-deps --prefer-offline
 
 # Copy source and build
 COPY frontend/ ./
