@@ -1,0 +1,35 @@
+{
+  "name": "aGrow Agricultural Platform",
+  "short_name": "aGrow",
+  "description": "Field scanning and harvesting analytics for agriculture",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#16a34a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%2316a34a'/><text y='.9em' font-size='72' x='14'>🌱</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["agriculture", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Field Scan",
+      "short_name": "Scan",
+      "description": "Open field scanner",
+      "url": "/field-scan",
+      "icons": [{ "src": "/manifest.json", "sizes": "96x96" }]
+    },
+    {
+      "name": "Analytics",
+      "short_name": "Analytics",
+      "description": "View harvesting analytics",
+      "url": "/agrow/analytics",
+      "icons": [{ "src": "/manifest.json", "sizes": "96x96" }]
+    }
+  ]
+}

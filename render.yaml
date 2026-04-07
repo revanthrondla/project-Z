@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HireIQ — Render.com deployment configuration
+# https://render.com/docs/render-yaml-reference
+#
+# Deploy steps:
+#   1. Push this repo to GitHub
+#   2. Connect the repo in Render dashboard
+#   3. Render detects render.yaml and creates the service automatically
+#   4. Set SECRET environment variables in the Render dashboard
+#      (JWT_SECRET, ENCRYPTION_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  - type: web
+    name: hireiq
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+
+    # Render free tier is "starter"; upgrade to "standard" for production
+    plan: starter
+
+    # Render sets PORT automatically; our app reads process.env.PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # JWT secret — set this as a SECRET in the Render dashboard, not here
+      - key: JWT_SECRET
+        sync: false   # Render will prompt you to set this manually
+
+      # Encryption key for stored IMAP passwords and sensitive data
+      - key: ENCRYPTION_KEY
+        sync: false
+
+      # SQLite data directory — mapped to Render's persistent disk mount
+      - key: HIREIQ_DATA_DIR
+        value: /data
+
+      - key: HIREIQ_DB_PATH
+        value: /data/hireiq.db
+
+      # Comma-separated origins — update to your actual domain
+      - key: ALLOWED_ORIGINS
+        value: https://hireiq.onrender.com
+
+      # AI features (optional) — set in dashboard if using AI assistant module
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      - key: OPENAI_API_KEY
+        sync: false
+
+    # Persistent disk for SQLite databases and uploads
+    # Render free tier does not support disks — upgrade to paid for persistence
+    disk:
+      name: hireiq-data
+      mountPath: /data
+      sizeGB: 5
+
+    healthCheckPath: /api/health
+    autoDeploy: true

@@ -1,0 +1,107 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HireIQ — Docker Compose (local development + self-hosted production)
+#
+# Usage:
+#   Development:  docker compose up
+#   Production:   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Volumes:
+#   hireiq_data  — SQLite database files (master.db + per-tenant .db files)
+#   hireiq_uploads — uploaded files (documents, resumes, etc.)
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: hireiq:latest
+    container_name: hireiq_app
+    restart: unless-stopped
+
+    ports:
+      - "${PORT:-3001}:3001"
+
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+
+      # JWT — MUST be overridden via .env or platform secrets
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+
+      # Database paths — inside the mounted volume
+      HIREIQ_DATA_DIR: /data
+      HIREIQ_DB_PATH: /data/hireiq.db
+
+      # CORS — comma-separated list of allowed frontend origins
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3001}
+
+      # Email polling (optional — for auto-importing payment emails)
+      # EMAIL_HOST: ${EMAIL_HOST:-}
+      # EMAIL_PORT: ${EMAIL_PORT:-993}
+      # EMAIL_USER: ${EMAIL_USER:-}
+      # EMAIL_PASS: ${EMAIL_PASS:-}
+
+      # AI features (optional — requires API keys)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+
+      # Encryption key for sensitive stored data (IMAP passwords, etc.)
+      # Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+
+    volumes:
+      # Persistent SQLite databases
+      - hireiq_data:/data
+      # Persistent uploaded files (referenced by /api/upload/*)
+      - hireiq_uploads:/app/uploads
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ── Optional: Nginx reverse proxy with SSL termination ────────────────────
+  # Uncomment when running self-hosted with a custom domain.
+  # For Railway/Render, SSL is handled by the platform — skip this service.
+  #
+  # nginx:
+  #   image: nginx:1.27-alpine
+  #   container_name: hireiq_nginx
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+  #     - certbot_certs:/etc/letsencrypt:ro
+  #     - certbot_www:/var/www/certbot:ro
+  #   depends_on:
+  #     app:
+  #       condition: service_healthy
+  #
+  # certbot:
+  #   image: certbot/certbot:latest
+  #   volumes:
+  #     - certbot_certs:/etc/letsencrypt
+  #     - certbot_www:/var/www/certbot
+  #   entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+volumes:
+  hireiq_data:
+    driver: local
+  hireiq_uploads:
+    driver: local
+  # certbot_certs:
+  # certbot_www:
