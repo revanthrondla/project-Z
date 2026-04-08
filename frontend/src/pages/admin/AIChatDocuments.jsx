@@ -146,7 +146,7 @@ export default function AIChatDocuments() {
             {['file', 'text'].map(mode => (
               <button key={mode}
                 onClick={() => setInputMode(mode)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${inputMode === mode ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${inputMode === mode ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               >
                 {mode === 'file' ? '📎 Upload File' : '✍️ Paste Text'}
               </button>
@@ -180,7 +180,7 @@ export default function AIChatDocuments() {
                   type="file"
                   accept=".pdf,.txt,.md,.csv"
                   onChange={e => setFile(e.target.files[0] || null)}
-                  className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 file:font-medium hover:file:bg-blue-100 cursor-pointer"
+                  className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 file:font-medium hover:file:bg-blue-100 cursor-pointer"
                 />
                 {file && (
                   <p className="text-xs text-gray-500 mt-1">{file.name} ({formatBytes(file.size)})</p>
@@ -227,7 +227,7 @@ export default function AIChatDocuments() {
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600" />
+            <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-emerald-600" />
           </div>
         ) : docs.length === 0 ? (
           <div className="text-center py-14 text-gray-400">
@@ -271,8 +271,8 @@ export default function AIChatDocuments() {
       </div>
 
       {/* How it works */}
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
-        <h3 className="font-semibold text-blue-900 text-sm mb-2">💡 How the AI Knowledge Base works</h3>
+      <div className="bg-emerald-50 border border-blue-100 rounded-xl p-5">
+        <h3 className="font-semibold text-emerald-900 text-sm mb-2">💡 How the AI Knowledge Base works</h3>
         <div className="text-xs text-blue-800 space-y-1">
           <p>• Documents are indexed with full-text search and retrieved automatically when relevant to a user's question.</p>
           <p>• Supported formats: PDF (text extracted), plain text (.txt), Markdown (.md), or paste directly.</p>

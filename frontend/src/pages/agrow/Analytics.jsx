@@ -146,10 +146,10 @@ export default function Analytics() {
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <KpiCard label="Total Scans"     value={t.total_scans    || 0}  icon="🔍" />
-        <KpiCard label="Total Quantity"  value={Number(t.total_quantity || 0).toFixed(0)} sub="units/crates" icon="📦" color="text-blue-600" />
+        <KpiCard label="Total Quantity"  value={Number(t.total_quantity || 0).toFixed(0)} sub="units/crates" icon="📦" color="text-emerald-600" />
         <KpiCard label="Products"        value={t.unique_products || 0} icon="🌾" color="text-yellow-600" />
         <KpiCard label="Active Crews"    value={t.crew_count      || 0} icon="👷" color="text-purple-600" />
-        <KpiCard label="Workers"         value={t.worker_count    || 0} icon="👤" color="text-indigo-600" />
+        <KpiCard label="Workers"         value={t.worker_count    || 0} icon="👤" color="text-emerald-600" />
       </div>
 
       {/* Charts grid */}
@@ -215,7 +215,7 @@ export default function Analytics() {
               {data.byWorker.map((w, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                    ${i === 0 ? 'bg-yellow-100 text-yellow-700' : i === 1 ? 'bg-gray-100 text-gray-700' : i === 2 ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-600'}`}>
+                    ${i === 0 ? 'bg-yellow-100 text-yellow-700' : i === 1 ? 'bg-gray-100 text-gray-700' : i === 2 ? 'bg-orange-100 text-orange-700' : 'bg-emerald-50 text-emerald-600'}`}>
                     {i + 1}
                   </div>
                   <div className="flex-1 min-w-0">

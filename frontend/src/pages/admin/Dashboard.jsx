@@ -4,7 +4,7 @@ import api from '../../api';
 
 function StatCard({ icon, label, value, sub, color = 'blue', to }) {
   const colors = {
-    blue: 'bg-blue-50 text-blue-600',
+    blue: 'bg-emerald-50 text-emerald-600',
     green: 'bg-green-50 text-green-600',
     yellow: 'bg-yellow-50 text-yellow-600',
     purple: 'bg-purple-50 text-purple-600',
@@ -47,7 +47,7 @@ export default function AdminDashboard() {
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
     </div>
   );
 
@@ -81,7 +81,7 @@ export default function AdminDashboard() {
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Pending Approvals</h2>
           <div className="flex gap-2">
-            <Link to="/timesheets" className="text-sm text-blue-600 hover:underline">View timesheets →</Link>
+            <Link to="/timesheets" className="text-sm text-emerald-600 hover:underline">View timesheets →</Link>
           </div>
         </div>
         {!stats?.recentActivity?.length ? (
@@ -93,7 +93,7 @@ export default function AdminDashboard() {
           <div className="divide-y divide-gray-50">
             {stats.recentActivity.map((item, i) => (
               <div key={i} className="px-6 py-4 flex items-center gap-4 hover:bg-gray-50">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base ${item.type === 'timesheet' ? 'bg-blue-50' : 'bg-orange-50'}`}>
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base ${item.type === 'timesheet' ? 'bg-emerald-50' : 'bg-orange-50'}`}>
                   {item.type === 'timesheet' ? '⏱️' : '🏖️'}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -104,7 +104,7 @@ export default function AdminDashboard() {
                   <ActivityBadge status={item.status} />
                   <Link
                     to={item.type === 'timesheet' ? '/timesheets' : '/absences'}
-                    className="text-xs text-blue-600 hover:underline"
+                    className="text-xs text-emerald-600 hover:underline"
                   >
                     Review
                   </Link>

@@ -6,14 +6,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 
 const STATUS_COLORS = {
-  open:        'bg-blue-100 text-blue-700',
+  open:        'bg-blue-100 text-emerald-700',
   in_progress: 'bg-yellow-100 text-yellow-700',
   resolved:    'bg-green-100 text-green-700',
   closed:      'bg-gray-100 text-gray-500',
 };
 const PRIORITY_COLORS = {
   low:    'bg-gray-100 text-gray-500',
-  medium: 'bg-blue-100 text-blue-700',
+  medium: 'bg-blue-100 text-emerald-700',
   high:   'bg-orange-100 text-orange-700',
   urgent: 'bg-red-100 text-red-700',
 };
@@ -130,14 +130,14 @@ function TicketDetailPanel({ ticketId, onClose, onUpdated }) {
 
         {/* Thread */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          <div className="bg-blue-50 rounded-xl p-4">
+          <div className="bg-emerald-50 rounded-xl p-4">
             <p className="text-xs text-blue-500 font-medium mb-1.5">
               {ticket.submitted_by} ({ticket.submitter_role}) — original message
             </p>
             <p className="text-sm text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
           </div>
           {(ticket.messages || []).map(m => (
-            <div key={m.id} className={`rounded-xl p-4 ${m.sender_role === 'super_admin' ? 'bg-indigo-50 ml-4' : 'bg-gray-50 mr-4'}`}>
+            <div key={m.id} className={`rounded-xl p-4 ${m.sender_role === 'super_admin' ? 'bg-emerald-50 ml-4' : 'bg-gray-50 mr-4'}`}>
               <p className="text-xs font-medium mb-1.5 text-gray-500">
                 {m.sender_role === 'super_admin' ? '🛟 Support (you)' : `🏢 ${m.sender} (${m.sender_role})`}
                 <span className="ml-2 text-gray-400 font-normal">{new Date(m.created_at).toLocaleString()}</span>
@@ -208,7 +208,7 @@ export default function SuperAdminSupportDashboard() {
       {stats && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <KpiCard label="Total" value={stats.total} icon="🎫" />
-          <KpiCard label="Open" value={stats.open} icon="📬" color="text-blue-600" />
+          <KpiCard label="Open" value={stats.open} icon="📬" color="text-emerald-600" />
           <KpiCard label="In Progress" value={stats.in_progress} icon="⚙️" color="text-yellow-600" />
           <KpiCard label="Resolved" value={stats.resolved} icon="✅" color="text-green-600" />
           <KpiCard label="Urgent / High" value={(stats.urgent || 0) + (stats.high_priority || 0)} icon="🚨" color="text-red-600" />
@@ -274,12 +274,12 @@ export default function SuperAdminSupportDashboard() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {tickets.map(t => (
-                <tr key={t.id} onClick={() => setSelectedId(t.id)} className="hover:bg-blue-50 cursor-pointer transition-colors">
+                <tr key={t.id} onClick={() => setSelectedId(t.id)} className="hover:bg-emerald-50 cursor-pointer transition-colors">
                   <td className="px-4 py-3 text-gray-400 text-xs">#{t.id}</td>
                   <td className="px-4 py-3">
                     <span className="font-medium text-gray-800">{t.subject}</span>
                     {t.message_count > 0 && (
-                      <span className="ml-2 text-xs text-indigo-500">({t.message_count})</span>
+                      <span className="ml-2 text-xs text-emerald-500">({t.message_count})</span>
                     )}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">

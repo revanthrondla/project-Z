@@ -86,7 +86,7 @@ function PayrollPaymentView({ data, loading }) {
       {data && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <KpiCard label="Total Employees" value={s.total_candidates} icon="👥" />
-          <KpiCard label="Expected Pay"     value={fmtCurrency(s.total_expected)} icon="📋" color="text-blue-600" />
+          <KpiCard label="Expected Pay"     value={fmtCurrency(s.total_expected)} icon="📋" color="text-emerald-600" />
           <KpiCard label="Total Paid"       value={fmtCurrency(s.total_paid)}     icon="💳" color="text-green-600" />
           <KpiCard
             label="Net Variance"
@@ -142,7 +142,7 @@ function PayrollPaymentView({ data, loading }) {
                     </td>
                     <td className="px-4 py-3 text-right text-gray-600">{fmtCurrency(r.hourly_rate)}/hr</td>
                     <td className="px-4 py-3 text-right text-gray-700">{fmtHours(r.total_hours)}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-blue-700">{fmtCurrency(r.expected_pay)}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmtCurrency(r.expected_pay)}</td>
                     <td className="px-4 py-3 text-right font-semibold text-green-700">{fmtCurrency(r.total_paid)}</td>
                     <td className={`px-4 py-3 text-right ${varColor}`}>{fmtVariance(r.variance)}</td>
                     <td className="px-4 py-3 text-center">
@@ -157,7 +157,7 @@ function PayrollPaymentView({ data, loading }) {
             <tfoot className="bg-gray-50 border-t border-gray-200">
               <tr>
                 <td className="px-4 py-3 font-semibold text-gray-700" colSpan={3}>Totals</td>
-                <td className="px-4 py-3 text-right font-bold text-blue-700">{fmtCurrency(s.total_expected)}</td>
+                <td className="px-4 py-3 text-right font-bold text-emerald-700">{fmtCurrency(s.total_expected)}</td>
                 <td className="px-4 py-3 text-right font-bold text-green-700">{fmtCurrency(s.total_paid)}</td>
                 <td className={`px-4 py-3 text-right font-bold ${s.net_variance < -0.01 ? 'text-red-600' : s.net_variance > 0.01 ? 'text-amber-600' : 'text-gray-400'}`}>
                   {fmtVariance(s.net_variance)}
@@ -248,7 +248,7 @@ function CandidateDetailModal({ candidateId, candidateName, period, onClose }) {
                         !e.client_approval_status || e.client_approval_status === 'pending' ? 'bg-amber-50/30' : ''
                       }`}>
                         <td className="px-3 py-2.5 font-medium text-gray-800">{e.date}</td>
-                        <td className="px-3 py-2.5 text-right text-blue-700 font-medium">{fmtHours(e.hours)}</td>
+                        <td className="px-3 py-2.5 text-right text-emerald-700 font-medium">{fmtHours(e.hours)}</td>
                         <td className="px-3 py-2.5 text-right text-green-700 font-medium">{fmtCurrency(e.amount)}</td>
                         <td className="px-3 py-2.5 text-gray-500 text-xs max-w-[200px] truncate">{e.description || e.project || '—'}</td>
                         <td className="px-3 py-2.5 text-center">
@@ -272,7 +272,7 @@ function CandidateDetailModal({ candidateId, candidateName, period, onClose }) {
                   <tfoot className="bg-gray-50 border-t border-gray-200">
                     <tr>
                       <td className="px-3 py-2.5 font-semibold text-gray-700">{detail.entries.length} entries</td>
-                      <td className="px-3 py-2.5 text-right font-bold text-blue-700">
+                      <td className="px-3 py-2.5 text-right font-bold text-emerald-700">
                         {fmtHours(detail.entries.reduce((s, e) => s + Number(e.hours), 0))}
                       </td>
                       <td className="px-3 py-2.5 text-right font-bold text-green-700">
@@ -334,7 +334,7 @@ function TimesheetDiscrepancyView({ data, loading }) {
       {/* KPI Cards */}
       {data && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <KpiCard label="Admin Approved" value={fmtHours(s.total_admin_approved)} icon="✅" color="text-blue-600"
+          <KpiCard label="Admin Approved" value={fmtHours(s.total_admin_approved)} icon="✅" color="text-emerald-600"
             sub={`${fmtCurrency(s.total_admin_approved * (s.total_invoiceable / Math.max(s.total_client_approved || s.total_admin_approved, 1)))} expected`} />
           <KpiCard label="Client Approved" value={fmtHours(s.total_client_approved)} icon="🟢" color="text-green-600"
             sub={`${fmtCurrency(s.total_invoiceable)} invoiceable`} highlight />
@@ -416,7 +416,7 @@ function TimesheetDiscrepancyView({ data, loading }) {
                       <p className="text-xs text-gray-400">{r.submitted_entries} entries · {fmtCurrency(r.hourly_rate)}/hr</p>
                     </td>
                     <td className="px-4 py-3 text-right text-gray-600">{fmtHours(r.submitted_hours)}</td>
-                    <td className="px-4 py-3 text-right text-blue-700 font-medium">{fmtHours(r.admin_approved_hours)}</td>
+                    <td className="px-4 py-3 text-right text-emerald-700 font-medium">{fmtHours(r.admin_approved_hours)}</td>
                     <td className="px-4 py-3 text-right text-green-700 font-medium">{fmtHours(r.client_approved_hours)}</td>
                     <td className={`px-4 py-3 text-right font-medium ${r.pending_client_hours > 0 ? 'text-amber-600' : 'text-gray-300'}`}>
                       {r.pending_client_hours > 0 ? fmtHours(r.pending_client_hours) : '—'}
@@ -433,7 +433,7 @@ function TimesheetDiscrepancyView({ data, loading }) {
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => setDrilldown({ id: r.candidate_id, name: r.candidate_name })}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="text-xs text-emerald-600 hover:underline"
                       >
                         Details
                       </button>
@@ -446,7 +446,7 @@ function TimesheetDiscrepancyView({ data, loading }) {
               <tr>
                 <td className="px-4 py-3 font-semibold text-gray-700">Totals</td>
                 <td className="px-4 py-3 text-right text-gray-600">{fmtHours(s.total_submitted_hours)}</td>
-                <td className="px-4 py-3 text-right font-bold text-blue-700">{fmtHours(s.total_admin_approved)}</td>
+                <td className="px-4 py-3 text-right font-bold text-emerald-700">{fmtHours(s.total_admin_approved)}</td>
                 <td className="px-4 py-3 text-right font-bold text-green-700">{fmtHours(s.total_client_approved)}</td>
                 <td className={`px-4 py-3 text-right font-bold ${s.total_pending_client > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
                   {s.total_pending_client > 0 ? fmtHours(s.total_pending_client) : '—'}

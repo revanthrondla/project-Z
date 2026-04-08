@@ -9,7 +9,7 @@ import api from '../../api';
 
 const TIER_BADGE = {
   fast:     'bg-green-100 text-green-700',
-  balanced: 'bg-blue-100  text-blue-700',
+  balanced: 'bg-blue-100  text-emerald-700',
   powerful: 'bg-purple-100 text-purple-700',
 };
 

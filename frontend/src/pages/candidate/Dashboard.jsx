@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import api from '../../api';
 
 function StatCard({ icon, label, value, color = 'blue' }) {
-  const colors = { blue: 'bg-blue-50 text-blue-600', green: 'bg-green-50 text-green-600', yellow: 'bg-yellow-50 text-yellow-600', purple: 'bg-purple-50 text-purple-600' };
+  const colors = { blue: 'bg-emerald-50 text-emerald-600', green: 'bg-green-50 text-green-600', yellow: 'bg-yellow-50 text-yellow-600', purple: 'bg-purple-50 text-purple-600' };
   return (
     <div className="card p-5">
       <div className="flex items-center gap-4">
@@ -38,7 +38,7 @@ export default function CandidateDashboard() {
     }).finally(() => setLoading(false));
   }, [user]);
 
-  if (loading) return <div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>;
+  if (loading) return <div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>;
 
   const paidTotal = stats?.invoiceStats?.find(i => i.status === 'paid')?.total || 0;
   const pendingTotal = stats?.invoiceStats?.find(i => i.status === 'sent')?.total || 0;
@@ -64,13 +64,13 @@ export default function CandidateDashboard() {
         <div className="card lg:col-span-2">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-semibold text-gray-900">Recent Time Entries</h2>
-            <Link to="/log-hours" className="text-sm text-blue-600 hover:underline">Log hours →</Link>
+            <Link to="/log-hours" className="text-sm text-emerald-600 hover:underline">Log hours →</Link>
           </div>
           {recentEntries.length === 0 ? (
             <div className="p-8 text-center text-gray-400">
               <div className="text-3xl mb-2">⏱️</div>
               <p>No time entries yet</p>
-              <Link to="/log-hours" className="mt-2 inline-block text-blue-600 text-sm hover:underline">Log your first hours</Link>
+              <Link to="/log-hours" className="mt-2 inline-block text-emerald-600 text-sm hover:underline">Log your first hours</Link>
             </div>
           ) : (
             <div className="divide-y divide-gray-50">
@@ -94,10 +94,10 @@ export default function CandidateDashboard() {
           <div className="card p-5">
             <h3 className="font-semibold text-gray-900 mb-3">Quick Actions</h3>
             <div className="space-y-2">
-              <Link to="/log-hours" className="flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 transition-colors group">
+              <Link to="/log-hours" className="flex items-center gap-3 p-3 rounded-lg hover:bg-emerald-50 transition-colors group">
                 <span className="text-xl">⏱️</span>
                 <div>
-                  <p className="text-sm font-medium text-gray-900 group-hover:text-blue-700">Log Today's Hours</p>
+                  <p className="text-sm font-medium text-gray-900 group-hover:text-emerald-700">Log Today's Hours</p>
                   <p className="text-xs text-gray-400">Track your work time</p>
                 </div>
               </Link>

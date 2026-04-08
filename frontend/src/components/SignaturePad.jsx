@@ -135,7 +135,7 @@ export default function SignaturePad({ onSave, onCancel, width = 520, height = 1
             onClick={save}
             disabled={isEmpty}
             className={`px-5 py-2 rounded-lg text-sm font-medium text-white transition-opacity
-              ${isEmpty ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+              ${isEmpty ? 'bg-blue-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
           >
             Apply Signature
           </button>

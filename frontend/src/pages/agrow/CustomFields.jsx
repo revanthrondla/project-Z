@@ -72,7 +72,7 @@ export default function CustomFields() {
     text:'T', number:'#', dropdown:'▼', date:'📅', time:'⏰', boolean:'✓', image:'🖼'
   };
   const TYPE_COLORS = {
-    text:'bg-blue-100 text-blue-700', number:'bg-green-100 text-green-700',
+    text:'bg-blue-100 text-emerald-700', number:'bg-green-100 text-green-700',
     dropdown:'bg-purple-100 text-purple-700', date:'bg-yellow-100 text-yellow-700',
     time:'bg-orange-100 text-orange-700', boolean:'bg-teal-100 text-teal-700',
     image:'bg-pink-100 text-pink-700'
@@ -99,7 +99,7 @@ export default function CustomFields() {
                 {f.required ? <span className="text-xs text-red-500 font-medium">Required</span> : null}
               </div>
               <div className="flex gap-2">
-                <button onClick={() => openEdit(f)} className="text-xs text-blue-500 hover:text-blue-700">Edit</button>
+                <button onClick={() => openEdit(f)} className="text-xs text-blue-500 hover:text-emerald-700">Edit</button>
                 <button onClick={() => handleDelete(f.id)} className="text-xs text-red-400 hover:text-red-600">Remove</button>
               </div>
             </div>

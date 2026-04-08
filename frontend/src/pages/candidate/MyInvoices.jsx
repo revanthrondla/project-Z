@@ -99,7 +99,7 @@ export default function MyInvoices() {
           <p className="text-xs text-gray-500 mt-1">Total Received</p>
         </div>
         <div className="card p-4 text-center">
-          <p className="text-2xl font-bold text-blue-600">${totalPending.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+          <p className="text-2xl font-bold text-emerald-600">${totalPending.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
           <p className="text-xs text-gray-500 mt-1">Pending Payment</p>
         </div>
         <div className="card p-4 text-center">
@@ -109,7 +109,7 @@ export default function MyInvoices() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+        <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>
       ) : invoices.length === 0 ? (
         <div className="card text-center py-16 text-gray-400">
           <div className="text-4xl mb-2">📄</div>
@@ -134,7 +134,7 @@ export default function MyInvoices() {
             <tbody className="divide-y divide-gray-50">
               {invoices.map(inv => (
                 <tr key={inv.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-blue-600 font-medium">{inv.invoice_number}</td>
+                  <td className="px-4 py-3 font-mono text-emerald-600 font-medium">{inv.invoice_number}</td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{inv.period_start}<br />{inv.period_end}</td>
                   <td className="px-4 py-3 text-gray-500">{inv.client_name || '—'}</td>
                   <td className="px-4 py-3 text-gray-700">{inv.total_hours}h</td>
@@ -143,7 +143,7 @@ export default function MyInvoices() {
                   <td className="px-4 py-3"><span className={STATUS_COLORS[inv.status]}>{inv.status}</span></td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => handleView(inv)} className="text-blue-600 hover:underline text-xs">View</button>
+                      <button onClick={() => handleView(inv)} className="text-emerald-600 hover:underline text-xs">View</button>
                       <button onClick={() => handleView(inv).then(() => {})} className="text-gray-500 hover:underline text-xs">Print</button>
                     </div>
                   </td>
@@ -175,9 +175,9 @@ export default function MyInvoices() {
                   <p className="text-gray-500 text-xs mb-1">Period</p>
                   <p className="font-medium">{viewInvoice.period_start} → {viewInvoice.period_end}</p>
                 </div>
-                <div className="bg-blue-50 p-3 rounded-lg">
+                <div className="bg-emerald-50 p-3 rounded-lg">
                   <p className="text-blue-500 text-xs mb-1">Total Hours</p>
-                  <p className="font-bold text-blue-700">{viewInvoice.total_hours}h @ ${viewInvoice.hourly_rate}/hr</p>
+                  <p className="font-bold text-emerald-700">{viewInvoice.total_hours}h @ ${viewInvoice.hourly_rate}/hr</p>
                 </div>
                 <div className="bg-green-50 p-3 rounded-lg">
                   <p className="text-green-500 text-xs mb-1">Total Amount</p>

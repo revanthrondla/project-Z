@@ -241,9 +241,9 @@ export default function ClientTimesheetApproval() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3">
                             <p className="text-sm font-medium text-gray-800">{entry.date}</p>
-                            <span className="text-sm font-bold text-blue-700">{fmtHours(entry.hours)}</span>
+                            <span className="text-sm font-bold text-emerald-700">{fmtHours(entry.hours)}</span>
                             {entry.project && (
-                              <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{entry.project}</span>
+                              <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">{entry.project}</span>
                             )}
                           </div>
                           {entry.description && (

@@ -155,7 +155,7 @@ export default function Employees() {
                   <div className="flex gap-2 justify-end">
                     {user?.role === 'admin' && (
                       <>
-                        <button onClick={() => openEdit(emp)} className="text-xs text-blue-500 hover:text-blue-700">Edit</button>
+                        <button onClick={() => openEdit(emp)} className="text-xs text-blue-500 hover:text-emerald-700">Edit</button>
                         <button onClick={() => handleDelete(emp.id)} className="text-xs text-red-400 hover:text-red-600">Remove</button>
                       </>
                     )}

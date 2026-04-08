@@ -8,7 +8,7 @@ const STATUS_BADGE = {
 };
 
 const CONTRACT_BADGE = {
-  contractor: 'bg-blue-100 text-blue-700',
+  contractor: 'bg-blue-100 text-emerald-700',
   employee:   'bg-purple-100 text-purple-700',
   'part-time':'bg-orange-100 text-orange-700',
 };
@@ -25,7 +25,7 @@ export default function ClientDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"/></div>;
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"/></div>;
   if (error) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3">
       <p className="text-gray-500">⚠️ {error}</p>
@@ -46,7 +46,7 @@ export default function ClientDashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          { label: 'Active Candidates', value: kpis.total_candidates, icon: '👥', color: 'text-blue-600 bg-blue-50' },
+          { label: 'Active Candidates', value: kpis.total_candidates, icon: '👥', color: 'text-emerald-600 bg-emerald-50' },
           { label: 'Approved Hours', value: `${kpis.total_approved_hours?.toFixed(1)}h`, icon: '✅', color: 'text-green-600 bg-green-50' },
           { label: 'Pending Hours', value: `${kpis.total_pending_hours?.toFixed(1)}h`, icon: '⏳', color: 'text-yellow-600 bg-yellow-50' },
           { label: 'Total Cost', value: `$${Number(kpis.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, icon: '💰', color: 'text-purple-600 bg-purple-50' },
@@ -75,7 +75,7 @@ export default function ClientDashboard() {
                 <div key={c.id} className="px-5 py-4 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
+                      <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center text-sm font-bold text-emerald-700 shrink-0">
                         {c.name[0].toUpperCase()}
                       </div>
                       <div>
@@ -103,7 +103,7 @@ export default function ClientDashboard() {
                       <p className="text-gray-400">Pending</p>
                     </div>
                     <div>
-                      <p className="font-semibold text-blue-600">${Number(c.approved_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                      <p className="font-semibold text-emerald-600">${Number(c.approved_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                       <p className="text-gray-400">Cost</p>
                     </div>
                   </div>

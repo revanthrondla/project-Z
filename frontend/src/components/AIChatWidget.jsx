@@ -165,7 +165,7 @@ function ToolCard({ toolData }) {
   }[tool] || '🔧';
 
   return (
-    <div className="mt-2 text-xs bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-blue-700">
+    <div className="mt-2 text-xs bg-emerald-50 border border-blue-100 rounded-lg px-3 py-2 text-emerald-700">
       <span className="font-medium">{icon} Action: {tool.replace(/_/g, ' ')}</span>
       {result?.success === false && <span className="ml-2 text-red-600">{result.error}</span>}
       {result?.success === true && <span className="ml-2 text-green-700">✓ Success</span>}
@@ -182,11 +182,11 @@ function MessageBubble({ msg }) {
   return (
     <div className={`flex gap-2 ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
       {!isUser && (
-        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center text-white text-xs shrink-0 mt-0.5">
+        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-emerald-600 flex items-center justify-center text-white text-xs shrink-0 mt-0.5">
           🤖
         </div>
       )}
-      <div className={`max-w-[85%] ${isUser ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm px-3.5 py-2.5' : 'bg-white border border-gray-100 rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-sm'}`}>
+      <div className={`max-w-[85%] ${isUser ? 'bg-emerald-600 text-white rounded-2xl rounded-tr-sm px-3.5 py-2.5' : 'bg-white border border-gray-100 rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-sm'}`}>
         {isUser
           ? <p className="text-sm">{msg.content}</p>
           : (
@@ -214,7 +214,7 @@ function MessageBubble({ msg }) {
 function TypingIndicator() {
   return (
     <div className="flex gap-2 mb-3">
-      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center text-white text-xs shrink-0">🤖</div>
+      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-emerald-600 flex items-center justify-center text-white text-xs shrink-0">🤖</div>
       <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
         <div className="flex gap-1 items-center h-4">
           {[0, 1, 2].map(i => (
@@ -368,7 +368,7 @@ export default function AIChatWidget() {
       {/* Floating trigger */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-purple-600 to-blue-600 text-white rounded-full shadow-2xl hover:shadow-purple-300 hover:scale-105 transition-all z-40 flex items-center justify-center text-2xl"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-600 to-emerald-600 text-white rounded-full shadow-2xl hover:shadow-purple-300 hover:scale-105 transition-all z-40 flex items-center justify-center text-xl sm:text-2xl"
         title="AI Assistant"
       >
         {open ? '✕' : '🤖'}
@@ -376,11 +376,11 @@ export default function AIChatWidget() {
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-24 right-6 w-[420px] h-[600px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col z-40 overflow-hidden"
-          style={{ maxHeight: 'calc(100vh - 120px)' }}>
+        <div className="fixed inset-2 sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[420px] sm:h-[600px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col z-40 overflow-hidden"
+          style={{ maxHeight: 'calc(100dvh - 16px)', sm: { maxHeight: 'calc(100vh - 120px)' } }}>
 
           {/* Header */}
-          <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-3 flex items-center justify-between text-white shrink-0">
+          <div className="bg-gradient-to-r from-purple-600 to-emerald-600 px-4 py-3 flex items-center justify-between text-white shrink-0">
             <div className="flex items-center gap-2">
               <span className="text-xl">🤖</span>
               <div>
@@ -408,7 +408,7 @@ export default function AIChatWidget() {
                     : conversations.map(c => (
                         <div key={c.id}
                           onClick={() => loadConversation(c.id)}
-                          className={`group flex items-center gap-1 px-3 py-2 cursor-pointer hover:bg-gray-100 text-xs border-b border-gray-50 ${c.id === convId ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
+                          className={`group flex items-center gap-1 px-3 py-2 cursor-pointer hover:bg-gray-100 text-xs border-b border-gray-50 ${c.id === convId ? 'bg-emerald-50 text-emerald-700' : 'text-gray-700'}`}
                         >
                           <span className="flex-1 truncate">{c.title}</span>
                           <button onClick={(e) => deleteConversation(c.id, e)}
@@ -440,7 +440,7 @@ export default function AIChatWidget() {
                       {SUGGESTIONS.map(s => (
                         <button key={s}
                           onClick={() => sendMessage(s)}
-                          className="text-xs bg-gray-100 hover:bg-blue-50 hover:text-blue-700 border border-gray-200 rounded-full px-2.5 py-1 transition-colors text-gray-600">
+                          className="text-xs bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 border border-gray-200 rounded-full px-2.5 py-1 transition-colors text-gray-600">
                           {s}
                         </button>
                       ))}
@@ -472,7 +472,7 @@ export default function AIChatWidget() {
                       <button
                         onClick={listening ? stopVoice : startVoice}
                         disabled={loading}
-                        className={`p-1.5 rounded-lg transition-all text-base ${listening ? 'text-red-500 bg-red-50 animate-pulse' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                        className={`p-1.5 rounded-lg transition-all text-base ${listening ? 'text-red-500 bg-red-50 animate-pulse' : 'text-gray-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
                         title={listening ? 'Stop recording' : 'Voice input'}
                       >
                         🎤
@@ -481,7 +481,7 @@ export default function AIChatWidget() {
                     <button
                       onClick={() => sendMessage()}
                       disabled={!input.trim() || loading}
-                      className="p-1.5 rounded-lg bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700 transition-colors text-sm"
+                      className="p-1.5 rounded-lg bg-emerald-600 text-white disabled:opacity-40 hover:bg-emerald-700 transition-colors text-sm"
                       title="Send"
                     >
                       ➤

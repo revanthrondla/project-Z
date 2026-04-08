@@ -64,7 +64,7 @@ export default function AdminAbsences() {
             <button onClick={load} className="mt-3 btn-primary text-sm">Retry</button>
           </div>
         ) : loading ? (
-          <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+          <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>
         ) : absences.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <div className="text-4xl mb-2">🏖️</div>
@@ -88,7 +88,7 @@ export default function AdminAbsences() {
                 <tr key={a.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-semibold text-xs">{a.candidate_name[0]}</div>
+                      <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center text-emerald-700 font-semibold text-xs">{a.candidate_name[0]}</div>
                       <span className="font-medium text-gray-900">{a.candidate_name}</span>
                     </div>
                   </td>

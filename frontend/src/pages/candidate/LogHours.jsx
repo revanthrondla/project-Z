@@ -111,7 +111,7 @@ export default function LogHours() {
       {/* Entries */}
       <div className="card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+          <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>
         ) : entries.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <div className="text-4xl mb-2">⏱️</div>
@@ -141,7 +141,7 @@ export default function LogHours() {
                   <td className="px-4 py-3 text-right">
                     {e.status === 'pending' ? (
                       <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => openEdit(e)} className="text-blue-600 hover:underline text-xs">Edit</button>
+                        <button onClick={() => openEdit(e)} className="text-emerald-600 hover:underline text-xs">Edit</button>
                         <button onClick={() => handleDelete(e.id)} className="text-red-500 hover:underline text-xs">Delete</button>
                       </div>
                     ) : <span className="text-xs text-gray-300">Locked</span>}

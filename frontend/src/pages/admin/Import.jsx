@@ -64,12 +64,12 @@ const SECTIONS = [
 ];
 
 const ACCENT_CLASSES = {
-  blue:   { bg: 'bg-blue-50',   border: 'border-blue-200',   icon: 'bg-blue-100 text-blue-700',   badge: 'bg-blue-600',   bar: 'bg-blue-500' },
+  blue:   { bg: 'bg-blue-50',   border: 'border-blue-200',   icon: 'bg-blue-100 text-emerald-700',   badge: 'bg-emerald-600',   bar: 'bg-emerald-500' },
   green:  { bg: 'bg-green-50',  border: 'border-green-200',  icon: 'bg-green-100 text-green-700',  badge: 'bg-green-600',  bar: 'bg-green-500' },
   orange: { bg: 'bg-orange-50', border: 'border-orange-200', icon: 'bg-orange-100 text-orange-700', badge: 'bg-orange-600', bar: 'bg-orange-500' },
   purple: { bg: 'bg-purple-50', border: 'border-purple-200', icon: 'bg-purple-100 text-purple-700', badge: 'bg-purple-600', bar: 'bg-purple-500' },
   red:    { bg: 'bg-red-50',    border: 'border-red-200',    icon: 'bg-red-100 text-red-700',    badge: 'bg-red-600',    bar: 'bg-red-500' },
-  indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', icon: 'bg-indigo-100 text-indigo-700', badge: 'bg-indigo-600', bar: 'bg-indigo-500' },
+  indigo: { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: 'bg-emerald-100 text-emerald-700', badge: 'bg-emerald-600', bar: 'bg-emerald-500' },
   teal:   { bg: 'bg-teal-50',   border: 'border-teal-200',   icon: 'bg-teal-100 text-teal-700',   badge: 'bg-teal-600',   bar: 'bg-teal-500' },
 };
 
@@ -294,7 +294,7 @@ export default function AdminImport() {
       </div>
 
       {/* Tip banner */}
-      <div className="mb-6 flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+      <div className="mb-6 flex items-start gap-3 bg-emerald-50 border border-blue-200 rounded-xl px-4 py-3">
         <span className="text-blue-500 text-lg mt-0.5">💡</span>
         <div className="text-sm text-blue-800">
           <strong>Tips:</strong> Lines starting with <code className="bg-blue-100 px-1 rounded">#</code> are treated as comments and ignored.

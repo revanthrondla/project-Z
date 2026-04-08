@@ -81,7 +81,7 @@ export default function ChangePassword() {
               onChange={handle}
               required
               autoComplete="current-password"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
 
@@ -97,7 +97,7 @@ export default function ChangePassword() {
               required
               minLength={8}
               autoComplete="new-password"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
 
@@ -112,14 +112,14 @@ export default function ChangePassword() {
               onChange={handle}
               required
               autoComplete="new-password"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors"
           >
             {loading ? 'Updating…' : 'Set New Password'}
           </button>

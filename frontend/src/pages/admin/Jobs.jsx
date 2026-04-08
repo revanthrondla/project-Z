@@ -6,7 +6,7 @@ const STATUS_OPTIONS = ['open', 'draft', 'closed'];
 const APP_STATUS_OPTIONS = ['applied', 'reviewing', 'shortlisted', 'rejected', 'hired'];
 
 const APP_STATUS_COLORS = {
-  applied: 'bg-blue-100 text-blue-700',
+  applied: 'bg-blue-100 text-emerald-700',
   reviewing: 'bg-yellow-100 text-yellow-700',
   shortlisted: 'bg-purple-100 text-purple-700',
   rejected: 'bg-red-100 text-red-700',
@@ -127,7 +127,7 @@ export default function AdminJobs() {
     } catch { alert('Failed to delete'); }
   }
 
-  if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div>;
+  if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"></div></div>;
 
   return (
     <div>
@@ -136,7 +136,7 @@ export default function AdminJobs() {
           <h1 className="text-2xl font-bold text-gray-900">Job Postings</h1>
           <p className="text-sm text-gray-500 mt-1">Create and manage open positions</p>
         </div>
-        <button onClick={openCreate} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+        <button onClick={openCreate} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
           + New Job
         </button>
       </div>
@@ -177,7 +177,7 @@ export default function AdminJobs() {
                       {job.skills && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {job.skills.split(',').map(s => s.trim()).filter(Boolean).map(s => (
-                            <span key={s} className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">{s}</span>
+                            <span key={s} className="bg-emerald-50 text-emerald-700 text-xs px-2 py-0.5 rounded-full">{s}</span>
                           ))}
                         </div>
                       )}
@@ -186,7 +186,7 @@ export default function AdminJobs() {
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">
                         {job.application_count} applicant{job.application_count !== 1 ? 's' : ''}
                       </span>
-                      <button onClick={e => { e.stopPropagation(); openEdit(job); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">✏️</button>
+                      <button onClick={e => { e.stopPropagation(); openEdit(job); }} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">✏️</button>
                       <button onClick={e => { e.stopPropagation(); handleDelete(job.id); }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">🗑️</button>
                     </div>
                   </div>
@@ -205,7 +205,7 @@ export default function AdminJobs() {
                 <button onClick={() => setSelectedJob(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
               </div>
               {appsLoading ? (
-                <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div></div>
+                <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div></div>
               ) : applications.length === 0 ? (
                 <div className="p-8 text-center text-gray-400 text-sm">No applications yet</div>
               ) : (
@@ -249,39 +249,39 @@ export default function AdminJobs() {
             <form onSubmit={handleSave} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Job Title *</label>
-                <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Senior React Developer" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
+                <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Senior React Developer" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Role overview, responsibilities, requirements…" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none" />
+                <textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Role overview, responsibilities, requirements…" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none resize-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Skills (comma-separated)</label>
-                <input value={form.skills} onChange={e => setForm(f => ({ ...f, skills: e.target.value }))} placeholder="e.g. React, TypeScript, Node.js" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
+                <input value={form.skills} onChange={e => setForm(f => ({ ...f, skills: e.target.value }))} placeholder="e.g. React, TypeScript, Node.js" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
-                  <select value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white">
+                  <select value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none bg-white">
                     <option value="">No client</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                  <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Remote, New York" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
+                  <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Remote, New York" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Contract Type</label>
-                  <select value={form.contract_type} onChange={e => setForm(f => ({ ...f, contract_type: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white">
+                  <select value={form.contract_type} onChange={e => setForm(f => ({ ...f, contract_type: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none bg-white">
                     {CONTRACT_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white">
+                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none bg-white">
                     {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                   </select>
                 </div>
@@ -289,16 +289,16 @@ export default function AdminJobs() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Min Rate ($/hr)</label>
-                  <input type="number" min="0" step="0.01" value={form.hourly_rate_min} onChange={e => setForm(f => ({ ...f, hourly_rate_min: e.target.value }))} placeholder="50" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
+                  <input type="number" min="0" step="0.01" value={form.hourly_rate_min} onChange={e => setForm(f => ({ ...f, hourly_rate_min: e.target.value }))} placeholder="50" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Max Rate ($/hr)</label>
-                  <input type="number" min="0" step="0.01" value={form.hourly_rate_max} onChange={e => setForm(f => ({ ...f, hourly_rate_max: e.target.value }))} placeholder="120" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" />
+                  <input type="number" min="0" step="0.01" value={form.hourly_rate_max} onChange={e => setForm(f => ({ ...f, hourly_rate_max: e.target.value }))} placeholder="120" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
                 </div>
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60">
+                <button type="submit" disabled={saving} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60">
                   {saving ? 'Saving…' : editJob ? 'Save Changes' : 'Create Job'}
                 </button>
               </div>

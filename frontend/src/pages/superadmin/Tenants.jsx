@@ -190,7 +190,7 @@ function ModulesPanel({ tenant }) {
 
   if (loading) return (
     <div className="flex items-center justify-center py-12">
-      <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600" />
+      <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-emerald-600" />
     </div>
   );
 
@@ -323,7 +323,7 @@ function DetailModal({ tenant, onClose, onUpdated }) {
             onClick={() => { setTab(t.key); setMsg(''); }}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
               tab === t.key
-                ? 'border-blue-600 text-blue-600'
+                ? 'border-emerald-600 text-emerald-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -334,7 +334,7 @@ function DetailModal({ tenant, onClose, onUpdated }) {
 
       {tab === 'overview' && (
         <div className="space-y-5">
-          {msg && <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm">{msg}</div>}
+          {msg && <div className="p-3 bg-emerald-50 border border-blue-200 text-emerald-700 rounded-lg text-sm">{msg}</div>}
 
           {/* Info */}
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -348,7 +348,7 @@ function DetailModal({ tenant, onClose, onUpdated }) {
 
           {/* Stats */}
           <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-3 text-center text-sm">
-            <div><p className="text-2xl font-bold text-blue-600">{s.active_candidates ?? '—'}</p><p className="text-gray-500 text-xs">Active candidates</p></div>
+            <div><p className="text-2xl font-bold text-emerald-600">{s.active_candidates ?? '—'}</p><p className="text-gray-500 text-xs">Active candidates</p></div>
             <div><p className="text-2xl font-bold text-green-600">{s.clients ?? '—'}</p><p className="text-gray-500 text-xs">Clients</p></div>
             <div><p className="text-2xl font-bold text-purple-600">{s.invoices ?? '—'}</p><p className="text-gray-500 text-xs">Invoices</p></div>
           </div>
@@ -439,7 +439,7 @@ export default function Tenants() {
         {['all','active','trial','suspended'].map(s => (
           <button key={s} onClick={() => setStatus(s)}
             className={`px-3 py-1.5 rounded-lg text-sm border capitalize transition-colors ${
-              statusFilter === s ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              statusFilter === s ? 'bg-emerald-600 text-white border-emerald-600' : 'border-gray-200 text-gray-600 hover:border-gray-300'
             }`}>{s}</button>
         ))}
       </div>
@@ -448,7 +448,7 @@ export default function Tenants() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center text-gray-400">
@@ -475,7 +475,7 @@ export default function Tenants() {
                   className="hover:bg-gray-50 cursor-pointer transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0 overflow-hidden">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-xs shrink-0 overflow-hidden">
                         {t.company_logo
                           ? <img src={t.company_logo} alt="" className="w-full h-full object-cover" />
                           : t.company_name[0].toUpperCase()}

@@ -96,7 +96,7 @@ export default function AdminCandidates() {
       {/* Table */}
       <div className="card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+          <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <div className="text-4xl mb-2">👥</div>
@@ -121,7 +121,7 @@ export default function AdminCandidates() {
                 <tr key={c.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-semibold text-sm">{c.name[0]}</div>
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-emerald-700 font-semibold text-sm">{c.name[0]}</div>
                       <div>
                         <Link to={`/employees/${c.id}`} className="font-medium text-gray-900 hover:text-green-700 hover:underline">{c.name}</Link>
                         <p className="text-xs text-gray-400">{c.email}</p>
@@ -137,7 +137,7 @@ export default function AdminCandidates() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Link to={`/employees/${c.id}`} className="text-green-600 hover:underline text-xs font-medium">Profile</Link>
-                      <button onClick={() => openEdit(c)} className="text-blue-600 hover:underline text-xs">Edit</button>
+                      <button onClick={() => openEdit(c)} className="text-emerald-600 hover:underline text-xs">Edit</button>
                       <button onClick={() => handleDelete(c.id)} className="text-red-500 hover:underline text-xs">Delete</button>
                     </div>
                   </td>

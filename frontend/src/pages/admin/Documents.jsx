@@ -112,13 +112,13 @@ function UploadModal({ candidates, clients, onClose, onUploaded }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
-            <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Employment Contract 2026" />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
               value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional notes…" />
           </div>
 
@@ -126,7 +126,7 @@ function UploadModal({ candidates, clients, onClose, onUploaded }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Candidate</label>
-              <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 value={form.candidate_id} onChange={e => setForm(f => ({ ...f, candidate_id: e.target.value }))}>
                 <option value="">— None —</option>
                 {candidates.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -134,7 +134,7 @@ function UploadModal({ candidates, clients, onClose, onUploaded }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Client</label>
-              <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}>
                 <option value="">— None —</option>
                 {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -151,7 +151,7 @@ function UploadModal({ candidates, clients, onClose, onUploaded }) {
                   onClick={() => setForm(f => ({ ...f, signature_type: val, required_signers: [] }))}
                   className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors text-left
                     ${form.signature_type === val
-                      ? 'bg-blue-600 border-blue-600 text-white'
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
                       : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
                   {val === 'none' && '✏️ '}
                   {val === 'single' && '👤 '}
@@ -175,8 +175,8 @@ function UploadModal({ candidates, clients, onClose, onUploaded }) {
                     <button key={key} type="button"
                       onClick={() => setForm(f => ({ ...f, required_signers: combo }))}
                       className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors
-                        ${selected ? 'bg-blue-50 border-blue-400 text-blue-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-                      <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${selected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`} />
+                        ${selected ? 'bg-emerald-50 border-blue-400 text-emerald-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                      <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${selected ? 'bg-emerald-600 border-emerald-600' : 'border-gray-300'}`} />
                       {combo.map(r => `${ROLE_ICONS[r]} ${r}`).join(' + ')}
                     </button>
                   );
@@ -189,7 +189,7 @@ function UploadModal({ candidates, clients, onClose, onUploaded }) {
             <button type="button" onClick={onClose}
               className="flex-1 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             <button type="submit" disabled={saving}
-              className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-60">
+              className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-60">
               {saving ? '⏳ Uploading…' : '📤 Upload'}
             </button>
           </div>
@@ -267,7 +267,7 @@ function DetailModal({ doc, onClose, onRefresh }) {
               {SIG_TYPE_LABELS[doc.signature_type] || doc.signature_type}
             </span>
             <a href={fileUrl} target="_blank" rel="noreferrer"
-              className="ml-auto text-sm text-blue-600 hover:underline flex items-center gap-1">
+              className="ml-auto text-sm text-emerald-600 hover:underline flex items-center gap-1">
               📄 View / Download
             </a>
           </div>
@@ -307,11 +307,11 @@ function DetailModal({ doc, onClose, onRefresh }) {
 
           {/* Admin sign panel */}
           {doc.status !== 'completed' && doc.status !== 'voided' && (
-            <div className="border border-blue-100 rounded-xl p-4 bg-blue-50">
+            <div className="border border-blue-100 rounded-xl p-4 bg-emerald-50">
               <p className="text-sm font-medium text-blue-800 mb-3">Admin Signature</p>
               {!signing ? (
                 <button onClick={() => setSigning(true)}
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                  className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
                   ✍️ Sign as Admin
                 </button>
               ) : (
@@ -397,7 +397,7 @@ export default function AdminDocuments() {
           <p className="text-gray-500 mt-1">Upload and manage documents requiring digital signatures</p>
         </div>
         <button onClick={() => setShowUpload(true)}
-          className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
+          className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 flex items-center gap-2">
           📤 Upload Document
         </button>
       </div>
@@ -420,12 +420,12 @@ export default function AdminDocuments() {
       {/* Filters */}
       <div className="card p-4 mb-4 flex flex-wrap gap-3">
         <input
-          className="flex-1 min-w-48 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 min-w-48 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           placeholder="Search by title, candidate, client…"
           value={filter.search}
           onChange={e => setFilter(f => ({ ...f, search: e.target.value }))}
         />
-        <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           value={filter.status} onChange={e => setFilter(f => ({ ...f, status: e.target.value }))}>
           <option value="">All Statuses</option>
           <option value="pending">Pending</option>
@@ -433,7 +433,7 @@ export default function AdminDocuments() {
           <option value="completed">Completed</option>
           <option value="voided">Voided</option>
         </select>
-        <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           value={filter.type} onChange={e => setFilter(f => ({ ...f, type: e.target.value }))}>
           <option value="">All Types</option>
           <option value="none">No Signature</option>
@@ -447,7 +447,7 @@ export default function AdminDocuments() {
       <div className="card overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center text-gray-400">
@@ -497,7 +497,7 @@ export default function AdminDocuments() {
                   </td>
                   <td className="px-4 py-3">
                     <button onClick={() => setSelected(doc)}
-                      className="text-blue-600 hover:text-blue-800 text-xs font-medium hover:underline">
+                      className="text-emerald-600 hover:text-blue-800 text-xs font-medium hover:underline">
                       View / Sign
                     </button>
                   </td>

@@ -14,7 +14,7 @@ function Badge({ text, color = 'gray' }) {
     green:  'bg-green-100 text-green-700',
     yellow: 'bg-yellow-100 text-yellow-700',
     red:    'bg-red-100 text-red-700',
-    blue:   'bg-blue-100 text-blue-700',
+    blue:   'bg-blue-100 text-emerald-700',
     purple: 'bg-purple-100 text-purple-700',
   };
   return <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[color] || colors.gray}`}>{text}</span>;
@@ -513,8 +513,8 @@ function LeaveTab({ empId }) {
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               {[['Entitlement', bal.entitlement_days, 'blue'], ['Used', bal.used_days, 'red'], ['Available', bal.available_days, bal.available_days < 0 ? 'red' : 'green']].map(([l, v, c]) => (
-                <div key={l} className={`rounded-lg p-2 ${c === 'blue' ? 'bg-blue-50' : c === 'red' ? 'bg-red-50' : 'bg-green-50'}`}>
-                  <p className={`text-lg font-bold ${c === 'blue' ? 'text-blue-700' : c === 'red' ? 'text-red-700' : 'text-green-700'}`}>{v}</p>
+                <div key={l} className={`rounded-lg p-2 ${c === 'blue' ? 'bg-emerald-50' : c === 'red' ? 'bg-red-50' : 'bg-green-50'}`}>
+                  <p className={`text-lg font-bold ${c === 'blue' ? 'text-emerald-700' : c === 'red' ? 'text-red-700' : 'text-green-700'}`}>{v}</p>
                   <p className="text-xs text-gray-500">{l}</p>
                 </div>
               ))}
@@ -946,7 +946,7 @@ function LicencesTab({ empId }) {
                   {lic.expiry_date && <p className={`text-sm font-medium mt-0.5 ${lic.urgency === 'expired' ? 'text-red-700' : lic.urgency === 'expiring_soon' ? 'text-yellow-700' : 'text-gray-600'}`}>
                     Expires: {fmt(lic.expiry_date)} · Reminder: {lic.reminder_days_before} days before
                   </p>}
-                  {lic.document_url && <a href={lic.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 inline-block">View Document →</a>}
+                  {lic.document_url && <a href={lic.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-600 hover:underline mt-1 inline-block">View Document →</a>}
                   {lic.notes && <p className="text-xs text-gray-500 italic mt-1">{lic.notes}</p>}
                 </div>
                 <div className="flex gap-2 ml-4">

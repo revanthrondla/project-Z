@@ -175,7 +175,7 @@ export default function AdminClients() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {loading ? (
           <div className="col-span-3 flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
           </div>
         ) : clients.length === 0 ? (
           <div className="col-span-3 text-center py-16 text-gray-400">
@@ -187,7 +187,7 @@ export default function AdminClients() {
             <div className="flex items-start justify-between mb-3">
               <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-purple-700 font-bold text-lg shrink-0">{c.name[0]}</div>
               <div className="flex gap-2">
-                <button onClick={() => openEdit(c)} className="text-blue-600 hover:underline text-xs">Edit</button>
+                <button onClick={() => openEdit(c)} className="text-emerald-600 hover:underline text-xs">Edit</button>
                 <button onClick={() => handleDelete(c.id)} className="text-red-500 hover:underline text-xs">Delete</button>
               </div>
             </div>
@@ -218,7 +218,7 @@ export default function AdminClients() {
               ) : (
                 <button
                   onClick={() => setCreateLoginFor(c)}
-                  className="w-full text-xs text-center py-1.5 px-3 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 font-medium transition-colors"
+                  className="w-full text-xs text-center py-1.5 px-3 rounded-lg border border-blue-200 text-emerald-600 hover:bg-emerald-50 font-medium transition-colors"
                 >
                   🔑 Create Portal Login
                 </button>

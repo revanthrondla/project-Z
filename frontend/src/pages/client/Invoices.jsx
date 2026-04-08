@@ -3,7 +3,7 @@ import api from '../../api';
 
 const STATUS_STYLES = {
   draft:           { bg: 'bg-gray-100',    text: 'text-gray-700',   label: 'Draft' },
-  sent:            { bg: 'bg-blue-100',    text: 'text-blue-700',   label: 'Sent' },
+  sent:            { bg: 'bg-blue-100',    text: 'text-emerald-700',   label: 'Sent' },
   client_approved: { bg: 'bg-green-100',   text: 'text-green-700',  label: '✅ Approved' },
   paid:            { bg: 'bg-emerald-100', text: 'text-emerald-700',label: 'Paid' },
   overdue:         { bg: 'bg-red-100',     text: 'text-red-700',    label: 'Overdue' },
@@ -131,7 +131,7 @@ function InvoiceDetail({ invoiceId, onClose, onApproved }) {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>;
+  if (loading) return <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"/></div>;
   if (error) return <p className="text-red-600 py-8 text-center">{error}</p>;
 
   const { invoice, lineItems } = data;
@@ -153,7 +153,7 @@ function InvoiceDetail({ invoiceId, onClose, onApproved }) {
             <button
               onClick={() => downloadPdf(invoice)}
               disabled={downloading}
-              className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium transition-colors"
+              className="text-xs px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 hover:bg-blue-100 font-medium transition-colors"
             >
               {downloading ? '…' : '⬇️ PDF'}
             </button>
@@ -171,7 +171,7 @@ function InvoiceDetail({ invoiceId, onClose, onApproved }) {
       <div className="mb-5">
         <h4 className="text-sm font-semibold text-gray-700 mb-3">
           Line Items
-          {canEdit && <span className="ml-2 text-xs font-normal text-blue-600">Click ✏️ to edit dates or hours</span>}
+          {canEdit && <span className="ml-2 text-xs font-normal text-emerald-600">Click ✏️ to edit dates or hours</span>}
         </h4>
         <div className="overflow-x-auto rounded-xl border border-gray-200">
           <table className="w-full text-sm">
@@ -207,7 +207,7 @@ function InvoiceDetail({ invoiceId, onClose, onApproved }) {
                         ${(parseFloat(editForm.hours || 0) * item.rate).toFixed(2)}
                       </td>
                       <td className="px-4 py-2 text-right">
-                        <button onClick={() => saveEdit(item)} disabled={saving} className="text-xs bg-blue-600 text-white px-2 py-1 rounded mr-1 hover:bg-blue-700 disabled:opacity-50">Save</button>
+                        <button onClick={() => saveEdit(item)} disabled={saving} className="text-xs bg-emerald-600 text-white px-2 py-1 rounded mr-1 hover:bg-emerald-700 disabled:opacity-50">Save</button>
                         <button onClick={cancelEdit} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded border">×</button>
                       </td>
                     </>
@@ -220,7 +220,7 @@ function InvoiceDetail({ invoiceId, onClose, onApproved }) {
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">${Number(item.amount).toFixed(2)}</td>
                       {canEdit && (
                         <td className="px-4 py-3 text-right">
-                          <button onClick={() => startEdit(item)} className="text-gray-400 hover:text-blue-600 text-base" title="Edit">✏️</button>
+                          <button onClick={() => startEdit(item)} className="text-gray-400 hover:text-emerald-600 text-base" title="Edit">✏️</button>
                         </td>
                       )}
                     </>
@@ -256,7 +256,7 @@ function InvoiceDetail({ invoiceId, onClose, onApproved }) {
           disabled={invoice.status === 'paid' || invoice.status === 'cancelled'}
         />
         {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
-          <button onClick={saveNotes} className="mt-2 text-xs text-blue-600 hover:underline">Save notes</button>
+          <button onClick={saveNotes} className="mt-2 text-xs text-emerald-600 hover:underline">Save notes</button>
         )}
         {actionMsg && <p className="mt-1 text-xs text-green-600">{actionMsg}</p>}
       </div>
@@ -324,7 +324,7 @@ export default function ClientInvoices() {
     paid: invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total_amount, 0),
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"/></div>;
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"/></div>;
   if (error) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3">
       <p className="text-gray-500">⚠️ {error}</p>
@@ -343,7 +343,7 @@ export default function ClientInvoices() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Total', value: totals.total, color: 'text-gray-900' },
-          { label: 'Awaiting Approval', value: totals.pending, color: 'text-blue-600' },
+          { label: 'Awaiting Approval', value: totals.pending, color: 'text-emerald-600' },
           { label: 'Approved', value: totals.approved, color: 'text-green-600' },
           { label: 'Paid', value: totals.paid, color: 'text-emerald-600' },
         ].map(k => (
@@ -363,7 +363,7 @@ export default function ClientInvoices() {
             key={s}
             onClick={() => setFilter(s)}
             className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
-              filter === s ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+              filter === s ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
             {s === 'all' ? 'All' : STATUS_STYLES[s]?.label || s}
@@ -382,7 +382,7 @@ export default function ClientInvoices() {
           {filtered.map(inv => (
             <div
               key={inv.id}
-              className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 transition-colors cursor-pointer"
+              className="bg-white rounded-xl border border-gray-200 p-5 hover:border-emerald-300 transition-colors cursor-pointer"
               onClick={() => setSelectedId(inv.id)}
             >
               <div className="flex items-start justify-between gap-4">
@@ -410,7 +410,7 @@ export default function ClientInvoices() {
                     ${Number(inv.total_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </p>
                   <p className="text-sm text-gray-400">{inv.total_hours}h @ ${inv.hourly_rate}/hr</p>
-                  <button className="mt-2 text-xs text-blue-600 font-medium hover:underline">
+                  <button className="mt-2 text-xs text-emerald-600 font-medium hover:underline">
                     View & Review →
                   </button>
                 </div>

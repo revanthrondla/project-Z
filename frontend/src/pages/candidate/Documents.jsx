@@ -64,12 +64,12 @@ function UploadModal({ onClose, onUploaded }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
-            <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. CV, Certification, Reference Letter…" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-            <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
               value={desc} onChange={e => setDesc(e.target.value)} placeholder="Optional description…" />
           </div>
 
@@ -77,7 +77,7 @@ function UploadModal({ onClose, onUploaded }) {
             <button type="button" onClick={onClose}
               className="flex-1 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             <button type="submit" disabled={saving}
-              className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-60">
+              className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-60">
               {saving ? '⏳ Uploading…' : '📤 Upload'}
             </button>
           </div>
@@ -154,7 +154,7 @@ function DetailModal({ doc, onClose, onRefresh }) {
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${m.cls}`}>{m.icon} {m.label}</span>
             );})()}
             <a href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer"
-              className="ml-auto text-sm text-blue-600 hover:underline">📄 Open File</a>
+              className="ml-auto text-sm text-emerald-600 hover:underline">📄 Open File</a>
           </div>
 
           {detail.description && <p className="text-sm text-gray-600">{detail.description}</p>}
@@ -197,12 +197,12 @@ function DetailModal({ doc, onClose, onRefresh }) {
           )}
 
           {mySlot && detail.status !== 'voided' && (
-            <div className="border border-blue-100 rounded-xl p-4 bg-blue-50">
+            <div className="border border-blue-100 rounded-xl p-4 bg-emerald-50">
               <p className="text-sm font-semibold text-blue-800 mb-3">Your signature is required</p>
               {!signing ? (
                 <div className="flex gap-2">
                   <button onClick={() => setSigning(true)}
-                    className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
                     ✍️ Sign Document
                   </button>
                   <button onClick={handleReject}
@@ -261,7 +261,7 @@ export default function CandidateDocuments() {
           <p className="text-gray-500 mt-1">View, upload, and sign your documents</p>
         </div>
         <button onClick={() => setShowUpload(true)}
-          className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
+          className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 flex items-center gap-2">
           📤 Upload Document
         </button>
       </div>
@@ -295,7 +295,7 @@ export default function CandidateDocuments() {
       {/* Document list */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
         </div>
       ) : filtered.length === 0 ? (
         <div className="card py-16 text-center text-gray-400">
@@ -317,7 +317,7 @@ export default function CandidateDocuments() {
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0
                   ${doc.status === 'completed' ? 'bg-green-50' :
                     doc.status === 'voided'    ? 'bg-red-50'   :
-                    needsMySign                ? 'bg-amber-50' : 'bg-blue-50'}`}>
+                    needsMySign                ? 'bg-amber-50' : 'bg-emerald-50'}`}>
                   {doc.status === 'completed' ? '✅' :
                    doc.status === 'voided'    ? '❌' :
                    needsMySign                ? '✍️' : '📄'}

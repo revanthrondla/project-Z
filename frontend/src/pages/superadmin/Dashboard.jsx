@@ -4,7 +4,7 @@ import api from '../../api';
 
 function KPI({ label, value, sub, color = 'blue' }) {
   const colors = {
-    blue:   'bg-blue-50 border-blue-200 text-blue-700',
+    blue:   'bg-emerald-50 border-blue-200 text-emerald-700',
     green:  'bg-green-50 border-green-200 text-green-700',
     amber:  'bg-amber-50 border-amber-200 text-amber-700',
     red:    'bg-red-50 border-red-200 text-red-700',
@@ -39,7 +39,7 @@ export default function SuperAdminDashboard() {
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
-      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600" />
     </div>
   );
 
@@ -66,7 +66,7 @@ export default function SuperAdminDashboard() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-gray-800">Platform Support</h2>
-            <Link to="/super-admin/support" className="text-sm text-blue-600 hover:underline">View all tickets →</Link>
+            <Link to="/super-admin/support" className="text-sm text-emerald-600 hover:underline">View all tickets →</Link>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KPI label="Total Tickets"   value={supportStats.total}       color="blue"   />
@@ -82,7 +82,7 @@ export default function SuperAdminDashboard() {
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h2 className="font-semibold text-gray-800">Recently Provisioned</h2>
-          <a href="/super-admin/tenants" className="text-sm text-blue-600 hover:underline">View all →</a>
+          <a href="/super-admin/tenants" className="text-sm text-emerald-600 hover:underline">View all →</a>
         </div>
         <div className="divide-y divide-gray-50">
           {tenants.length === 0 && (
@@ -90,7 +90,7 @@ export default function SuperAdminDashboard() {
           )}
           {tenants.map(t => (
             <div key={t.id} className="flex items-center gap-4 px-5 py-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
                 {t.company_logo
                   ? <img src={t.company_logo} alt="" className="w-9 h-9 rounded-lg object-cover" />
                   : t.company_name[0].toUpperCase()}

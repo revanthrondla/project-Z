@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../api';
 
 const APP_STATUS_COLORS = {
-  applied: 'bg-blue-100 text-blue-700',
+  applied: 'bg-blue-100 text-emerald-700',
   reviewing: 'bg-yellow-100 text-yellow-700',
   shortlisted: 'bg-purple-100 text-purple-700',
   rejected: 'bg-red-100 text-red-700',
@@ -74,7 +74,7 @@ export default function CandidateJobs() {
 
   const appliedJobIds = new Set(myApplications.map(a => a.job_id));
 
-  if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div>;
+  if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"></div></div>;
 
   return (
     <div>
@@ -132,7 +132,7 @@ export default function CandidateJobs() {
                           {job.skills && (
                             <div className="flex flex-wrap gap-1 mt-2">
                               {job.skills.split(',').map(s => s.trim()).filter(Boolean).map(s => (
-                                <span key={s} className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">{s}</span>
+                                <span key={s} className="bg-emerald-50 text-emerald-700 text-xs px-2 py-0.5 rounded-full">{s}</span>
                               ))}
                             </div>
                           )}
@@ -176,7 +176,7 @@ export default function CandidateJobs() {
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Required Skills</p>
                       <div className="flex flex-wrap gap-1.5">
                         {selectedJob.skills.split(',').map(s => s.trim()).filter(Boolean).map(s => (
-                          <span key={s} className="bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full font-medium">{s}</span>
+                          <span key={s} className="bg-emerald-50 text-emerald-700 text-xs px-2.5 py-1 rounded-full font-medium">{s}</span>
                         ))}
                       </div>
                     </div>
@@ -209,11 +209,11 @@ export default function CandidateJobs() {
                           value={coverLetter}
                           onChange={e => setCoverLetter(e.target.value)}
                           placeholder="Briefly introduce yourself and why you're a great fit…"
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none resize-none"
                         />
                       </div>
                       {error && <p className="text-red-600 text-xs">{error}</p>}
-                      <button type="submit" disabled={applying} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60">
+                      <button type="submit" disabled={applying} className="w-full bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60">
                         {applying ? 'Submitting…' : 'Submit Application'}
                       </button>
                     </form>
@@ -231,7 +231,7 @@ export default function CandidateJobs() {
             <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
               <div className="text-4xl mb-3">📋</div>
               <p className="text-gray-500">You haven't applied to any jobs yet.</p>
-              <button onClick={() => setTab('browse')} className="mt-4 text-blue-600 text-sm font-medium hover:underline">Browse open positions →</button>
+              <button onClick={() => setTab('browse')} className="mt-4 text-emerald-600 text-sm font-medium hover:underline">Browse open positions →</button>
             </div>
           ) : (
             <div className="space-y-3">

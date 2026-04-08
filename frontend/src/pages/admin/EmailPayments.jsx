@@ -108,7 +108,7 @@ function SettingsPanel({ onClose }) {
                   onClick={() => setForm(f => ({ ...f, provider: key, imap_host: v.host, imap_port: 993 }))}
                   className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
                     form.provider === key
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
                       : 'border-gray-200 text-gray-600 hover:border-gray-300'
                   }`}
                 >
@@ -169,7 +169,7 @@ function SettingsPanel({ onClose }) {
           <label className="flex items-center gap-3 cursor-pointer">
             <div
               onClick={() => setForm(f => ({...f, enabled: !f.enabled}))}
-              className={`relative w-10 h-5 rounded-full transition-colors ${form.enabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+              className={`relative w-10 h-5 rounded-full transition-colors ${form.enabled ? 'bg-emerald-600' : 'bg-gray-300'}`}
             >
               <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </div>
@@ -259,7 +259,7 @@ function ReviewModal({ imp, invoices, onClose, onConfirmed, onRejected }) {
         </div>
         <div className="p-6 space-y-5">
           {/* Parsed data summary */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="bg-emerald-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-sm font-semibold text-blue-800">Extracted from email{imp.has_attachment ? ' + PDF attachment' : ''}</span>
               <ConfidenceBadge level={imp.match_confidence} />
@@ -394,7 +394,7 @@ function Field({ label, value, highlight, className = '' }) {
   return (
     <div className={className}>
       <p className="text-gray-500 text-xs">{label}</p>
-      <p className={`font-medium ${highlight ? 'text-blue-700 text-base' : 'text-gray-800'}`}>{value}</p>
+      <p className={`font-medium ${highlight ? 'text-emerald-700 text-base' : 'text-gray-800'}`}>{value}</p>
     </div>
   );
 }
@@ -473,7 +473,7 @@ export default function EmailPayments() {
         <div className={`mb-4 p-3 rounded-lg text-sm border ${
           pollResult.errors?.length ? 'bg-red-50 border-red-200 text-red-700' :
           pollResult.processed > 0   ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-          'bg-blue-50 border-blue-200 text-blue-700'
+          'bg-emerald-50 border-blue-200 text-emerald-700'
         }`}>
           {pollResult.errors?.length ? (
             <>❌ Poll error: {pollResult.errors.join('; ')}</>
@@ -514,7 +514,7 @@ export default function EmailPayments() {
           >
             {t.label}
             {t.count != null && t.count > 0 && (
-              <span className="inline-flex items-center justify-center w-5 h-5 text-xs bg-blue-600 text-white rounded-full">{t.count}</span>
+              <span className="inline-flex items-center justify-center w-5 h-5 text-xs bg-emerald-600 text-white rounded-full">{t.count}</span>
             )}
           </button>
         ))}
@@ -524,7 +524,7 @@ export default function EmailPayments() {
       <div className="card overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
           </div>
         ) : imports.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
@@ -581,7 +581,7 @@ export default function EmailPayments() {
                   <td className="px-4 py-3">
                     {imp.invoice_number ? (
                       <div>
-                        <p className="font-mono text-blue-600 text-xs font-medium">{imp.invoice_number}</p>
+                        <p className="font-mono text-emerald-600 text-xs font-medium">{imp.invoice_number}</p>
                         <p className="text-xs text-gray-500">{imp.invoice_candidate_name}</p>
                         <p className="text-xs text-gray-500">{money(imp.invoice_amount)}</p>
                       </div>
@@ -604,7 +604,7 @@ export default function EmailPayments() {
                     {imp.status === 'pending' ? (
                       <button
                         onClick={() => setReviewImport(imp)}
-                        className="text-blue-600 hover:underline text-xs font-medium"
+                        className="text-emerald-600 hover:underline text-xs font-medium"
                       >
                         Review →
                       </button>

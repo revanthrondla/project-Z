@@ -58,7 +58,7 @@ function GeneralTab() {
     finally { setSaving(false); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>;
+  if (loading) return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"/></div>;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
@@ -151,7 +151,7 @@ const PROVIDERS = {
 
 const TIER_BADGE = {
   fast:     'bg-green-100 text-green-700',
-  balanced: 'bg-blue-100 text-blue-700',
+  balanced: 'bg-blue-100 text-emerald-700',
   powerful: 'bg-purple-100 text-purple-700',
 };
 
@@ -232,7 +232,7 @@ function AITab() {
     } finally { setTesting(false); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>;
+  if (loading) return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"/></div>;
 
   const currentProviderMeta = PROVIDERS[provider];
   const models = currentProviderMeta?.models || [];
@@ -244,7 +244,7 @@ function AITab() {
 
       {/* Platform fallback info */}
       {platformInfo.has_key && (
-        <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800">
+        <div className="flex items-start gap-3 bg-emerald-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800">
           <span className="text-lg shrink-0">ℹ️</span>
           <div>
             <strong>Platform key available</strong> — your platform administrator has configured a default AI key
@@ -264,7 +264,7 @@ function AITab() {
               key={key}
               type="button"
               onClick={() => handleProviderChange(key)}
-              className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${provider === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+              className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${provider === key ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'}`}
             >
               <span className="text-2xl">{meta.icon}</span>
               <div>
@@ -283,7 +283,7 @@ function AITab() {
         <div className="space-y-2">
           {models.map(m => (
             <label key={m.id}
-              className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${model === m.id ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+              className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${model === m.id ? 'border-blue-400 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'}`}
             >
               <input type="radio" name="model" value={m.id} checked={model===m.id} onChange={()=>setModel(m.id)} className="accent-blue-600"/>
               <div className="flex-1">
@@ -302,7 +302,7 @@ function AITab() {
           <h2 className="text-base font-semibold text-gray-800 mb-1">API Key</h2>
           <p className="text-xs text-gray-500 mb-4">
             Enter your own key to use your account's quota and billing.{' '}
-            <a href={currentProviderMeta?.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Get a key ↗</a>
+            <a href={currentProviderMeta?.url} target="_blank" rel="noreferrer" className="text-emerald-600 hover:underline">Get a key ↗</a>
           </p>
 
           {hasExistingKey && !apiKey && (
@@ -392,7 +392,7 @@ export default function Settings() {
             onClick={() => setTab(t.key)}
             className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors -mb-px ${
               tab === t.key
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                ? 'text-emerald-600 border-b-2 border-emerald-600 bg-white'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >

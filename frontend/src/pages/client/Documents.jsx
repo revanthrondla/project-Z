@@ -79,7 +79,7 @@ function DetailModal({ doc, onClose, onRefresh }) {
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${m.cls}`}>{m.icon} {m.label}</span>
             );})()}
             <a href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer"
-              className="ml-auto text-sm text-blue-600 hover:underline">📄 Open File</a>
+              className="ml-auto text-sm text-emerald-600 hover:underline">📄 Open File</a>
           </div>
 
           {detail.description && <p className="text-sm text-gray-600">{detail.description}</p>}
@@ -124,15 +124,15 @@ function DetailModal({ doc, onClose, onRefresh }) {
 
           {/* Sign prompt */}
           {mySlot && detail.status !== 'voided' && (
-            <div className="border border-blue-100 rounded-xl p-5 bg-blue-50">
+            <div className="border border-blue-100 rounded-xl p-5 bg-emerald-50">
               <p className="text-sm font-semibold text-blue-800 mb-1">Your signature is required</p>
-              <p className="text-xs text-blue-700 mb-4">
+              <p className="text-xs text-emerald-700 mb-4">
                 By signing, you confirm you have read and agree to the contents of this document.
               </p>
               {!signing ? (
                 <div className="flex gap-2">
                   <button onClick={() => setSigning(true)}
-                    className="px-5 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                    className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
                     ✍️ Sign Now
                   </button>
                   <button onClick={handleReject}
@@ -223,7 +223,7 @@ export default function ClientDocuments() {
       {/* List */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
         </div>
       ) : filtered.length === 0 ? (
         <div className="card py-16 text-center text-gray-400">
@@ -243,7 +243,7 @@ export default function ClientDocuments() {
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0
                   ${doc.status === 'completed' ? 'bg-green-50' :
                     doc.status === 'voided'    ? 'bg-red-50'   :
-                    needsMySign                ? 'bg-amber-50' : 'bg-blue-50'}`}>
+                    needsMySign                ? 'bg-amber-50' : 'bg-emerald-50'}`}>
                   {doc.status === 'completed' ? '✅' :
                    doc.status === 'voided'    ? '❌' :
                    needsMySign                ? '✍️' : '📄'}

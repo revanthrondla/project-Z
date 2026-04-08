@@ -86,9 +86,9 @@ function PaymentsPanel({ invoice, onPaymentChange }) {
     <div className="space-y-4">
       {/* Summary bar */}
       <div className="grid grid-cols-3 gap-3 text-sm">
-        <div className="bg-blue-50 rounded-lg p-3">
+        <div className="bg-emerald-50 rounded-lg p-3">
           <p className="text-xs text-blue-500 mb-0.5">Invoice Total</p>
-          <p className="font-bold text-blue-700">{fmtMoney(invoice.total_amount)}</p>
+          <p className="font-bold text-emerald-700">{fmtMoney(invoice.total_amount)}</p>
         </div>
         <div className="bg-green-50 rounded-lg p-3">
           <p className="text-xs text-green-500 mb-0.5">Total Paid</p>
@@ -130,7 +130,7 @@ function PaymentsPanel({ invoice, onPaymentChange }) {
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2.5 text-gray-700">{p.payment_date}</td>
                   <td className="px-3 py-2.5">
-                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-medium">
+                    <span className="bg-blue-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-medium">
                       {METHOD_LABELS[p.payment_method] || p.payment_method}
                     </span>
                   </td>
@@ -329,9 +329,9 @@ function InvoiceDetail({ invoice: initialInvoice, onClose, onStatusChange }) {
               <p className="text-gray-500 text-xs mb-1">Due Date</p>
               <p className="font-medium">{invoice.due_date || 'Not set'}</p>
             </div>
-            <div className="bg-blue-50 p-3 rounded-lg">
+            <div className="bg-emerald-50 p-3 rounded-lg">
               <p className="text-blue-500 text-xs mb-1">Total Hours</p>
-              <p className="font-bold text-blue-700">{invoice.total_hours}h @ ${invoice.hourly_rate}/hr</p>
+              <p className="font-bold text-emerald-700">{invoice.total_hours}h @ ${invoice.hourly_rate}/hr</p>
             </div>
             <div className="bg-green-50 p-3 rounded-lg">
               <p className="text-green-500 text-xs mb-1">Total Amount</p>
@@ -506,7 +506,7 @@ function GenerateModal({ candidates, clients, onClose, onGenerated }) {
                         {r.status === 'generated' ? '✅ Generated' : r.status === 'skipped' ? '⏭ Skipped' : '❌ Error'}
                       </span>
                     </td>
-                    <td className="px-4 py-2 font-mono text-blue-600">{r.invoice_number || '—'}</td>
+                    <td className="px-4 py-2 font-mono text-emerald-600">{r.invoice_number || '—'}</td>
                     <td className="px-4 py-2 text-right font-bold">
                       {r.total_amount != null ? `$${Number(r.total_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : r.reason || '—'}
                     </td>
@@ -571,7 +571,7 @@ function GenerateModal({ candidates, clients, onClose, onGenerated }) {
               {mode === 'client' ? 'Employees under selected client' : 'Select Employees *'}
             </label>
             {visibleCandidates.length > 0 && (
-              <button type="button" onClick={toggleAll} className="text-xs text-blue-600 hover:underline">
+              <button type="button" onClick={toggleAll} className="text-xs text-emerald-600 hover:underline">
                 {allVisible ? 'Deselect all' : 'Select all'}
               </button>
             )}
@@ -594,7 +594,7 @@ function GenerateModal({ candidates, clients, onClose, onGenerated }) {
                   type="checkbox"
                   checked={selectedIds.includes(c.id)}
                   onChange={() => toggleCandidate(c.id)}
-                  className="rounded border-gray-300 text-blue-600"
+                  className="rounded border-gray-300 text-emerald-600"
                 />
                 <span className="flex-1 text-sm font-medium text-gray-900">{c.name}</span>
                 <span className="text-xs text-gray-400">${c.hourly_rate}/hr</span>
@@ -603,7 +603,7 @@ function GenerateModal({ candidates, clients, onClose, onGenerated }) {
             ))}
           </div>
           {selectedIds.length > 0 && (
-            <p className="text-xs text-blue-600 mt-1.5 font-medium">
+            <p className="text-xs text-emerald-600 mt-1.5 font-medium">
               {selectedIds.length} employee{selectedIds.length !== 1 ? 's' : ''} selected — will generate {selectedIds.length} invoice{selectedIds.length !== 1 ? 's' : ''}
             </p>
           )}
@@ -697,7 +697,7 @@ export default function AdminInvoices() {
 
       <div className="card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+          <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>
         ) : invoices.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <div className="text-4xl mb-2">📄</div>
@@ -722,7 +722,7 @@ export default function AdminInvoices() {
             <tbody className="divide-y divide-gray-50">
               {invoices.map(inv => (
                 <tr key={inv.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-blue-600 font-medium">{inv.invoice_number}</td>
+                  <td className="px-4 py-3 font-mono text-emerald-600 font-medium">{inv.invoice_number}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{inv.candidate_name}</td>
                   <td className="px-4 py-3 text-gray-500">{inv.client_name || '—'}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{inv.period_start}<br />{inv.period_end}</td>
@@ -733,7 +733,7 @@ export default function AdminInvoices() {
                     <span className={`inline-flex items-center text-xs px-2.5 py-1 rounded-full font-medium ${
                       inv.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                       inv.status === 'client_approved' ? 'bg-green-100 text-green-700' :
-                      inv.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+                      inv.status === 'sent' ? 'bg-blue-100 text-emerald-700' :
                       inv.status === 'overdue' ? 'bg-red-100 text-red-700' :
                       inv.status === 'cancelled' ? 'bg-gray-100 text-gray-400' :
                       'bg-gray-100 text-gray-600'
@@ -742,7 +742,7 @@ export default function AdminInvoices() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button onClick={() => handleView(inv)} className="text-blue-600 hover:underline text-xs">View</button>
+                    <button onClick={() => handleView(inv)} className="text-emerald-600 hover:underline text-xs">View</button>
                   </td>
                 </tr>
               ))}

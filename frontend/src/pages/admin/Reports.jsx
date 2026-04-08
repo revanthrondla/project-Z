@@ -8,7 +8,7 @@ const pct   = (part, total) => total ? `${((part / total) * 100).toFixed(0)}%` :
 
 function KpiCard({ icon, label, value, sub, color = 'blue' }) {
   const colours = {
-    blue:   'bg-blue-50   text-blue-600',
+    blue:   'bg-emerald-50   text-emerald-600',
     green:  'bg-green-50  text-green-600',
     yellow: 'bg-yellow-50 text-yellow-600',
     purple: 'bg-purple-50 text-purple-600',
@@ -192,7 +192,7 @@ export default function Reports() {
           ].map(r => (
             <button key={r.label}
               onClick={() => setFilters(f => ({ ...f, start_date: r.start, end_date: r.end }))}
-              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors">
+              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition-colors">
               {r.label}
             </button>
           ))}
@@ -223,7 +223,7 @@ export default function Reports() {
         {TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
-              tab === t ? 'bg-white border border-b-white border-gray-100 text-blue-600 -mb-px' : 'text-gray-500 hover:text-gray-700'
+              tab === t ? 'bg-white border border-b-white border-gray-100 text-emerald-600 -mb-px' : 'text-gray-500 hover:text-gray-700'
             }`}>
             {t === 'Hours'    && '⏱️ '}
             {t === 'Absences' && '🏖️ '}
@@ -235,7 +235,7 @@ export default function Reports() {
 
       {loading && (
         <div className="card flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
         </div>
       )}
 
@@ -372,7 +372,7 @@ export default function Reports() {
                       <td className="px-4 py-3 text-gray-500 text-xs">{r.client_name || '—'}</td>
                       <td className="px-4 py-3 text-right text-gray-600">{r.absence_count}</td>
                       <td className="px-4 py-3 text-right font-bold text-gray-900">{r.total_days}d</td>
-                      <td className="px-4 py-3 text-right text-blue-600">{r.vacation_days}d</td>
+                      <td className="px-4 py-3 text-right text-emerald-600">{r.vacation_days}d</td>
                       <td className="px-4 py-3 text-right text-orange-500">{r.sick_days}d</td>
                       <td className="px-4 py-3 text-right text-purple-500">{r.personal_days}d</td>
                       <td className="px-4 py-3 text-right font-medium text-green-600">{r.approved_days}d</td>

@@ -109,7 +109,7 @@ export default function AdminTimesheets() {
             <button onClick={load} className="mt-3 btn-primary text-sm">Retry</button>
           </div>
         ) : loading ? (
-          <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+          <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>
         ) : entries.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <div className="text-4xl mb-2">⏱️</div>
@@ -134,7 +134,7 @@ export default function AdminTimesheets() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {entries.map(e => (
-                <tr key={e.id} className={`hover:bg-gray-50 ${selected.includes(e.id) ? 'bg-blue-50' : ''}`}>
+                <tr key={e.id} className={`hover:bg-gray-50 ${selected.includes(e.id) ? 'bg-emerald-50' : ''}`}>
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"

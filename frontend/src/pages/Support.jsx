@@ -7,14 +7,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../api';
 
 const STATUS_COLORS = {
-  open:        'bg-blue-100 text-blue-700',
+  open:        'bg-blue-100 text-emerald-700',
   in_progress: 'bg-yellow-100 text-yellow-700',
   resolved:    'bg-green-100 text-green-700',
   closed:      'bg-gray-100 text-gray-500',
 };
 const PRIORITY_COLORS = {
   low:    'bg-gray-100 text-gray-500',
-  medium: 'bg-blue-100 text-blue-700',
+  medium: 'bg-blue-100 text-emerald-700',
   high:   'bg-orange-100 text-orange-700',
   urgent: 'bg-red-100 text-red-700',
 };
@@ -134,12 +134,12 @@ function TicketThread({ ticket, onClose, onUpdated }) {
         {/* Thread */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* Original message */}
-          <div className="bg-blue-50 rounded-xl p-4">
+          <div className="bg-emerald-50 rounded-xl p-4">
             <p className="text-xs text-blue-500 font-medium mb-1.5">Your original message</p>
             <p className="text-sm text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
           </div>
           {messages.map(m => (
-            <div key={m.id} className={`rounded-xl p-4 ${m.is_staff ? 'bg-indigo-50 ml-4' : 'bg-gray-50 mr-4'}`}>
+            <div key={m.id} className={`rounded-xl p-4 ${m.is_staff ? 'bg-emerald-50 ml-4' : 'bg-gray-50 mr-4'}`}>
               <p className="text-xs font-medium mb-1.5 text-gray-500">
                 {m.is_staff ? '🛟 Support Team' : `👤 ${m.sender_name || 'You'}`}
                 <span className="ml-2 text-gray-400 font-normal">{new Date(m.created_at).toLocaleString()}</span>
@@ -217,7 +217,7 @@ export default function Support() {
       <div className="flex gap-2 mb-4 flex-wrap">
         {['', 'open', 'in_progress', 'resolved', 'closed'].map(s => (
           <button key={s} onClick={() => setFilterStatus(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterStatus === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterStatus === s ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
             {s === '' ? 'All' : s.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
           </button>
         ))}
@@ -236,13 +236,13 @@ export default function Support() {
         <div className="space-y-3">
           {filtered.map(t => (
             <div key={t.id} onClick={() => openTicket(t)}
-              className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:border-blue-300 hover:shadow-sm transition-all">
+              className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:border-emerald-300 hover:shadow-sm transition-all">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-gray-800 text-sm">{t.subject}</span>
                     {t.message_count > 0 && (
-                      <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full">
+                      <span className="text-xs bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full">
                         {t.message_count} {t.message_count === 1 ? 'reply' : 'replies'}
                       </span>
                     )}

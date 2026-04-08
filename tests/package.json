@@ -1,0 +1,20 @@
+{
+  "name": "flow-tests",
+  "version": "1.0.0",
+  "description": "Flow — E2E and unit test suite",
+  "private": true,
+  "scripts": {
+    "test:e2e":         "playwright test --config=e2e/playwright.config.js",
+    "test:e2e:auth":    "playwright test --config=e2e/playwright.config.js auth.spec.js",
+    "test:e2e:admin":   "playwright test --config=e2e/playwright.config.js admin.spec.js",
+    "test:e2e:employee":"playwright test --config=e2e/playwright.config.js employee.spec.js",
+    "test:e2e:brand":   "playwright test --config=e2e/playwright.config.js branding.spec.js",
+    "test:e2e:ui":      "playwright test --config=e2e/playwright.config.js --ui",
+    "test:e2e:headed":  "playwright test --config=e2e/playwright.config.js --headed",
+    "test:e2e:mobile":  "playwright test --config=e2e/playwright.config.js --project=mobile-chrome",
+    "test:e2e:report":  "playwright show-report tests/reports/playwright"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0"
+  }
+}

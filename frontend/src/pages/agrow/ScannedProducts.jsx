@@ -95,7 +95,7 @@ export default function ScannedProducts() {
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: 'Scan Records', value: totals.items, color: 'text-blue-600' },
+          { label: 'Scan Records', value: totals.items, color: 'text-emerald-600' },
           { label: 'Total Quantity', value: totals.quantity.toFixed(1), color: 'text-green-600' },
           { label: 'Unique Products', value: totals.products, color: 'text-purple-600' },
         ].map(k => (
