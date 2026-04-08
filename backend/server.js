@@ -88,6 +88,21 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // ── Request logging ───────────────────────────────────────────────────────────
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
 
+// ── DB readiness gate ─────────────────────────────────────────────────────────
+// The HTTP server starts immediately so Railway's healthcheck can pass.
+// All /api/* routes except /health return 503 until DB init completes.
+let dbReady = false;
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health') return next();   // always pass through
+  if (!dbReady) {
+    return res.status(503).json({
+      error: 'Server is initialising. Please retry in a few seconds.',
+      retry_after: 10,
+    });
+  }
+  next();
+});
+
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth',              authRoutes);
 app.use('/api/super-admin',       superAdminRoutes);
@@ -199,9 +214,10 @@ app.get('/api/dashboard/stats', authenticate, injectTenantDb, requireAdmin, asyn
   }
 });
 
-// ── Health check ──────────────────────────────────────────────────────────────
+// ── Health check (exempt from dbReady gate) ───────────────────────────────────
 app.get('/api/health', (req, res) => res.json({
   status: 'ok',
+  db_ready: dbReady,
   timestamp: new Date().toISOString(),
   env: NODE_ENV,
   uptime: process.uptime(),
@@ -367,39 +383,49 @@ function startEmailPoller() {
 
 // ── Async startup ─────────────────────────────────────────────────────────────
 async function start() {
+  // ── Step 1: Bind HTTP port FIRST ─────────────────────────────────────────
+  // Railway (and Docker) healthchecks fire as soon as the container starts.
+  // We listen immediately so /api/health returns 200 right away.
+  // All other /api/* routes return 503 via the dbReady gate above until
+  // the database is fully initialised.
+  await new Promise((resolve, reject) => {
+    const server = app.listen(PORT, resolve);
+    server.on('error', reject);
+  });
+  console.log(`\n🚀 Flow HTTP listening on port ${PORT} [${NODE_ENV}] — DB initialising…`);
+
+  // ── Step 2: Initialise database ───────────────────────────────────────────
   try {
-    // 1. Boot master schema + seed super-admin + seed default tenant
     const { initMaster } = require('./masterDatabase');
     await initMaster();
 
-    // 2. Run all pending schema migrations (master + every tenant_* schema)
     const { runAllMigrations } = require('./migrate');
     await runAllMigrations();
 
-    // 3. Start HTTP server
-    app.listen(PORT, () => {
-      console.log(`\n🚀 HireIQ running on http://localhost:${PORT} [${NODE_ENV}]`);
-      if (NODE_ENV !== 'production') {
-        console.log('\n📝 Test accounts:');
-        console.log('   Admin:     admin@hireiq.com  / admin123');
-        console.log('   Candidate: alice@hireiq.com  / candidate123\n');
-      }
+    // ── Step 3: Open all routes ───────────────────────────────────────────
+    dbReady = true;
+    console.log('✅ Database ready — all API routes are now open');
 
-      // 4. Start background jobs
-      startEmailPoller();
+    if (NODE_ENV !== 'production') {
+      console.log('\n📝 Test accounts:');
+      console.log('   Admin:     admin@hireiq.com  / admin123  (tenant: hireiq)');
+      console.log('   Candidate: alice@hireiq.com  / candidate123  (tenant: hireiq)\n');
+    }
 
-      // 5. Run licence expiry check on startup + daily
+    // ── Step 4: Start background jobs ─────────────────────────────────────
+    startEmailPoller();
+
+    checkLicenceExpiry().catch(err =>
+      console.error('[LicenceCheck] Startup check failed:', err.message)
+    );
+    setInterval(() => {
       checkLicenceExpiry().catch(err =>
-        console.error('[LicenceCheck] Startup check failed:', err.message)
+        console.error('[LicenceCheck] Scheduled check failed:', err.message)
       );
-      setInterval(() => {
-        checkLicenceExpiry().catch(err =>
-          console.error('[LicenceCheck] Scheduled check failed:', err.message)
-        );
-      }, 24 * 60 * 60 * 1000);
-    });
+    }, 24 * 60 * 60 * 1000);
+
   } catch (err) {
-    console.error('[FATAL] Server startup failed:', err.message);
+    console.error('[FATAL] DB initialisation failed:', err.message);
     console.error(err.stack);
     process.exit(1);
   }

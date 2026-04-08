@@ -9,12 +9,12 @@ if (!JWT_SECRET) {
     console.error('[FATAL] JWT_SECRET environment variable is not set.');
     process.exit(1);
   }
-  JWT_SECRET = 'hireiq-dev-only-DO-NOT-USE-IN-PROD';
+  JWT_SECRET = 'flow-dev-only-DO-NOT-USE-IN-PROD';
   console.warn('\n⚠️  WARNING: JWT_SECRET not set — using insecure dev default.\n');
 }
 
 function authenticate(req, res, next) {
-  let token = req.cookies?.hireiq_token;
+  let token = req.cookies?.flow_token;
   if (!token) {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) token = authHeader.split(' ')[1];

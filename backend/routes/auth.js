@@ -8,7 +8,7 @@ const { getTenantDb, db: defaultDb } = require('../database');
 const router = express.Router();
 
 // ── Cookie options ────────────────────────────────────────────────────────────
-const COOKIE_NAME = 'hireiq_token';
+const COOKIE_NAME = 'flow_token';
 function cookieOptions() {
   return {
     httpOnly: true,                                          // Not accessible via JS

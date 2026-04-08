@@ -103,7 +103,7 @@ router.get('/:id/pdf', authenticate, injectTenantDb, async (req, res) => {
     'SELECT * FROM invoice_line_items WHERE invoice_id = ? ORDER BY date'
   ).all(invoice.id);
 
-  const companyName = req.user.tenantName || 'aGrow';
+  const companyName = req.user.tenantName || 'Flow';
 
   // ── Build PDF ──────────────────────────────────────────────────────────────
   const doc = new PDFDocument({ margin: 50, size: 'A4' });

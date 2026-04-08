@@ -1,5 +1,5 @@
 /**
- * AI Chat Routes — HireIQ AI Assistant
+ * AI Chat Routes — Flow AI Assistant
  *
  * POST   /api/ai-chat/message                 — send a message (start or continue conversation)
  * GET    /api/ai-chat/conversations            — list conversations for current user
@@ -298,7 +298,7 @@ async function executeTool(db, toolName, input, userId) {
 
         // Create user account
         const bcrypt = require('bcryptjs');
-        const tempPw = `HireIQ_${Math.random().toString(36).slice(2, 10)}`;
+        const tempPw = `Flow_${Math.random().toString(36).slice(2, 10)}`;
         const hash   = await bcrypt.hash(tempPw, 10);
 
         const userRes = await db.prepare(`
@@ -500,7 +500,7 @@ Current organisation snapshot:
   const today      = new Date().toISOString().slice(0, 10);
   const suffix     = tenantAI?.system_prompt_suffix ? `\n\n${tenantAI.system_prompt_suffix}` : '';
 
-  const systemPrompt = `You are HireIQ Assistant — an intelligent AI for ${tenantName}'s HR and staffing platform.
+  const systemPrompt = `You are Flow Assistant — an intelligent AI for ${tenantName}'s HR and staffing platform.
 Current user: ${userName} (${role})  |  Model: ${provider}/${model}  |  Today: ${today}
 ${dataCtx}${docCtx}
 

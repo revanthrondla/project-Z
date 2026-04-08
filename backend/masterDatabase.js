@@ -1,5 +1,5 @@
 /**
- * HireIQ Master Database (PostgreSQL version)
+ * Flow Master Database (PostgreSQL version)
  *
  * Uses the 'master' schema in the shared PostgreSQL database.
  * Stores: super_admins, tenants, tenant_modules, platform support, AI config.
@@ -150,7 +150,7 @@ async function seedSuperAdmin() {
     const hash = await bcrypt.hash(seedPassword, 10);
     await masterDb.prepare(
       'INSERT INTO super_admins (name, email, password_hash) VALUES ($1, $2, $3)'
-    ).run('HireIQ Super Admin', seedEmail, hash);
+    ).run('Flow Super Admin', seedEmail, hash);
     console.log(`✅ Super-admin created: ${seedEmail}`);
     console.warn('⚠️  Remove SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD from Railway after first login.');
   } else {
@@ -159,7 +159,7 @@ async function seedSuperAdmin() {
     const hash = await bcrypt.hash(devPass, 10);
     await masterDb.prepare(
       'INSERT INTO super_admins (name, email, password_hash) VALUES ($1, $2, $3)'
-    ).run('HireIQ Super Admin', devEmail, hash);
+    ).run('Flow Super Admin', devEmail, hash);
     console.log(`✅ Super-admin created (dev): ${devEmail} / ${devPass}`);
   }
 }
@@ -172,7 +172,7 @@ async function seedDefaultTenant() {
     await masterDb.prepare(`
       INSERT INTO tenants (slug, company_name, status, plan, admin_email, max_candidates, max_clients)
       VALUES ($1, $2, 'active', 'standard', $3, 100, 50)
-    `).run('hireiq', 'HireIQ Demo', 'admin@hireiq.com');
+    `).run('hireiq', 'Flow Demo', 'admin@hireiq.com');
     console.log('✅ Default tenant registered: slug=hireiq');
   }
 

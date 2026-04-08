@@ -3,13 +3,13 @@
  * Used by the super-admin UI to render module toggles.
  */
 export const MODULE_REGISTRY = [
-  // ── aGrow Agricultural ─────────────────────────────────────────────────────
-  { key:'agrow_scan',             name:'Field Scan',         category:'aGrow',    description:'Barcode + camera scanning in the field with offline-first support', icon:'📷', default:true },
-  { key:'agrow_scanned_products', name:'Scanned Products',   category:'aGrow',    description:'View and manage all field scan records', icon:'🌾', default:true },
-  { key:'agrow_analytics',        name:'Harvest Analytics',  category:'aGrow',    description:'Production metrics, daily trend charts, and crew performance analysis', icon:'📈', default:true },
-  { key:'agrow_employees',        name:'Field Workers',      category:'aGrow',    description:'Crew and field employee management with badge tracking', icon:'👷', default:true },
-  { key:'agrow_custom_fields',    name:'Custom Fields',      category:'aGrow',    description:'Extend any data model with custom attributes', icon:'🔧', default:true },
-  { key:'agrow_languages',        name:'Languages',          category:'aGrow',    description:'Multilingual support for field operations', icon:'🌐', default:true },
+  // ── Field Ops ──────────────────────────────────────────────────────────────
+  { key:'agrow_scan',             name:'Field Scan',         category:'Field Ops',    description:'Barcode + camera scanning in the field with offline-first support', icon:'📷', default:true },
+  { key:'agrow_scanned_products', name:'Scanned Products',   category:'Field Ops',    description:'View and manage all field scan records', icon:'🌾', default:true },
+  { key:'agrow_analytics',        name:'Harvest Analytics',  category:'Field Ops',    description:'Production metrics, daily trend charts, and crew performance analysis', icon:'📈', default:true },
+  { key:'agrow_employees',        name:'Field Workers',      category:'Field Ops',    description:'Crew and field employee management with badge tracking', icon:'👷', default:true },
+  { key:'agrow_custom_fields',    name:'Custom Fields',      category:'Field Ops',    description:'Extend any data model with custom attributes', icon:'🔧', default:true },
+  { key:'agrow_languages',        name:'Languages',          category:'Field Ops',    description:'Multilingual support for field operations', icon:'🌐', default:true },
 
   // ── Staffing / HR ──────────────────────────────────────────────────────────
   { key:'hr_candidates',   name:'Candidates',          category:'Staffing', description:'Candidate profiles, placement tracking, and hourly rate management', icon:'👥', default:true },

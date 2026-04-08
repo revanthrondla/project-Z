@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import FlowLogo from '../components/FlowLogo';
 
 export default function Login() {
   const { login } = useAuth();
@@ -28,16 +29,15 @@ export default function Login() {
     setForm({ email, password, companyCode });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
 
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-2xl mb-4 shadow-lg">
-            <span className="text-white text-2xl font-bold">🌱</span>
+          <div className="flex justify-center mb-3">
+            <FlowLogo size="xl" inverted />
           </div>
-          <h1 className="text-3xl font-bold text-white">aGrow</h1>
-          <p className="text-blue-200 mt-1">Agricultural Scanning Platform</p>
+          <p className="text-indigo-200 mt-1">Workforce Platform</p>
         </div>
 
         {/* Card */}
@@ -56,7 +56,7 @@ export default function Login() {
               <input
                 type="text"
                 className="input font-mono"
-                placeholder="e.g. hireiq"
+                placeholder="e.g. flow-demo"
                 value={form.companyCode}
                 onChange={e => setForm({ ...form, companyCode: e.target.value })}
                 autoFocus

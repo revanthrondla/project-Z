@@ -384,7 +384,7 @@ export default function AIChatWidget() {
             <div className="flex items-center gap-2">
               <span className="text-xl">🤖</span>
               <div>
-                <p className="font-semibold text-sm">HireIQ Assistant</p>
+                <p className="font-semibold text-sm">Flow Assistant</p>
                 <p className="text-xs text-purple-200">Ask anything about your data</p>
               </div>
             </div>
@@ -434,7 +434,7 @@ export default function AIChatWidget() {
                 {messages.length === 0 && (
                   <div className="h-full flex flex-col items-center justify-center text-center">
                     <div className="text-4xl mb-3">🤖</div>
-                    <p className="font-semibold text-gray-800 text-sm mb-1">Hi! I'm your HireIQ Assistant</p>
+                    <p className="font-semibold text-gray-800 text-sm mb-1">Hi! I'm your Flow Assistant</p>
                     <p className="text-gray-500 text-xs mb-4 max-w-xs">Ask me about employees, timesheets, absences, or let me help you create records.</p>
                     <div className="flex flex-wrap gap-1.5 justify-center">
                       {SUGGESTIONS.map(s => (

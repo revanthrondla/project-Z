@@ -1,7 +1,7 @@
 {
   "name": "hireiq",
   "version": "1.0.0",
-  "description": "HireIQ — Time Tracking, Absence Management & Invoice Platform",
+  "description": "Flow — Time Tracking, Absence Management & Invoice Platform",
   "scripts": {
     "install:all": "cd backend && npm install && cd ../frontend && npm install",
     "start:backend": "node backend/server.js",

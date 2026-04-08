@@ -1,16 +1,16 @@
 /**
- * aGrow Module Registry
+ * Flow Module Registry
  *
  * Single source of truth for all licensable modules.
  * Super admins toggle these per tenant via the platform admin UI.
  */
 
 const MODULE_REGISTRY = [
-  // ── aGrow Agricultural ─────────────────────────────────────────────────────
+  // ── Field Ops ──────────────────────────────────────────────────────────────
   {
     key:         'agrow_scan',
     name:        'Field Scan',
-    category:    'aGrow',
+    category:    'Field Ops',
     description: 'Barcode + camera scanning in the field with offline-first support',
     icon:        '📷',
     default:     true,
@@ -18,7 +18,7 @@ const MODULE_REGISTRY = [
   {
     key:         'agrow_scanned_products',
     name:        'Scanned Products',
-    category:    'aGrow',
+    category:    'Field Ops',
     description: 'View and manage all field scan records',
     icon:        '🌾',
     default:     true,
@@ -26,7 +26,7 @@ const MODULE_REGISTRY = [
   {
     key:         'agrow_analytics',
     name:        'Harvest Analytics',
-    category:    'aGrow',
+    category:    'Field Ops',
     description: 'Production metrics, daily trend charts, and crew performance analysis',
     icon:        '📈',
     default:     true,
@@ -34,7 +34,7 @@ const MODULE_REGISTRY = [
   {
     key:         'agrow_employees',
     name:        'Field Workers',
-    category:    'aGrow',
+    category:    'Field Ops',
     description: 'Crew and field employee management with badge tracking',
     icon:        '👷',
     default:     true,
@@ -42,7 +42,7 @@ const MODULE_REGISTRY = [
   {
     key:         'agrow_custom_fields',
     name:        'Custom Fields',
-    category:    'aGrow',
+    category:    'Field Ops',
     description: 'Extend any data model with custom attributes (text, number, dropdown, image)',
     icon:        '🔧',
     default:     true,
@@ -50,7 +50,7 @@ const MODULE_REGISTRY = [
   {
     key:         'agrow_languages',
     name:        'Languages',
-    category:    'aGrow',
+    category:    'Field Ops',
     description: 'Multilingual support for field operations',
     icon:        '🌐',
     default:     true,

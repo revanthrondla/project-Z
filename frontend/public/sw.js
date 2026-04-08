@@ -1,5 +1,5 @@
 /**
- * aGrow Service Worker
+ * Flow Service Worker
  *
  * Strategy:
  *  - App shell (HTML/JS/CSS): cache-first with network fallback

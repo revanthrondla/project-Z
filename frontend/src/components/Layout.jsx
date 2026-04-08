@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useModules } from '../contexts/ModulesContext';
 import { useNotifications } from '../hooks/useNotifications';
 import AIChatWidget from './AIChatWidget';
+import FlowLogo from './FlowLogo';
 
 // ── Navigation definitions ────────────────────────────────────────────────────
 // moduleKey: if set, item is hidden when that module is disabled for the tenant.
@@ -19,7 +20,7 @@ const superAdminNav = [
 const adminNav = [
   { to: '/dashboard',  icon: '📊', label: 'Dashboard' },
   // ── aGrow ──────────────────────────────────────────────────
-  { to: '/field-scan',          icon: '📷', label: 'Field Scan',       section: 'aGrow',   moduleKey: 'agrow_scan' },
+  { to: '/field-scan',          icon: '📷', label: 'Field Scan',       section: 'Field Ops',   moduleKey: 'agrow_scan' },
   { to: '/agrow/scanned',       icon: '🌾', label: 'Scanned Products',                     moduleKey: 'agrow_scanned_products' },
   { to: '/agrow/analytics',     icon: '📈', label: 'Harvest Analytics',                    moduleKey: 'agrow_analytics' },
   { to: '/agrow/employees',     icon: '👷', label: 'Field Workers',                        moduleKey: 'agrow_employees' },
@@ -46,7 +47,7 @@ const adminNav = [
 
 const candidateNav = [
   { to: '/dashboard',       icon: '📊', label: 'My Dashboard' },
-  { to: '/field-scan',      icon: '📷', label: 'Field Scan',  section: 'aGrow', moduleKey: 'agrow_scan' },
+  { to: '/field-scan',      icon: '📷', label: 'Field Scan',  section: 'Field Ops', moduleKey: 'agrow_scan' },
   { to: '/agrow/scanned',   icon: '🌾', label: 'My Scans',                      moduleKey: 'agrow_scanned_products' },
   { to: '/agrow/analytics', icon: '📈', label: 'Analytics',                     moduleKey: 'agrow_analytics' },
   { to: '/jobs',            icon: '💼', label: 'Jobs',        section: 'Work',  moduleKey: 'hr_jobs' },
@@ -179,10 +180,10 @@ export default function Layout() {
     ? rawNav
     : rawNav.filter(item => !item.moduleKey || hasModule(item.moduleKey));
 
-  // Super-admin uses purple accents; regular users use blue
-  const accentActive   = isSuperAdmin ? 'bg-purple-600 text-white' : 'bg-green-600 text-white';
-  const accentLogo     = isSuperAdmin ? 'bg-purple-500' : 'bg-green-600';
-  const accentDot      = isSuperAdmin ? 'bg-purple-500' : user?.role === 'admin' ? 'bg-green-500' : 'bg-green-400';
+  // Super-admin uses purple accents; regular users use Flow indigo
+  const accentActive   = isSuperAdmin ? 'bg-purple-600 text-white' : 'bg-indigo-600 text-white';
+  const accentLogo     = isSuperAdmin ? 'bg-purple-500' : 'bg-indigo-500';
+  const accentDot      = isSuperAdmin ? 'bg-purple-500' : user?.role === 'admin' ? 'bg-indigo-500' : 'bg-indigo-400';
 
   const handleLogout = () => {
     logout();
@@ -190,7 +191,7 @@ export default function Layout() {
   };
 
   const roleLabel = () => {
-    if (isSuperAdmin) return 'aGrow Staff';
+    if (isSuperAdmin) return 'Flow Staff';
     if (user?.tenantName) return user.tenantName;
     return user?.role ?? '';
   };
@@ -200,20 +201,13 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className={`${sidebarOpen ? 'w-60' : 'w-16'} bg-gray-900 text-white flex flex-col transition-all duration-200 shrink-0`}>
         {/* Logo area */}
-        <div className="flex items-center gap-3 px-4 py-5 border-b border-gray-700">
-          <div className={`w-8 h-8 ${accentLogo} rounded-lg flex items-center justify-center font-bold text-sm shrink-0`}>
-            {isSuperAdmin ? '⚡' : '🌱'}
-          </div>
-          {sidebarOpen && (
-            <div className="min-w-0">
-              <span className="font-bold text-lg tracking-tight">aGrow</span>
-              {isSuperAdmin && (
-                <p className="text-xs text-purple-300 font-medium -mt-0.5">Platform Admin</p>
-              )}
-              {!isSuperAdmin && user?.tenantName && (
-                <p className="text-xs text-gray-400 truncate -mt-0.5">{user.tenantName}</p>
-              )}
-            </div>
+        <div className="px-4 py-4 border-b border-gray-700">
+          <FlowLogo size={sidebarOpen ? 'sm' : 'xs'} iconOnly={!sidebarOpen} inverted />
+          {sidebarOpen && isSuperAdmin && (
+            <p className="text-xs text-purple-300 font-medium mt-1 pl-0.5">Platform Admin</p>
+          )}
+          {sidebarOpen && !isSuperAdmin && user?.tenantName && (
+            <p className="text-xs text-gray-400 truncate mt-1 pl-0.5">{user.tenantName}</p>
           )}
         </div>
 

@@ -490,7 +490,7 @@ export default function EmailPayments() {
       <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm">
         <p className="font-semibold text-amber-800 mb-1">📧 How it works</p>
         <p className="text-amber-700">
-          HireIQ polls your inbox for emails matching the subject keyword (e.g. "payment").
+          Flow polls your inbox for emails matching the subject keyword (e.g. "payment").
           It reads the email body and any <strong>PDF attachments</strong>, extracts the amount, client, dates, and
           reference number, then auto-matches to an open invoice. You review and confirm before the payment is recorded.
           Works with <strong>Gmail</strong> (use an App Password) and <strong>Outlook / Microsoft 365</strong>.

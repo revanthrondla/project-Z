@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
     // On mount, attempt a fast restore from sessionStorage for instant render,
     // then verify the session via /me (the httpOnly cookie is sent automatically).
     // If the cookie has expired the /me call returns 401 → interceptor redirects.
-    const cached = sessionStorage.getItem('hireiq_user');
+    const cached = sessionStorage.getItem('flow_user');
     if (cached) {
       try { setUser(JSON.parse(cached)); } catch { /* ignore malformed cache */ }
     }
@@ -19,12 +19,12 @@ export function AuthProvider({ children }) {
     api.get('/api/auth/me')
       .then(res => {
         setUser(res.data);
-        sessionStorage.setItem('hireiq_user', JSON.stringify(res.data));
+        sessionStorage.setItem('flow_user', JSON.stringify(res.data));
       })
       .catch(() => {
         // 401 handled by interceptor (redirect to /login)
         setUser(null);
-        sessionStorage.removeItem('hireiq_user');
+        sessionStorage.removeItem('flow_user');
       })
       .finally(() => setLoading(false));
   }, []);
@@ -45,17 +45,17 @@ export function AuthProvider({ children }) {
     const { user } = res.data;
 
     // Cache user profile (contains no secrets — only id, name, role, etc.)
-    sessionStorage.setItem('hireiq_user', JSON.stringify(user));
+    sessionStorage.setItem('flow_user', JSON.stringify(user));
     setUser(user);
     return user;
   };
 
   const logout = async () => {
     try { await api.post('/api/auth/logout'); } catch { /* ignore network errors */ }
-    sessionStorage.removeItem('hireiq_user');
+    sessionStorage.removeItem('flow_user');
     // Remove legacy localStorage keys if present from an older session
-    localStorage.removeItem('agrow_token');
-    localStorage.removeItem('agrow_user');
+    localStorage.removeItem('flow_token');
+    localStorage.removeItem('flow_user');
     setUser(null);
   };
 

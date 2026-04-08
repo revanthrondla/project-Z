@@ -261,7 +261,7 @@ function InvoiceDetail({ invoice: initialInvoice, onClose, onStatusChange }) {
       </style></head>
       <body>
         <div class="header">
-          <div><div class="logo">aGrow</div><p style="color:#6b7280;font-size:13px">Agricultural Scanning Platform</p></div>
+          <div><div class="logo">Flow</div><p style="color:#6b7280;font-size:13px">Workforce Platform</p></div>
           <div style="text-align:right">
             <div style="font-size:20px;font-weight:bold">${invoice.invoice_number}</div>
             <p style="color:#6b7280;font-size:13px">Status: ${invoice.status.toUpperCase()}</p>

@@ -71,7 +71,7 @@ function parseCSV(buffer) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TEMPLATES = {
-  candidates: `# HireIQ Employee Import Template
+  candidates: `# Flow Employee Import Template
 # Required columns: name, email, role, hourly_rate
 # Optional columns: phone, alt_phone, personal_email, home_street, home_city, home_state, home_postcode, home_country
 #                   client_name, start_date, end_date, status, contract_type, password
@@ -82,7 +82,7 @@ Jane Smith,jane@example.com,Frontend Developer,80,+1-555-0200,+1-555-0299,jane.p
 John Doe,john@example.com,DevOps Engineer,90,+1-555-0201,,john@personal.com,456 Oak Ave,Austin,TX,78701,US,Tech Solutions Ltd,2026-01-15,,active,contractor,password123
 `,
 
-  emergency_contacts: `# HireIQ Emergency Contacts Import Template
+  emergency_contacts: `# Flow Emergency Contacts Import Template
 # Required columns: employee_email, name, phone1
 # Optional columns: relationship, phone2
 employee_email,name,relationship,phone1,phone2
@@ -90,7 +90,7 @@ jane@example.com,Sarah Smith,Spouse,+1-555-9100,+1-555-9101
 john@example.com,Mary Doe,Mother,+1-555-9200,
 `,
 
-  employment_history: `# HireIQ Employment History Import Template
+  employment_history: `# Flow Employment History Import Template
 # Required columns: employee_email, position_title, start_date
 # Optional columns: end_date, remuneration, currency, frequency, notes
 # frequency values: hourly | daily | weekly | monthly | annual
@@ -101,7 +101,7 @@ jane@example.com,Frontend Developer,2025-07-01,,80000,USD,annual,Promotion
 john@example.com,DevOps Engineer,2026-01-15,,90,USD,hourly,Contract role
 `,
 
-  training_records: `# HireIQ Training Records Import Template
+  training_records: `# Flow Training Records Import Template
 # Required columns: employee_email, training_date, name
 # Optional columns: content, results
 # date format: YYYY-MM-DD
@@ -111,7 +111,7 @@ jane@example.com,2025-09-10,TypeScript Fundamentals,Type safety and generics,Com
 john@example.com,2026-02-20,AWS Solutions Architect,Cloud architecture and services,Passed — 88%
 `,
 
-  timesheets: `# HireIQ Timesheet Import Template
+  timesheets: `# Flow Timesheet Import Template
 # Required columns: candidate_email, date, hours
 # Optional columns: description, project, status
 # status values: pending | approved | rejected
@@ -122,7 +122,7 @@ alice@hireiq.com,2026-03-26,7.5,Code review and testing,Backend API,pending
 bob@hireiq.com,2026-03-25,8,UI component work,Design System,pending
 `,
 
-  absences: `# HireIQ Absence Import Template
+  absences: `# Flow Absence Import Template
 # Required columns: candidate_email, start_date, end_date, type
 # Optional columns: status, notes
 # type values: vacation | sick | personal | public_holiday | other
@@ -133,7 +133,7 @@ alice@hireiq.com,2026-04-01,2026-04-03,vacation,pending,Easter break
 bob@hireiq.com,2026-04-10,2026-04-10,sick,pending,Doctor appointment
 `,
 
-  jobs: `# HireIQ Job Posting Import Template
+  jobs: `# Flow Job Posting Import Template
 # Required columns: title
 # Optional columns: description, skills, client_name, location, contract_type, hourly_rate_min, hourly_rate_max, status
 # contract_type values: contractor | employee | part-time

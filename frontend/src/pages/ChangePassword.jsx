@@ -58,7 +58,7 @@ export default function ChangePassword() {
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
           <span className="text-amber-500 mt-0.5">⚠️</span>
           <p className="text-sm text-amber-800">
-            You must change your password before accessing HireIQ. This is required for account security.
+            You must change your password before accessing Flow. This is required for account security.
           </p>
         </div>
 

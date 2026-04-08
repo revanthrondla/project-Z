@@ -85,7 +85,7 @@ function ImportSection({ section }) {
   const [showErrors, setShowErrors] = useState(false);
 
   const downloadTemplate = () => {
-    const token = localStorage.getItem('agrow_token');
+    const token = localStorage.getItem('flow_token');
     const a = document.createElement('a');
     a.href = `/api/upload/template/${key}`;
     // Need auth header — use fetch + blob
@@ -95,7 +95,7 @@ function ImportSection({ section }) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `hireiq_${key}_template.csv`;
+        link.download = `flow_${key}_template.csv`;
         link.click();
         URL.revokeObjectURL(url);
       });
