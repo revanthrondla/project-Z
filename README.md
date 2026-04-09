@@ -1,111 +1,131 @@
-# HireIQ — Time Tracking & Invoice Management
+# Flow — Time Tracking, Absence Management & Invoice Platform
 
-A full-stack web application for staffing agencies to track candidate hours, manage absences, and generate invoices.
+A full-stack multi-tenant web application for staffing agencies to track candidate hours, manage absences, and generate invoices — with per-tenant PostgreSQL schemas, role-based access, and an AI assistant.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18 + Vite + Tailwind CSS |
+| Frontend | React 18 + Vite + Tailwind CSS (Emerald design system) |
 | Backend | Node.js + Express |
-| Database | Built-in Node.js SQLite (`node:sqlite`) — no extra packages needed |
-| Auth | JWT (JSON Web Tokens) |
+| Database | PostgreSQL — separate schema per tenant (`tenant_{slug}`) |
+| Auth | JWT (httpOnly cookie, 8h expiry) |
+| AI | Anthropic Claude / OpenAI (configurable per tenant) |
 
 ## Prerequisites
 
-- **Node.js v22+** (required for built-in SQLite support)
+- **Node.js v18+**
 - npm
+- **PostgreSQL** — connection string in `DATABASE_URL`
 
 ## Quick Start
 
 ```bash
-# 1. Install all dependencies
+# 1. Install all dependencies (backend + frontend + tests)
 npm run install:all
 
-# 2. Start both servers
-npm run dev
-```
+# 2. Copy and fill environment variables
+cp .env.example .env
 
-Or use the startup script:
-```bash
-bash start.sh
+# 3. Start both servers (backend :3001, frontend :5173)
+npm run dev
 ```
 
 Then open **http://localhost:5173** in your browser.
 
-## Demo Accounts
+## Demo Accounts (tenant: `hireiq`)
 
 | Role | Email | Password |
 |------|-------|----------|
+| Super Admin | superadmin@flow.com | (set via DATABASE seed) |
 | Admin | admin@hireiq.com | admin123 |
 | Candidate (Dev) | alice@hireiq.com | candidate123 |
 | Candidate (Design) | bob@hireiq.com | candidate123 |
-| Candidate (PM) | carol@hireiq.com | candidate123 |
-| Candidate (Analyst) | david@hireiq.com | candidate123 |
+| Client | client@hireiq.com | client123 |
 
 ## Features
 
+### Super Admin Portal
+- **Tenant Management** — Create, suspend, and manage all organizations
+- **Module Control** — Enable/disable feature modules per tenant
+- **AI Config** — Set global or per-tenant LLM provider and API key
+- **Platform Support** — Respond to support tickets from tenant admins
+
 ### Admin Portal
-- **Dashboard** — KPI overview (active candidates, pending approvals, monthly hours, revenue)
-- **Candidates** — Full CRUD, hourly rate management, client assignment, contract type
+- **Dashboard** — KPI overview (active employees, pending approvals, monthly hours, revenue)
+- **Employees** — Full CRUD, hourly rate, client assignment, contract type, HR profiles
 - **Clients** — Manage client companies with billing currency settings
 - **Timesheets** — Review and approve/reject time entries with bulk actions
-- **Absences** — Approve or reject absence requests (vacation, sick, personal, etc.)
-- **Invoices** — Auto-generate invoices from approved time entries, print/export
+- **Absences** — Approve or reject absence requests
+- **Invoices** — Auto-generate invoices from approved time entries; email payment import
+- **Payroll** — Reconciliation view: expected vs actual pay and hours
+- **AI Assistant** — Chat with Flow AI for insights across your tenant data
 
 ### Candidate Portal
 - **Dashboard** — Personal stats (hours, earnings, pending approvals)
 - **Log Hours** — Submit daily time entries with project and description
 - **My Absences** — Request and track absence history
-- **My Invoices** — View invoices and print them
+- **My Invoices** — View invoices; download PDF
+- **Resume Builder** — Build and export your CV as PDF
+
+### Client Portal
+- **Timesheets** — View and approve candidate hours for billing
+- **Invoices** — View and download invoices
 
 ## Project Structure
 
 ```
-HireIQ/
+Flow/
 ├── backend/
-│   ├── server.js          # Express app & routes
-│   ├── database.js        # SQLite setup & seed data
+│   ├── server.js              # Express app, route mounting, startup
+│   ├── database.js            # PostgreSQL tenant DDL + provisioning
+│   ├── masterDatabase.js      # Master schema (super_admins, tenants, modules)
+│   ├── migrate.js             # Incremental migrations per tenant
+│   ├── moduleRegistry.js      # Feature module definitions
+│   ├── db/
+│   │   ├── pool.js            # pg connection pool singleton
+│   │   └── wrapper.js         # SQLite-compat wrapper (? → $N, RETURNING id)
 │   ├── middleware/
-│   │   └── auth.js        # JWT middleware
-│   └── routes/
-│       ├── auth.js        # Login, me, change-password
-│       ├── candidates.js  # Candidate CRUD + stats
-│       ├── clients.js     # Client CRUD
-│       ├── timeEntries.js # Time entry CRUD + bulk approve
-│       ├── absences.js    # Absence CRUD
-│       └── invoices.js    # Invoice generation & management
+│   │   └── auth.js            # authenticate, requireAdmin, requireSuperAdmin, requireModule
+│   ├── routes/                # One file per resource domain
+│   └── services/              # llmService, emailPaymentService, cryptoUtils
 ├── frontend/
 │   └── src/
-│       ├── pages/admin/   # Admin pages
-│       ├── pages/candidate/ # Candidate pages
-│       └── components/    # Shared layout components
-└── start.sh               # Startup script
+│       ├── pages/admin/       # Admin pages
+│       ├── pages/candidate/   # Candidate pages
+│       ├── pages/client/      # Client pages
+│       ├── pages/superadmin/  # Super-admin pages
+│       ├── pages/agrow/       # Field Ops module pages
+│       └── components/        # Layout, FlowLogo, AIChatWidget
+├── tests/
+│   └── e2e/                   # Playwright end-to-end specs
+└── package.json               # Root scripts (dev, build, test)
 ```
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/auth/login` | Authenticate user |
-| GET | `/api/candidates` | List candidates |
-| POST | `/api/candidates` | Add candidate |
-| GET | `/api/clients` | List clients |
-| GET | `/api/time-entries` | List time entries (filterable) |
-| POST | `/api/time-entries` | Log hours |
-| POST | `/api/time-entries/bulk-approve` | Bulk approve/reject |
-| GET | `/api/absences` | List absences |
-| POST | `/api/invoices/generate` | Auto-generate invoice from approved entries |
-| GET | `/api/dashboard/stats` | Admin dashboard statistics |
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3001` | Backend port |
-| `JWT_SECRET` | `hireiq-secret-key-2024` | JWT signing secret (change in production!) |
-| `HIREIQ_DB_PATH` | `./backend/hireiq.db` | SQLite database path |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | ✅ | PostgreSQL connection string |
+| `JWT_SECRET` | ✅ | JWT signing secret — **change in production** |
+| `PORT` | No (3001) | Backend HTTP port |
+| `NODE_ENV` | No (development) | `development` or `production` |
+| `ALLOWED_ORIGINS` | No | Comma-separated CORS origins |
+| `ANTHROPIC_API_KEY` | No | Default AI key (super-admin can override per tenant) |
 
-## Data Persistence
+## Running Tests
 
-The SQLite database is stored at `backend/hireiq.db` and persists all data between restarts. Delete this file to reset to the seed data.
+```bash
+# Full Playwright E2E suite (starts frontend automatically)
+npm run test:e2e
+
+# Skip webserver start (if already running)
+npm run test:e2e:skip-start
+
+# Mobile viewports only
+npm run test:e2e:mobile
+```
+
+## Multi-Tenancy
+
+Each organization gets its own PostgreSQL schema (`tenant_{slug}`). All tables, data, and settings are fully isolated. The master schema holds super-admin accounts, tenant records, and module configurations.

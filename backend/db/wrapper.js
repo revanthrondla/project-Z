@@ -1,5 +1,5 @@
 /**
- * HireIQ — Async PostgreSQL wrapper
+ * Flow — Async PostgreSQL wrapper
  *
  * Provides a familiar prepare().get / .all / .run interface over pg,
  * so route code needs minimal changes from the SQLite version.

@@ -1,5 +1,5 @@
 /**
- * Offline-first IndexedDB helper for aGrow Field Scan.
+ * Offline-first IndexedDB helper for Field Scan.
  *
  * Stores pending scanned products when offline.
  * Clears them after successful sync.

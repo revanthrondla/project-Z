@@ -1,5 +1,5 @@
 /**
- * aGrow Analytics Dashboard
+ * Field Ops Analytics Dashboard
  * Live harvesting metrics: by-day trend, by-product, by-crew, top workers.
  */
 import React, { useState, useEffect, useCallback } from 'react';

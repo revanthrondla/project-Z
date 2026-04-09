@@ -2,10 +2,10 @@
 // Usage: pm2 start ecosystem.config.js --env production
 module.exports = {
   apps: [{
-    name: 'hireiq',
+    name: 'flow',
     script: './backend/server.js',
     cwd: __dirname,
-    instances: 1,          // SQLite is single-writer; keep at 1
+    instances: 1,          // single writer; keep at 1
     autorestart: true,
     watch: false,
     max_memory_restart: '512M',

@@ -8,7 +8,7 @@
  *  - POST /api/agrow/scanned-products/sync: queued for background sync when offline
  */
 
-const CACHE_NAME     = 'agrow-v1';
+const CACHE_NAME     = 'flow-v1';
 const SHELL_URLS     = ['/', '/index.html'];
 const REFERENCE_URLS = ['/api/agrow/reference-data'];
 

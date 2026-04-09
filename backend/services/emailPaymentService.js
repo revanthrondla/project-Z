@@ -2,7 +2,7 @@
  * emailPaymentService.js
  * Polls an IMAP inbox (Gmail or Outlook) for payment confirmation emails,
  * parses email body + PDF attachments, extracts payment fields, and
- * auto-matches to existing HireIQ invoices.
+ * auto-matches to existing Flow invoices.
  */
 
 const Imap   = require('imap');

@@ -407,9 +407,9 @@ async function start() {
     console.log('✅ Database ready — all API routes are now open');
 
     if (NODE_ENV !== 'production') {
-      console.log('\n📝 Test accounts:');
-      console.log('   Admin:     admin@hireiq.com  / admin123  (tenant: hireiq)');
-      console.log('   Candidate: alice@hireiq.com  / candidate123  (tenant: hireiq)\n');
+      console.log('\n📝 Flow dev test accounts (tenant: hireiq):');
+      console.log('   Admin:     admin@hireiq.com     / admin123');
+      console.log('   Candidate: alice@hireiq.com     / candidate123\n');
     }
 
     // ── Step 4: Start background jobs ─────────────────────────────────────

@@ -1,5 +1,5 @@
 /**
- * HireIQ Database Migrations (PostgreSQL)
+ * Flow Database Migrations (PostgreSQL)
  *
  * Uses a schema_migrations table per schema to track which migrations have run.
  * All migrations are idempotent — safe to call repeatedly.

@@ -18,7 +18,7 @@ import AdminImport from './pages/admin/Import';
 import AdminDocuments from './pages/admin/Documents';
 import AdminSettings from './pages/admin/Settings';
 
-// aGrow pages
+// Field Ops pages
 import FieldScan       from './pages/agrow/FieldScan';
 import AGrowAnalytics  from './pages/agrow/Analytics';
 import ScannedProducts from './pages/agrow/ScannedProducts';
@@ -226,7 +226,7 @@ function AppRoutes() {
         <Route path="payroll-reconciliation" element={<PrivateRoute adminOnly><PayrollReconciliation /></PrivateRoute>} />
         <Route path="email-payments"         element={<PrivateRoute adminOnly><EmailPayments /></PrivateRoute>} />
 
-        {/* ── aGrow routes — module-gated ──────────────────────────── */}
+        {/* ── Field Ops routes — module-gated ──────────────────────────── */}
         <Route path="field-scan"          element={<ModuleRoute moduleKey="agrow_scan"><FieldScan /></ModuleRoute>} />
         <Route path="agrow/analytics"     element={<ModuleRoute moduleKey="agrow_analytics"><AGrowAnalytics /></ModuleRoute>} />
         <Route path="agrow/scanned"       element={<ModuleRoute moduleKey="agrow_scanned_products"><ScannedProducts /></ModuleRoute>} />

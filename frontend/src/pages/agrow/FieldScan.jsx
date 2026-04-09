@@ -1,5 +1,5 @@
 /**
- * aGrow Field Scan Page
+ * Field Scan Page
  *
  * Offline-first scanning UI:
  *  - Barcode input (text entry or hardware scanner)

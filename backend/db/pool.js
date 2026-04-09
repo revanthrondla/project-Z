@@ -1,5 +1,5 @@
 /**
- * HireIQ — PostgreSQL connection pool singleton
+ * Flow — PostgreSQL connection pool singleton
  *
  * All database access goes through this pool. The pool is created once at
  * process startup and shared across all requests.

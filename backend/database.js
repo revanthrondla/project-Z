@@ -1,5 +1,5 @@
 /**
- * HireIQ — PostgreSQL tenant database layer
+ * Flow — PostgreSQL tenant database layer
  *
  * Replaces the SQLite node:sqlite implementation.
  * Each tenant lives in its own PostgreSQL schema: tenant_{slug}
