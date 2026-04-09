@@ -6,26 +6,47 @@
  *  - API calls to /api/agrow/reference-data: stale-while-revalidate (needed offline for scan dropdowns)
  *  - All other API calls: network-first (fresh data when online)
  *  - POST /api/agrow/scanned-products/sync: queued for background sync when offline
+ *
+ * Update flow:
+ *  1. New SW installs but waits (does NOT auto-activate).
+ *  2. App receives 'updatefound' / 'waiting' and shows an "Update available" banner.
+ *  3. User clicks "Reload" → app sends SKIP_WAITING → SW activates → page reloads.
+ *
+ * To deploy a new version: increment CACHE_VERSION below.
  */
 
-const CACHE_NAME     = 'flow-v1';
+const CACHE_VERSION  = 1;                        // ← bump on every deploy
+const CACHE_NAME     = `flow-v${CACHE_VERSION}`;
 const SHELL_URLS     = ['/', '/index.html'];
 const REFERENCE_URLS = ['/api/agrow/reference-data'];
 
-// ── Install: pre-cache shell ──────────────────────────────────────────────────
+// ── Install: pre-cache shell — do NOT skipWaiting (let app control timing) ───
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_URLS)).catch(() => {})
   );
-  self.skipWaiting();
+  // Do NOT call self.skipWaiting() here.
+  // The app will send SKIP_WAITING when the user acknowledges the update.
 });
 
-// ── Activate: clean old caches ────────────────────────────────────────────────
+// ── Message: handle SKIP_WAITING from app ─────────────────────────────────────
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+// ── Activate: clean old caches, take control of all clients ──────────────────
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+    ).then(() => {
+      // Notify all open tabs that a new version is now active
+      return self.clients.matchAll({ type: 'window' }).then(clients =>
+        clients.forEach(client => client.postMessage({ type: 'SW_ACTIVATED', version: CACHE_VERSION }))
+      );
+    })
   );
   self.clients.claim();
 });

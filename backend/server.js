@@ -412,6 +412,43 @@ async function start() {
       console.log('   Candidate: alice@hireiq.com     / candidate123\n');
     }
 
+    // ── Production credential guard ───────────────────────────────────────
+    // Scans all active tenants and warns loudly if any account is still using
+    // a well-known seed/default password.  Runs async — never blocks startup.
+    if (NODE_ENV === 'production') {
+      (async () => {
+        try {
+          const bcrypt = require('bcryptjs');
+          const { getTenantDb } = require('./database');
+          const { masterDb: guardMasterDb } = require('./masterDatabase');
+          const DEFAULT_PASSWORDS = ['admin123', 'candidate123', 'client123', 'Admin@123'];
+
+          const tenants = await guardMasterDb
+            .prepare("SELECT slug FROM tenants WHERE status = 'active'").all();
+
+          for (const tenant of tenants) {
+            try {
+              const db = await getTenantDb(tenant.slug);
+              const users = await db
+                .prepare('SELECT email, password_hash FROM users').all();
+              for (const u of users) {
+                for (const def of DEFAULT_PASSWORDS) {
+                  if (bcrypt.compareSync(def, u.password_hash)) {
+                    console.warn(
+                      `⚠️  [SECURITY] Tenant '${tenant.slug}': '${u.email}' ` +
+                      `still uses default password '${def}' — change immediately!`
+                    );
+                  }
+                }
+              }
+            } catch { /* tenant may not be provisioned yet */ }
+          }
+        } catch (err) {
+          console.warn('[CredentialGuard] Skipped:', err.message);
+        }
+      })();
+    }
+
     // ── Step 4: Start background jobs ─────────────────────────────────────
     startEmailPoller();
 

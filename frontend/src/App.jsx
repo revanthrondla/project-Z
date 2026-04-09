@@ -1,87 +1,90 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModulesProvider, useModules } from './contexts/ModulesContext';
 import Layout from './components/Layout';
+
+// ── Eagerly loaded (needed on every page load) ────────────────────────────────
 import Login from './pages/Login';
-
-// Admin pages
-import AdminDashboard from './pages/admin/Dashboard';
-import AdminCandidates from './pages/admin/Candidates';
-import AdminClients from './pages/admin/Clients';
-import AdminTimesheets from './pages/admin/Timesheets';
-import AdminAbsences from './pages/admin/Absences';
-import AdminInvoices from './pages/admin/Invoices';
-import AdminJobs from './pages/admin/Jobs';
-import AdminReports from './pages/admin/Reports';
-import AdminImport from './pages/admin/Import';
-import AdminDocuments from './pages/admin/Documents';
-import AdminSettings from './pages/admin/Settings';
-
-// Field Ops pages
-import FieldScan       from './pages/agrow/FieldScan';
-import AGrowAnalytics  from './pages/agrow/Analytics';
-import ScannedProducts from './pages/agrow/ScannedProducts';
-import AgrowEmployees  from './pages/agrow/Employees';
-import CustomFields    from './pages/agrow/CustomFields';
-import Languages       from './pages/agrow/Languages';
-
-// Candidate pages
-import CandidateDashboard from './pages/candidate/Dashboard';
-import LogHours from './pages/candidate/LogHours';
-import MyAbsences from './pages/candidate/MyAbsences';
-import MyInvoices from './pages/candidate/MyInvoices';
-import CandidateJobs from './pages/candidate/Jobs';
-import CandidateDocuments from './pages/candidate/Documents';
-
-// Admin pages (new)
-import ResumeBuilder          from './pages/admin/ResumeBuilder';
-import PayrollReconciliation  from './pages/admin/PayrollReconciliation';
-import EmailPayments          from './pages/admin/EmailPayments';
-
-// Client portal pages
-import ClientDashboard        from './pages/client/Dashboard';
-import ClientInvoices         from './pages/client/Invoices';
-import ClientDocuments        from './pages/client/Documents';
-import ClientTimesheetApproval from './pages/client/TimesheetApproval';
-
-// Candidate pages (new)
-import MyResume from './pages/candidate/MyResume';
-
-// Super-admin pages
-import SuperAdminDashboard from './pages/superadmin/Dashboard';
-import SuperAdminTenants from './pages/superadmin/Tenants';
-import SuperAdminSupportDashboard from './pages/superadmin/SupportDashboard';
-import PlatformAIConfig from './pages/superadmin/AIConfig';
-
-// Support pages
-import Support from './pages/Support';
-import AdminSupportDashboard from './pages/admin/SupportDashboard';
-
-// AI Assistant pages
-import AIChatDocuments from './pages/admin/AIChatDocuments';
-import AIChatWidget from './components/AIChatWidget';
-
-// Employee profile
-import EmployeeProfile from './pages/admin/EmployeeProfile';
-
-// Auth pages
 import ChangePassword from './pages/ChangePassword';
 
-// ── Route guards ────────────────────────────────────────────────────────────
+// ── Lazily loaded — each becomes its own JS chunk ────────────────────────────
 
-function Spinner() {
+// Admin pages
+const AdminDashboard        = lazy(() => import('./pages/admin/Dashboard'));
+const AdminCandidates       = lazy(() => import('./pages/admin/Candidates'));
+const AdminClients          = lazy(() => import('./pages/admin/Clients'));
+const AdminTimesheets       = lazy(() => import('./pages/admin/Timesheets'));
+const AdminAbsences         = lazy(() => import('./pages/admin/Absences'));
+const AdminInvoices         = lazy(() => import('./pages/admin/Invoices'));
+const AdminJobs             = lazy(() => import('./pages/admin/Jobs'));
+const AdminReports          = lazy(() => import('./pages/admin/Reports'));
+const AdminImport           = lazy(() => import('./pages/admin/Import'));
+const AdminDocuments        = lazy(() => import('./pages/admin/Documents'));
+const AdminSettings         = lazy(() => import('./pages/admin/Settings'));
+const ResumeBuilder         = lazy(() => import('./pages/admin/ResumeBuilder'));
+const PayrollReconciliation = lazy(() => import('./pages/admin/PayrollReconciliation'));
+const EmailPayments         = lazy(() => import('./pages/admin/EmailPayments'));
+const AdminSupportDashboard = lazy(() => import('./pages/admin/SupportDashboard'));
+const AIChatDocuments       = lazy(() => import('./pages/admin/AIChatDocuments'));
+const EmployeeProfile       = lazy(() => import('./pages/admin/EmployeeProfile'));
+
+// Field Ops pages
+const FieldScan       = lazy(() => import('./pages/agrow/FieldScan'));
+const AGrowAnalytics  = lazy(() => import('./pages/agrow/Analytics'));
+const ScannedProducts = lazy(() => import('./pages/agrow/ScannedProducts'));
+const AgrowEmployees  = lazy(() => import('./pages/agrow/Employees'));
+const CustomFields    = lazy(() => import('./pages/agrow/CustomFields'));
+const Languages       = lazy(() => import('./pages/agrow/Languages'));
+
+// Candidate pages
+const CandidateDashboard = lazy(() => import('./pages/candidate/Dashboard'));
+const LogHours           = lazy(() => import('./pages/candidate/LogHours'));
+const MyAbsences         = lazy(() => import('./pages/candidate/MyAbsences'));
+const MyInvoices         = lazy(() => import('./pages/candidate/MyInvoices'));
+const CandidateJobs      = lazy(() => import('./pages/candidate/Jobs'));
+const CandidateDocuments = lazy(() => import('./pages/candidate/Documents'));
+const MyResume           = lazy(() => import('./pages/candidate/MyResume'));
+
+// Client portal pages
+const ClientDashboard        = lazy(() => import('./pages/client/Dashboard'));
+const ClientInvoices         = lazy(() => import('./pages/client/Invoices'));
+const ClientDocuments        = lazy(() => import('./pages/client/Documents'));
+const ClientTimesheetApproval = lazy(() => import('./pages/client/TimesheetApproval'));
+
+// Super-admin pages
+const SuperAdminDashboard        = lazy(() => import('./pages/superadmin/Dashboard'));
+const SuperAdminTenants          = lazy(() => import('./pages/superadmin/Tenants'));
+const SuperAdminSupportDashboard = lazy(() => import('./pages/superadmin/SupportDashboard'));
+const PlatformAIConfig           = lazy(() => import('./pages/superadmin/AIConfig'));
+
+// Support
+const Support = lazy(() => import('./pages/Support'));
+
+// AI Chat widget (loaded on-demand — only renders inside Layout)
+// AIChatWidget is lazily imported by Layout.jsx — no import needed here
+
+// ── Loading fallback ──────────────────────────────────────────────────────────
+
+function PageSpinner() {
   return (
-    <div className="flex items-center justify-center h-screen">
+    <div className="flex items-center justify-center h-screen" aria-label="Loading page">
       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600" />
     </div>
   );
 }
 
+/** Wrap any lazy component in a route-level Suspense boundary */
+function Lazy({ children }) {
+  return <Suspense fallback={<PageSpinner />}>{children}</Suspense>;
+}
+
+// ── Route guards ─────────────────────────────────────────────────────────────
+
 /** Requires any authenticated user */
 function PrivateRoute({ children, adminOnly = false, clientOnly = false }) {
   const { user, loading, mustChangePw } = useAuth();
-  if (loading) return <Spinner />;
+  if (loading) return <PageSpinner />;
   if (!user) return <Navigate to="/login" replace />;
   // Force password change before allowing access to any protected page
   if (mustChangePw) return <Navigate to="/change-password" replace />;
@@ -93,7 +96,7 @@ function PrivateRoute({ children, adminOnly = false, clientOnly = false }) {
 /** Requires super_admin role */
 function SuperAdminRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <Spinner />;
+  if (loading) return <PageSpinner />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== 'super_admin') return <Navigate to="/dashboard" replace />;
   return children;
@@ -108,7 +111,7 @@ function ModuleRoute({ moduleKey, children, adminOnly = false }) {
   const { user, loading: authLoading } = useAuth();
   const { hasModule, loading: modLoading } = useModules();
 
-  if (authLoading || modLoading) return <Spinner />;
+  if (authLoading || modLoading) return <PageSpinner />;
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && user.role !== 'admin') return <Navigate to="/dashboard" replace />;
 
@@ -131,12 +134,12 @@ function ModuleRoute({ moduleKey, children, adminOnly = false }) {
   return children;
 }
 
-// ── Route tree ───────────────────────────────────────────────────────────────
+// ── Route tree ────────────────────────────────────────────────────────────────
 
 function AppRoutes() {
   const { user } = useAuth();
 
-  // Determine where to redirect "/" and unknown paths based on role
+  // Determine where to redirect "/" based on role
   const defaultPath = user?.role === 'super_admin' ? '/super-admin/dashboard' : '/dashboard';
 
   return (
@@ -144,11 +147,7 @@ function AppRoutes() {
       {/* Public */}
       <Route
         path="/login"
-        element={
-          user
-            ? <Navigate to={defaultPath} replace />
-            : <Login />
-        }
+        element={user ? <Navigate to={defaultPath} replace /> : <Login />}
       />
 
       {/* Force-password-change page — accessible while logged in */}
@@ -165,10 +164,10 @@ function AppRoutes() {
         }
       >
         <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="dashboard" element={<SuperAdminDashboard />} />
-        <Route path="tenants"   element={<SuperAdminTenants />} />
-        <Route path="support"   element={<SuperAdminSupportDashboard />} />
-        <Route path="ai-config" element={<PlatformAIConfig />} />
+        <Route path="dashboard" element={<Lazy><SuperAdminDashboard /></Lazy>} />
+        <Route path="tenants"   element={<Lazy><SuperAdminTenants /></Lazy>} />
+        <Route path="support"   element={<Lazy><SuperAdminSupportDashboard /></Lazy>} />
+        <Route path="ai-config" element={<Lazy><PlatformAIConfig /></Lazy>} />
       </Route>
 
       {/* ── Tenant user shell ─────────────────────────────────────────── */}
@@ -176,81 +175,79 @@ function AppRoutes() {
         {/* Shared dashboard (role-aware) */}
         <Route path="dashboard" element={
           user?.role === 'admin'
-            ? <PrivateRoute adminOnly><AdminDashboard /></PrivateRoute>
+            ? <PrivateRoute adminOnly><Lazy><AdminDashboard /></Lazy></PrivateRoute>
             : user?.role === 'client'
-              ? <PrivateRoute clientOnly><ClientDashboard /></PrivateRoute>
-              : <CandidateDashboard />
+              ? <PrivateRoute clientOnly><Lazy><ClientDashboard /></Lazy></PrivateRoute>
+              : <Lazy><CandidateDashboard /></Lazy>
         } />
 
         {/* Admin-only routes — module-gated */}
-        <Route path="employees" element={<ModuleRoute moduleKey="hr_candidates" adminOnly><AdminCandidates /></ModuleRoute>} />
-        <Route path="employees/:id" element={<ModuleRoute moduleKey="hr_candidates" adminOnly><EmployeeProfile /></ModuleRoute>} />
-        <Route path="clients"    element={<ModuleRoute moduleKey="hr_clients"    adminOnly><AdminClients /></ModuleRoute>} />
-        <Route path="timesheets" element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><AdminTimesheets /></ModuleRoute>} />
+        <Route path="employees"    element={<ModuleRoute moduleKey="hr_candidates" adminOnly><Lazy><AdminCandidates /></Lazy></ModuleRoute>} />
+        <Route path="employees/:id" element={<ModuleRoute moduleKey="hr_candidates" adminOnly><Lazy><EmployeeProfile /></Lazy></ModuleRoute>} />
+        <Route path="clients"      element={<ModuleRoute moduleKey="hr_clients"    adminOnly><Lazy><AdminClients /></Lazy></ModuleRoute>} />
+        <Route path="timesheets"   element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminTimesheets /></Lazy></ModuleRoute>} />
         <Route path="absences" element={
           user?.role === 'admin'
-            ? <ModuleRoute moduleKey="hr_absences" adminOnly><AdminAbsences /></ModuleRoute>
-            : <ModuleRoute moduleKey="hr_absences"><MyAbsences /></ModuleRoute>
+            ? <ModuleRoute moduleKey="hr_absences" adminOnly><Lazy><AdminAbsences /></Lazy></ModuleRoute>
+            : <ModuleRoute moduleKey="hr_absences"><Lazy><MyAbsences /></Lazy></ModuleRoute>
         } />
         <Route path="invoices" element={
           user?.role === 'admin'
-            ? <ModuleRoute moduleKey="hr_invoices" adminOnly><AdminInvoices /></ModuleRoute>
+            ? <ModuleRoute moduleKey="hr_invoices" adminOnly><Lazy><AdminInvoices /></Lazy></ModuleRoute>
             : user?.role === 'client'
-              ? <ModuleRoute moduleKey="hr_invoices"><ClientInvoices /></ModuleRoute>
-              : <ModuleRoute moduleKey="hr_invoices"><MyInvoices /></ModuleRoute>
+              ? <ModuleRoute moduleKey="hr_invoices"><Lazy><ClientInvoices /></Lazy></ModuleRoute>
+              : <ModuleRoute moduleKey="hr_invoices"><Lazy><MyInvoices /></Lazy></ModuleRoute>
         } />
 
         {/* Jobs — module-gated, role-aware */}
         <Route path="jobs" element={
           user?.role === 'admin'
-            ? <ModuleRoute moduleKey="hr_jobs" adminOnly><AdminJobs /></ModuleRoute>
-            : <ModuleRoute moduleKey="hr_jobs"><CandidateJobs /></ModuleRoute>
+            ? <ModuleRoute moduleKey="hr_jobs" adminOnly><Lazy><AdminJobs /></Lazy></ModuleRoute>
+            : <ModuleRoute moduleKey="hr_jobs"><Lazy><CandidateJobs /></Lazy></ModuleRoute>
         } />
 
         {/* Documents — module-gated, role-aware */}
         <Route path="documents" element={
           user?.role === 'admin'
-            ? <ModuleRoute moduleKey="hr_documents" adminOnly><AdminDocuments /></ModuleRoute>
+            ? <ModuleRoute moduleKey="hr_documents" adminOnly><Lazy><AdminDocuments /></Lazy></ModuleRoute>
             : user?.role === 'client'
-              ? <ModuleRoute moduleKey="hr_documents"><ClientDocuments /></ModuleRoute>
-              : <ModuleRoute moduleKey="hr_documents"><CandidateDocuments /></ModuleRoute>
+              ? <ModuleRoute moduleKey="hr_documents"><Lazy><ClientDocuments /></Lazy></ModuleRoute>
+              : <ModuleRoute moduleKey="hr_documents"><Lazy><CandidateDocuments /></Lazy></ModuleRoute>
         } />
 
-        {/* Admin: Reports + Import + Settings (Settings always allowed) */}
-        <Route path="reports"  element={<ModuleRoute moduleKey="hr_reports" adminOnly><AdminReports /></ModuleRoute>} />
-        <Route path="import"   element={<ModuleRoute moduleKey="hr_import"  adminOnly><AdminImport /></ModuleRoute>} />
-        <Route path="settings" element={<PrivateRoute adminOnly><AdminSettings /></PrivateRoute>} />
+        {/* Admin: Reports + Import + Settings */}
+        <Route path="reports"  element={<ModuleRoute moduleKey="hr_reports" adminOnly><Lazy><AdminReports /></Lazy></ModuleRoute>} />
+        <Route path="import"   element={<ModuleRoute moduleKey="hr_import"  adminOnly><Lazy><AdminImport /></Lazy></ModuleRoute>} />
+        <Route path="settings" element={<PrivateRoute adminOnly><Lazy><AdminSettings /></Lazy></PrivateRoute>} />
 
-        {/* Admin: Resume Builder + Payroll Reconciliation + Email Payments */}
-        <Route path="resume-builder"         element={<ModuleRoute moduleKey="hr_candidates" adminOnly><ResumeBuilder /></ModuleRoute>} />
-        <Route path="payroll-reconciliation" element={<PrivateRoute adminOnly><PayrollReconciliation /></PrivateRoute>} />
-        <Route path="email-payments"         element={<PrivateRoute adminOnly><EmailPayments /></PrivateRoute>} />
+        {/* Admin: Resume Builder + Payroll + Email Payments */}
+        <Route path="resume-builder"         element={<ModuleRoute moduleKey="hr_candidates" adminOnly><Lazy><ResumeBuilder /></Lazy></ModuleRoute>} />
+        <Route path="payroll-reconciliation" element={<PrivateRoute adminOnly><Lazy><PayrollReconciliation /></Lazy></PrivateRoute>} />
+        <Route path="email-payments"         element={<PrivateRoute adminOnly><Lazy><EmailPayments /></Lazy></PrivateRoute>} />
 
-        {/* ── Field Ops routes — module-gated ──────────────────────────── */}
-        <Route path="field-scan"          element={<ModuleRoute moduleKey="agrow_scan"><FieldScan /></ModuleRoute>} />
-        <Route path="agrow/analytics"     element={<ModuleRoute moduleKey="agrow_analytics"><AGrowAnalytics /></ModuleRoute>} />
-        <Route path="agrow/scanned"       element={<ModuleRoute moduleKey="agrow_scanned_products"><ScannedProducts /></ModuleRoute>} />
-        <Route path="agrow/employees"     element={<ModuleRoute moduleKey="agrow_employees" adminOnly><AgrowEmployees /></ModuleRoute>} />
-        <Route path="agrow/custom-fields" element={<ModuleRoute moduleKey="agrow_custom_fields" adminOnly><CustomFields /></ModuleRoute>} />
-        <Route path="agrow/languages"     element={<ModuleRoute moduleKey="agrow_languages" adminOnly><Languages /></ModuleRoute>} />
+        {/* ── Field Ops routes — module-gated ────────────────────────── */}
+        <Route path="field-scan"          element={<ModuleRoute moduleKey="agrow_scan"><Lazy><FieldScan /></Lazy></ModuleRoute>} />
+        <Route path="agrow/analytics"     element={<ModuleRoute moduleKey="agrow_analytics"><Lazy><AGrowAnalytics /></Lazy></ModuleRoute>} />
+        <Route path="agrow/scanned"       element={<ModuleRoute moduleKey="agrow_scanned_products"><Lazy><ScannedProducts /></Lazy></ModuleRoute>} />
+        <Route path="agrow/employees"     element={<ModuleRoute moduleKey="agrow_employees" adminOnly><Lazy><AgrowEmployees /></Lazy></ModuleRoute>} />
+        <Route path="agrow/custom-fields" element={<ModuleRoute moduleKey="agrow_custom_fields" adminOnly><Lazy><CustomFields /></Lazy></ModuleRoute>} />
+        <Route path="agrow/languages"     element={<ModuleRoute moduleKey="agrow_languages" adminOnly><Lazy><Languages /></Lazy></ModuleRoute>} />
 
-        {/* Client portal: Timesheet Approval */}
-        <Route path="client-timesheets" element={<PrivateRoute clientOnly><ClientTimesheetApproval /></PrivateRoute>} />
+        {/* Client portal */}
+        <Route path="client-timesheets" element={<PrivateRoute clientOnly><Lazy><ClientTimesheetApproval /></Lazy></PrivateRoute>} />
 
         {/* Candidate-only routes */}
-        <Route path="log-hours"    element={<PrivateRoute><LogHours /></PrivateRoute>} />
-        <Route path="my-absences"  element={<PrivateRoute><MyAbsences /></PrivateRoute>} />
-        <Route path="my-invoices"  element={<PrivateRoute><MyInvoices /></PrivateRoute>} />
-        <Route path="my-resume"    element={<PrivateRoute><MyResume /></PrivateRoute>} />
+        <Route path="log-hours"    element={<PrivateRoute><Lazy><LogHours /></Lazy></PrivateRoute>} />
+        <Route path="my-absences"  element={<PrivateRoute><Lazy><MyAbsences /></Lazy></PrivateRoute>} />
+        <Route path="my-invoices"  element={<PrivateRoute><Lazy><MyInvoices /></Lazy></PrivateRoute>} />
+        <Route path="my-resume"    element={<PrivateRoute><Lazy><MyResume /></Lazy></PrivateRoute>} />
 
-        {/* Support — employee/client portal (module-gated) */}
-        <Route path="support"       element={<ModuleRoute moduleKey="hr_support"><Support /></ModuleRoute>} />
+        {/* Support */}
+        <Route path="support"       element={<ModuleRoute moduleKey="hr_support"><Lazy><Support /></Lazy></ModuleRoute>} />
+        <Route path="support-admin" element={<ModuleRoute moduleKey="hr_support" adminOnly><Lazy><AdminSupportDashboard /></Lazy></ModuleRoute>} />
 
-        {/* Support — admin management (module-gated, admin only) */}
-        <Route path="support-admin" element={<ModuleRoute moduleKey="hr_support" adminOnly><AdminSupportDashboard /></ModuleRoute>} />
-
-        {/* AI Assistant — admin knowledge-base document management */}
-        <Route path="ai-documents" element={<ModuleRoute moduleKey="ai_assistant" adminOnly><AIChatDocuments /></ModuleRoute>} />
+        {/* AI Assistant */}
+        <Route path="ai-documents" element={<ModuleRoute moduleKey="ai_assistant" adminOnly><Lazy><AIChatDocuments /></Lazy></ModuleRoute>} />
       </Route>
 
       {/* Catch-all */}

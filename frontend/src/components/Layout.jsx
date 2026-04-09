@@ -3,7 +3,8 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useModules } from '../contexts/ModulesContext';
 import { useNotifications } from '../hooks/useNotifications';
-import AIChatWidget from './AIChatWidget';
+import { lazy, Suspense } from 'react';
+const AIChatWidget = lazy(() => import('./AIChatWidget'));
 import FlowLogo from './FlowLogo';
 
 // ── Navigation definitions ────────────────────────────────────────────────────
@@ -422,8 +423,12 @@ export default function Layout() {
         </main>
       </div>
 
-      {/* AI Chat Widget */}
-      {!isSuperAdmin && <AIChatWidget />}
+      {/* AI Chat Widget — lazy-loaded, only for tenant users */}
+      {!isSuperAdmin && (
+        <Suspense fallback={null}>
+          <AIChatWidget />
+        </Suspense>
+      )}
     </div>
   );
 }
