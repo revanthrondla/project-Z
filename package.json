@@ -3,11 +3,16 @@
   "version": "1.0.0",
   "description": "Flow — Time Tracking, Absence Management & Invoice Platform",
   "scripts": {
-    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install && cd ../tests && npm install",
     "start:backend": "node backend/server.js",
     "start:frontend": "npm --prefix frontend run dev",
     "dev": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
-    "start": "bash start.sh"
+    "start": "bash start.sh",
+    "test:e2e": "npm --prefix tests run test:e2e",
+    "test:e2e:brand": "npm --prefix tests run test:e2e:brand",
+    "test:e2e:mobile": "npm --prefix tests run test:e2e:mobile",
+    "test:e2e:skip-start": "npm --prefix tests run test:e2e:skip-start",
+    "test:e2e:report": "npm --prefix tests run test:e2e:report"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
