@@ -44,7 +44,9 @@ ENV NODE_ENV=production \
 EXPOSE 3001
 
 # Health check — Railway/Render use this to determine container readiness
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+# start-period=5s: server binds port immediately; healthcheck can pass within seconds
+# retries=10: gives up to 150s total (10 × 15s) for DB init on cold start
+HEALTHCHECK --interval=15s --timeout=10s --start-period=5s --retries=10 \
   CMD wget -qO- http://localhost:3001/api/health || exit 1
 
 CMD ["node", "server.js"]
