@@ -12,12 +12,16 @@
 const pool = require('./db/pool');
 
 // ── Migration registry ────────────────────────────────────────────────────────
-// Each entry: { id, description, up: async (client) => void }
+// Each entry: { id, description, scope, up: async (client) => void }
+//   scope: 'tenant'  — runs only on tenant_* schemas (tables: users, candidates, …)
+//   scope: 'master'  — runs only on the master schema (tables: tenants, super_admins, …)
+//   scope: 'all'     — runs on every schema (omit scope to default to 'all')
 // Migrations run in ID order. Once recorded in schema_migrations they are skipped.
 
 const MIGRATIONS = [
   {
     id: 1,
+    scope: 'tenant',
     description: 'Add must_change_password to users',
     async up(client) {
       await client.query(`
@@ -28,6 +32,7 @@ const MIGRATIONS = [
   },
   {
     id: 2,
+    scope: 'tenant',
     description: 'Add user_id to clients',
     async up(client) {
       await client.query(`
@@ -38,6 +43,7 @@ const MIGRATIONS = [
   },
   {
     id: 3,
+    scope: 'tenant',
     description: 'Add client_approved status to invoices',
     async up(client) {
       // PostgreSQL CHECK constraints cannot be changed with ALTER — drop and recreate
@@ -57,6 +63,7 @@ const MIGRATIONS = [
   },
   {
     id: 4,
+    scope: 'tenant',
     description: 'Create invoice_payments table',
     async up(client) {
       await client.query(`
@@ -78,6 +85,7 @@ const MIGRATIONS = [
   },
   {
     id: 5,
+    scope: 'tenant',
     description: 'Create payroll tables',
     async up(client) {
       await client.query(`
@@ -117,6 +125,7 @@ const MIGRATIONS = [
   },
   {
     id: 6,
+    scope: 'tenant',
     description: 'Add updated_at columns and triggers',
     async up(client) {
       // Create a reusable trigger function
@@ -154,6 +163,7 @@ const MIGRATIONS = [
   },
   {
     id: 7,
+    scope: 'tenant',
     description: 'Create employee profile & employment history tables',
     async up(client) {
       await client.query(`
@@ -250,6 +260,7 @@ const MIGRATIONS = [
   },
   {
     id: 8,
+    scope: 'tenant',
     description: 'Create audit_logs table',
     async up(client) {
       await client.query(`
@@ -274,6 +285,7 @@ const MIGRATIONS = [
   },
   {
     id: 9,
+    scope: 'tenant',
     description: 'Create AI / chat tables',
     async up(client) {
       await client.query(`
@@ -317,6 +329,7 @@ const MIGRATIONS = [
   },
   {
     id: 10,
+    scope: 'tenant',
     description: 'Create absence policy and accrual tables',
     async up(client) {
       await client.query(`
@@ -353,6 +366,7 @@ const MIGRATIONS = [
   },
   {
     id: 11,
+    scope: 'tenant',
     description: 'Schema normalisation — rename legacy tables and add missing columns',
     async up(client) {
       // ── 1. Table renames (each DO block is a no-op on fresh schemas) ──────
@@ -539,6 +553,9 @@ const MIGRATIONS = [
  * @param {string} schema  e.g. 'master', 'tenant_hireiq'
  */
 async function runMigrationsForSchema(schema) {
+  // Determine schema type so we can skip inapplicable migrations
+  const schemaType = schema === 'master' ? 'master' : 'tenant';
+
   const client = await pool.connect();
   try {
     await client.query(`SET search_path TO "${schema}", public`);
@@ -557,7 +574,12 @@ async function runMigrationsForSchema(schema) {
     const appliedIds = new Set(applied.map(r => r.id));
 
     const pending = MIGRATIONS
-      .filter(m => !appliedIds.has(m.id))
+      .filter(m => {
+        if (appliedIds.has(m.id)) return false;                      // already applied
+        const scope = m.scope || 'all';
+        if (scope === 'all') return true;
+        return scope === schemaType;                                  // only run if scope matches
+      })
       .sort((a, b) => a.id - b.id);
     if (pending.length === 0) {
       console.log(`  ⏭  [${schema}] All migrations up to date`);
