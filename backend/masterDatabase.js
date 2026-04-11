@@ -233,17 +233,34 @@ function getMasterDb() {
   return masterDb;
 }
 
-// Proxy object so `require('./masterDatabase').masterDb.prepare(...)` works
-// the same way as before, without callers needing to await getMasterDb().
+/**
+ * masterDbProxy — a stable object reference that routes can safely destructure
+ * at module-load time (before initMaster() runs).
+ *
+ * Why a proxy instead of a getter:
+ *   `const { masterDb } = require('../masterDatabase')` calls any property
+ *   getter on the exports object immediately at destructure time.  If initMaster()
+ *   hasn't run yet that throws "Master DB not initialised".
+ *
+ *   A Proxy is an ordinary object — destructuring just copies the reference.
+ *   The `get` trap only fires when a property is READ on that object (e.g.
+ *   `masterDb.prepare`), which only happens inside route handlers, by which
+ *   point initMaster() has always completed (enforced by the dbReady gate in
+ *   server.js that returns 503 for all API routes until dbReady = true).
+ */
 const masterDbProxy = new Proxy({}, {
   get(_, prop) {
-    const db = getMasterDb();
-    return db[prop];
-  }
+    if (!masterDb) throw new Error('Master DB not initialised — call initMaster() first');
+    const val = masterDb[prop];
+    return typeof val === 'function' ? val.bind(masterDb) : val;
+  },
+  has(_, prop) {
+    return masterDb ? prop in masterDb : false;
+  },
 });
 
 module.exports = {
-  get masterDb() { return getMasterDb(); },
+  masterDb: masterDbProxy,   // safe to destructure at module level — no getter
   initMaster,
   seedDefaultModulesForTenant,
   getMasterDb,
