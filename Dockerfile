@@ -20,7 +20,10 @@ RUN npm run build
 # ── Stage 2: Production runtime ──────────────────────────────────────────────
 FROM node:20-alpine AS production
 
-WORKDIR /app
+# Keep the same sub-directory layout as the source repo so that the path
+# __dirname/../frontend/dist in server.js resolves correctly:
+#   /app/backend/../frontend/dist  →  /app/frontend/dist
+WORKDIR /app/backend
 
 # Install backend production dependencies only
 COPY backend/package*.json ./
@@ -30,10 +33,10 @@ RUN npm ci --omit=dev --prefer-offline
 COPY backend/ ./
 
 # Copy built frontend from stage 1 into the location Express expects
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+# path.join(__dirname, '../frontend/dist') = /app/backend/../frontend/dist = /app/frontend/dist
+COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-# Pre-create the uploads directory inside the WORKDIR.
-# Data is now stored in PostgreSQL; uploads are the only persistent filesystem need.
+# Pre-create the uploads directory
 RUN mkdir -p /app/uploads
 
 # Environment defaults (override at runtime via platform env vars)
