@@ -409,7 +409,7 @@ router.delete('/:id', authenticate, injectTenantDb, async (req, res) => {
 });
 
 // ── PATCH /api/documents/:id/void — admin can void a document ────────────────
-router.patch('/:id/void', authenticate, requireAdmin, injectTenantDb, (req, res) => {
+router.patch('/:id/void', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   const doc = await req.db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
   if (!doc) return res.status(404).json({ error: 'Document not found' });
 

@@ -35,7 +35,7 @@ router.get('/reconciliation', async (req, res) => {
 // VIEW 1 — Payroll vs Payments
 // Compare expected pay (approved hours × rate) vs actual invoice_payments
 // ────────────────────────────────────────────────────────────────────────────
-function payrollPaymentView(req, res, from, to) {
+async function payrollPaymentView(req, res, from, to) {
   const p = [];
   const dateFilter = buildDateFilter('te', from, to, p);
 
@@ -100,7 +100,7 @@ function payrollPaymentView(req, res, from, to) {
 // Candidate-submitted hours vs admin-approved vs client-approved
 // Shows what is safe to invoice and what still has discrepancies
 // ────────────────────────────────────────────────────────────────────────────
-function timesheetDiscrepancyView(req, res, from, to) {
+async function timesheetDiscrepancyView(req, res, from, to) {
   const p = [];
   const dateFilter = buildDateFilter('te', from, to, p);
 

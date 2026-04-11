@@ -163,7 +163,7 @@ router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.si
 
     // Build client name → id map
     const clientMap = {};
-    await req.db.prepare('SELECT id, name FROM clients').all().forEach(c => {
+    (await req.db.prepare('SELECT id, name FROM clients').all()).forEach(c => {
       clientMap[c.name.toLowerCase()] = c.id;
     });
 
@@ -276,7 +276,7 @@ router.post('/timesheets', authenticate, requireAdmin, injectTenantDb, upload.si
 
     // Build email → candidate_id map
     const candidateMap = {};
-    await req.db.prepare('SELECT id, email FROM candidates').all().forEach(c => {
+    (await req.db.prepare('SELECT id, email FROM candidates').all()).forEach(c => {
       candidateMap[c.email.toLowerCase()] = c.id;
     });
 
@@ -324,7 +324,7 @@ router.post('/absences', authenticate, requireAdmin, injectTenantDb, upload.sing
     const imported = [], failed = [];
 
     const candidateMap = {};
-    await req.db.prepare('SELECT id, email FROM candidates').all().forEach(c => {
+    (await req.db.prepare('SELECT id, email FROM candidates').all()).forEach(c => {
       candidateMap[c.email.toLowerCase()] = c.id;
     });
 
@@ -374,11 +374,12 @@ router.post('/jobs', authenticate, requireAdmin, injectTenantDb, upload.single('
     const imported = [], failed = [];
 
     const clientMap = {};
-    await req.db.prepare('SELECT id, name FROM clients').all().forEach(c => {
+    (await req.db.prepare('SELECT id, name FROM clients').all()).forEach(c => {
       clientMap[c.name.toLowerCase()] = c.id;
     });
 
-    const adminId = await req.db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get()?.id;
+    const adminRow = await req.db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+    const adminId = adminRow?.id;
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -443,7 +444,7 @@ router.post('/emergency-contacts', authenticate, requireAdmin, injectTenantDb, u
     const db = req.tenantDb;
     const imported = [], failed = [];
 
-    rows.forEach((r, idx) => {
+    for (const [idx, r] of rows.entries()) {
       const rowNum = idx + 2;
       try {
         if (!r.employee_email) throw new Error('employee_email is required');
@@ -460,7 +461,7 @@ router.post('/emergency-contacts', authenticate, requireAdmin, injectTenantDb, u
       } catch (err) {
         failed.push({ row: rowNum, data: r, error: err.message });
       }
-    });
+    }
 
     res.json({ total: rows.length, imported: imported.length, failed: failed.length, results: imported, errors: failed });
   } catch (err) {
@@ -479,7 +480,7 @@ router.post('/employment-history', authenticate, requireAdmin, injectTenantDb, u
     const imported = [], failed = [];
     const VALID_FREQ = ['hourly', 'daily', 'weekly', 'monthly', 'annual'];
 
-    rows.forEach((r, idx) => {
+    for (const [idx, r] of rows.entries()) {
       const rowNum = idx + 2;
       try {
         if (!r.employee_email) throw new Error('employee_email is required');
@@ -510,7 +511,7 @@ router.post('/employment-history', authenticate, requireAdmin, injectTenantDb, u
       } catch (err) {
         failed.push({ row: rowNum, data: r, error: err.message });
       }
-    });
+    }
 
     res.json({ total: rows.length, imported: imported.length, failed: failed.length, results: imported, errors: failed });
   } catch (err) {
@@ -528,7 +529,7 @@ router.post('/training-records', authenticate, requireAdmin, injectTenantDb, upl
     const db = req.tenantDb;
     const imported = [], failed = [];
 
-    rows.forEach((r, idx) => {
+    for (const [idx, r] of rows.entries()) {
       const rowNum = idx + 2;
       try {
         if (!r.employee_email) throw new Error('employee_email is required');
@@ -545,7 +546,7 @@ router.post('/training-records', authenticate, requireAdmin, injectTenantDb, upl
       } catch (err) {
         failed.push({ row: rowNum, data: r, error: err.message });
       }
-    });
+    }
 
     res.json({ total: rows.length, imported: imported.length, failed: failed.length, results: imported, errors: failed });
   } catch (err) {

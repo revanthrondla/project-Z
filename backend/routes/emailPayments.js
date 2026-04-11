@@ -178,7 +178,7 @@ router.post('/imports/:id/confirm', async (req, res) => {
   if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ error: 'Valid payment amount required.' });
   if (!payment_date) return res.status(400).json({ error: 'Payment date required.' });
 
-  await req.db.transaction(() => {
+  await req.db.transaction(async () => {
     // 1. Record the invoice payment
     await req.db.prepare(`
       INSERT INTO invoice_payments
@@ -191,9 +191,10 @@ router.post('/imports/:id/confirm', async (req, res) => {
 
     // 2. Check if invoice is now fully paid
     const invoice = await req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice_id);
-    const totalPaid = await req.db.prepare(
+    const paidRow = await req.db.prepare(
       'SELECT COALESCE(SUM(amount),0) AS total FROM invoice_payments WHERE invoice_id = ?'
-    ).get(invoice_id).total;
+    ).get(invoice_id);
+    const totalPaid = paidRow.total;
 
     if (totalPaid >= invoice.total_amount - 0.01) {
       await req.db.prepare("UPDATE invoices SET status = 'paid', updated_at = NOW() WHERE id = ?").run(invoice_id);
@@ -205,7 +206,7 @@ router.post('/imports/:id/confirm', async (req, res) => {
       SET status = 'confirmed', matched_invoice_id = ?, confirmed_by = ?, confirmed_at = NOW()
       WHERE id = ?
     `).run(invoice_id, req.user.id, imp.id);
-  })();
+  });
 
   const updated = await req.db.prepare('SELECT * FROM email_payment_imports WHERE id = ?').get(imp.id);
   const invoice = await req.db.prepare(`

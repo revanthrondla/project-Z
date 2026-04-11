@@ -4,7 +4,7 @@ const { authenticate, requireAdmin, injectTenantDb } = require('../middleware/au
 
 const router = express.Router();
 
-function generateInvoiceNumber(db) {
+async function generateInvoiceNumber(db) {
   const year = new Date().getFullYear();
   const last = await db.prepare("SELECT invoice_number FROM invoices ORDER BY id DESC LIMIT 1").get();
   let seq = 1;
@@ -240,7 +240,7 @@ router.get('/:id/pdf', authenticate, injectTenantDb, async (req, res) => {
 });
 
 // ── Helper: generate one invoice for a single candidate ──────────────────────
-function generateOneInvoice(db, candidateId, period_start, period_end, due_date, notes) {
+async function generateOneInvoice(db, candidateId, period_start, period_end, due_date, notes) {
   const candidate = await db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
   if (!candidate) return { skipped: true, reason: `Candidate ${candidateId} not found` };
 
@@ -254,11 +254,11 @@ function generateOneInvoice(db, candidateId, period_start, period_end, due_date,
     return { skipped: true, reason: `No approved time entries for ${candidate.name} in this period` };
   }
 
-  const totalHours  = entries.reduce((sum, e) => sum + e.hours, 0);
-  const totalAmount = totalHours * candidate.hourly_rate;
-  const invoiceNumber = generateInvoiceNumber(db);
+  const totalHours    = entries.reduce((sum, e) => sum + e.hours, 0);
+  const totalAmount   = totalHours * candidate.hourly_rate;
+  const invoiceNumber = await generateInvoiceNumber(db);
 
-  const invoiceId = db.transaction(() => {
+  const invoiceId = await db.transaction(async () => {
     const result = await db.prepare(`
       INSERT INTO invoices (invoice_number, candidate_id, client_id, period_start, period_end,
                             total_hours, hourly_rate, total_amount, status, due_date, notes)
@@ -268,18 +268,18 @@ function generateOneInvoice(db, candidateId, period_start, period_end, due_date,
            candidate.hourly_rate, totalAmount, due_date || null, notes || null);
 
     const iid = result.lastInsertRowid;
-    const insertLine = await db.prepare(`
+    const insertLine = db.prepare(`
       INSERT INTO invoice_line_items (invoice_id, date, description, hours, rate, amount)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
     for (const entry of entries) {
-      insertLine.run(iid, entry.date,
+      await insertLine.run(iid, entry.date,
         entry.description || entry.project || 'Work',
         entry.hours, candidate.hourly_rate,
         entry.hours * candidate.hourly_rate);
     }
     return iid;
-  })();
+  });
 
   const invoice = await db.prepare(`
     SELECT i.*, c.name AS candidate_name, cl.name AS client_name
@@ -327,7 +327,7 @@ router.post('/generate', authenticate, requireAdmin, injectTenantDb, async (req,
   // Single candidate — return legacy format for backwards compatibility
   if (ids.length === 1) {
     try {
-      const result = generateOneInvoice(req.db, ids[0], period_start, period_end, due_date, notes);
+      const result = await generateOneInvoice(req.db, ids[0], period_start, period_end, due_date, notes);
       if (result.skipped) return res.status(400).json({ error: result.reason });
       const lineItems = await req.db.prepare(
         'SELECT * FROM invoice_line_items WHERE invoice_id = ? ORDER BY date'
@@ -344,7 +344,7 @@ router.post('/generate', authenticate, requireAdmin, injectTenantDb, async (req,
 
   for (const cid of ids) {
     try {
-      const result = generateOneInvoice(req.db, cid, period_start, period_end, due_date, notes);
+      const result = await generateOneInvoice(req.db, cid, period_start, period_end, due_date, notes);
       if (result.skipped) {
         results.push({ candidate_id: cid, status: 'skipped', reason: result.reason });
         skipped++;
@@ -372,7 +372,7 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
     return res.status(400).json({ error: 'candidate_id, period_start, period_end required' });
   }
 
-  const invoiceNumber = generateInvoiceNumber(req.db);
+  const invoiceNumber = await generateInvoiceNumber(req.db);
   const candidate = await req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidate_id);
   const rate = hourly_rate || (candidate ? candidate.hourly_rate : 0);
   const hours = total_hours || 0;
@@ -468,9 +468,10 @@ router.post('/:id/payments', authenticate, requireAdmin, injectTenantDb, async (
          reference_number || null, notes || null, req.user.id);
 
   // Recompute total paid and auto-update invoice status
-  const totalPaid = await req.db.prepare(
+  const paidRow = await req.db.prepare(
     'SELECT COALESCE(SUM(amount), 0) AS total FROM invoice_payments WHERE invoice_id = ?'
-  ).get(invoice.id).total;
+  ).get(invoice.id);
+  const totalPaid = paidRow.total;
 
   let newStatus = invoice.status;
   if (totalPaid >= invoice.total_amount) {

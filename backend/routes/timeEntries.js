@@ -162,10 +162,10 @@ router.post('/bulk-approve', authenticate, requireAdmin, injectTenantDb, async (
   const stmt = await req.db.prepare('UPDATE time_entries SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?');
   const label = status === 'approved' ? 'approved' : 'rejected';
 
-  await req.db.transaction(() => {
+  await req.db.transaction(async () => {
     for (const id of ids) {
       const entry = await req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(id);
-      stmt.run(status, req.user.id, approvedAt, id);
+      await stmt.run(status, req.user.id, approvedAt, id);
       // Notify candidate
       if (entry) {
         const candidate = await req.db.prepare('SELECT user_id FROM candidates WHERE id = ?').get(entry.candidate_id);
@@ -231,7 +231,7 @@ router.get('/client-pending', authenticate, injectTenantDb, async (req, res) => 
 });
 
 // Helper — verify the client user owns the candidate linked to this entry
-function assertClientOwnsEntry(db, userId, entryId) {
+async function assertClientOwnsEntry(db, userId, entryId) {
   // Returns the entry if access is valid; null if forbidden
   const client = await db.prepare('SELECT id FROM clients WHERE user_id = ?').get(userId);
   if (!client) return null;
@@ -254,7 +254,7 @@ router.post('/:id/client-approve', authenticate, injectTenantDb, async (req, res
   // Clients may only approve entries belonging to their candidates
   let entry;
   if (req.user.role === 'client') {
-    entry = assertClientOwnsEntry(req.db, req.user.id, entryId);
+    entry = await assertClientOwnsEntry(req.db, req.user.id, entryId);
     if (!entry) return res.status(403).json({ error: 'Access denied — this entry does not belong to your candidates' });
   } else {
     entry = await req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId);
@@ -289,7 +289,7 @@ router.post('/:id/client-reject', authenticate, injectTenantDb, async (req, res)
 
   let entry;
   if (req.user.role === 'client') {
-    entry = assertClientOwnsEntry(req.db, req.user.id, entryId);
+    entry = await assertClientOwnsEntry(req.db, req.user.id, entryId);
     if (!entry) return res.status(403).json({ error: 'Access denied — this entry does not belong to your candidates' });
   } else {
     entry = await req.db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId);
