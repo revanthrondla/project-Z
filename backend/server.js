@@ -47,13 +47,33 @@ app.use(helmet({
 app.use(compression());
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001'];
+// IMPORTANT: Do NOT apply CORS globally (app.use).
+// Vite's production build adds `crossorigin` to every <script>/<link> tag,
+// which makes the browser send an Origin header for same-origin asset requests.
+// A global CORS gate would block those assets if the deployment URL isn't
+// whitelisted, producing a blank page.
+// Scoping CORS to /api/* means static files are never intercepted.
 
-app.use(cors({
+// Build the origin allowlist:
+//  1. Explicit list from ALLOWED_ORIGINS env var (comma-separated)
+//  2. Always include localhost for local dev
+//  3. Auto-include the Railway deployment URL via RAILWAY_PUBLIC_DOMAIN
+//     (Railway injects this automatically — no manual config needed)
+const allowedOrigins = [
+  ...(process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : []),
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  ...(process.env.RAILWAY_PUBLIC_DOMAIN
+    ? [`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`]
+    : []),
+];
+
+app.use('/api', cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
+    if (!origin) return callback(null, true);           // same-origin simple requests
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS: origin ${origin} not allowed`));
   },
@@ -254,9 +274,11 @@ async function checkLicenceExpiry() {
     .all('active');
 
   for (const tenant of tenants) {
+    let release;
     try {
-      const db = await getTenantDb(tenant.slug);
-      if (!db) continue;
+      const result = await getTenantDb(tenant.slug);
+      const db = result.wrapper;
+      release = result.release;
 
       const expiring = await db.prepare(`
         SELECT el.*, c.name AS employee_name, c.id AS cand_id
@@ -316,6 +338,8 @@ async function checkLicenceExpiry() {
       }
     } catch (err) {
       console.error(`[LicenceCheck] Error for tenant ${tenant.slug}:`, err.message);
+    } finally {
+      if (release) release();
     }
   }
   console.log(`🔖 Licence expiry check completed at ${new Date().toISOString()}`);
@@ -336,8 +360,11 @@ function startEmailPoller() {
         .all();
 
       for (const tenant of tenants) {
+        let epRelease;
         try {
-          const db = await getTenantDb(tenant.slug);
+          const { wrapper: db, release } = await getTenantDb(tenant.slug);
+          epRelease = release;
+
           let s = await db.prepare('SELECT * FROM email_settings WHERE id = 1').get();
           if (!s || !s.enabled || !s.imap_user || !s.imap_password) continue;
 
@@ -372,6 +399,8 @@ function startEmailPoller() {
           }
         } catch (tenantErr) {
           console.error(`[EmailPoll] Error for tenant ${tenant.slug}:`, tenantErr.message);
+        } finally {
+          if (epRelease) epRelease();
         }
       }
     } catch (err) {
@@ -427,8 +456,10 @@ async function start() {
             .prepare("SELECT slug FROM tenants WHERE status = 'active'").all();
 
           for (const tenant of tenants) {
+            let cgRelease;
             try {
-              const db = await getTenantDb(tenant.slug);
+              const { wrapper: db, release } = await getTenantDb(tenant.slug);
+              cgRelease = release;
               const users = await db
                 .prepare('SELECT email, password_hash FROM users').all();
               for (const u of users) {
@@ -442,6 +473,7 @@ async function start() {
                 }
               }
             } catch { /* tenant may not be provisioned yet */ }
+            finally { if (cgRelease) cgRelease(); }
           }
         } catch (err) {
           console.warn('[CredentialGuard] Skipped:', err.message);
