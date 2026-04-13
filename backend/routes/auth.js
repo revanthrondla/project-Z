@@ -70,57 +70,59 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'This organization account has been suspended' });
     }
 
-    let tenantDb;
+    // getTenantDb returns { wrapper, release } — must await and destructure,
+    // then release the pg client regardless of success or early return.
+    let tenantRelease;
     try {
-      tenantDb = getTenantDb(tenant.slug);
-    } catch (err) {
-      console.error('Tenant DB error on login:', err.message);
-      return res.status(500).json({ error: 'Unable to connect to organization database' });
+      const { wrapper: tenantDb, release } = await getTenantDb(tenant.slug);
+      tenantRelease = release;
+
+      const user = await tenantDb.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail);
+      if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+      const valid = bcrypt.compareSync(password, user.password_hash);
+      if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+
+      let candidateId = null;
+      if (user.role === 'candidate') {
+        const cand = await tenantDb.prepare('SELECT id FROM candidates WHERE user_id = ?').get(user.id);
+        if (cand) candidateId = cand.id;
+      }
+
+      let clientId = null;
+      if (user.role === 'client') {
+        const clientRec = await tenantDb.prepare('SELECT id FROM clients WHERE user_id = ?').get(user.id);
+        if (clientRec) clientId = clientRec.id;
+      }
+
+      const mustChangePw = !!(user.must_change_password);
+
+      const token = jwt.sign(
+        {
+          id: user.id, email: user.email, name: user.name, role: user.role,
+          candidateId, clientId,
+          tenantSlug: tenant.slug,
+          tenantName: tenant.company_name,
+          mustChangePw,
+        },
+        JWT_SECRET,
+        { expiresIn: '8h' }
+      );
+
+      res.cookie(COOKIE_NAME, token, cookieOptions());
+      res.json({
+        token,   // Also returned for API / non-browser clients
+        user: {
+          id: user.id, name: user.name, email: user.email, role: user.role,
+          candidateId, clientId,
+          tenantSlug: tenant.slug,
+          tenantName: tenant.company_name,
+          mustChangePw,
+        },
+      });
+    } finally {
+      if (tenantRelease) tenantRelease();
     }
-
-    const user = await tenantDb.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail);
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-
-    const valid = bcrypt.compareSync(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-
-    let candidateId = null;
-    if (user.role === 'candidate') {
-      const cand = await tenantDb.prepare('SELECT id FROM candidates WHERE user_id = ?').get(user.id);
-      if (cand) candidateId = cand.id;
-    }
-
-    let clientId = null;
-    if (user.role === 'client') {
-      const clientRec = await tenantDb.prepare('SELECT id FROM clients WHERE user_id = ?').get(user.id);
-      if (clientRec) clientId = clientRec.id;
-    }
-
-    const mustChangePw = !!(user.must_change_password);
-
-    const token = jwt.sign(
-      {
-        id: user.id, email: user.email, name: user.name, role: user.role,
-        candidateId, clientId,
-        tenantSlug: tenant.slug,
-        tenantName: tenant.company_name,
-        mustChangePw,
-      },
-      JWT_SECRET,
-      { expiresIn: '8h' }
-    );
-
-    res.cookie(COOKIE_NAME, token, cookieOptions());
-    res.json({
-      token,   // Also returned for API / non-browser clients
-      user: {
-        id: user.id, name: user.name, email: user.email, role: user.role,
-        candidateId, clientId,
-        tenantSlug: tenant.slug,
-        tenantName: tenant.company_name,
-        mustChangePw,
-      },
-    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

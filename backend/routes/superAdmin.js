@@ -35,8 +35,10 @@ router.get('/tenants', async (req, res) => {
 
     // Attach live counts from each tenant DB (best-effort — skip on error)
     const enriched = await Promise.all(tenants.map(async (t) => {
+      let rel;
       try {
-        const tdb = await getTenantDb(t.slug);
+        const { wrapper: tdb, release } = await getTenantDb(t.slug);
+        rel = release;
         const [candidates, clients, users] = await Promise.all([
           tdb.prepare("SELECT COUNT(*)::int AS c FROM candidates WHERE status='active'").get(),
           tdb.prepare("SELECT COUNT(*)::int AS c FROM clients").get(),
@@ -45,6 +47,8 @@ router.get('/tenants', async (req, res) => {
         return { ...t, candidate_count: candidates.c, client_count: clients.c, user_count: users.c };
       } catch {
         return { ...t, candidate_count: 0, client_count: 0, user_count: 0 };
+      } finally {
+        if (rel) rel();
       }
     }));
 
@@ -61,8 +65,10 @@ router.get('/tenants/:id', async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
     let stats = {};
+    let statsRel;
     try {
-      const tdb = await getTenantDb(tenant.slug);
+      const { wrapper: tdb, release } = await getTenantDb(tenant.slug);
+      statsRel = release;
       const [cand, activeCand, clients, invoices, revenue, timesheets, users] = await Promise.all([
         tdb.prepare("SELECT COUNT(*)::int AS c FROM candidates").get(),
         tdb.prepare("SELECT COUNT(*)::int AS c FROM candidates WHERE status='active'").get(),
@@ -83,6 +89,8 @@ router.get('/tenants/:id', async (req, res) => {
       };
     } catch (err) {
       stats.error = err.message;
+    } finally {
+      if (statsRel) statsRel();
     }
 
     res.json({ ...tenant, stats });
@@ -198,13 +206,19 @@ router.post('/tenants/:id/reset-admin', async (req, res) => {
     const tenant = await masterDb.prepare('SELECT * FROM tenants WHERE id = $1').get(req.params.id);
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
-    const tdb   = await getTenantDb(tenant.slug);
-    const admin = await tdb.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
-    if (!admin) return res.status(404).json({ error: 'No admin user found in tenant DB' });
+    let resetRel;
+    try {
+      const { wrapper: tdb, release } = await getTenantDb(tenant.slug);
+      resetRel = release;
+      const admin = await tdb.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+      if (!admin) return res.status(404).json({ error: 'No admin user found in tenant DB' });
 
-    const hash = await bcrypt.hash(new_password, 10);
-    await tdb.prepare('UPDATE users SET password_hash = $1 WHERE id = $2').run(hash, admin.id);
-    res.json({ message: 'Admin password reset successfully' });
+      const hash = await bcrypt.hash(new_password, 10);
+      await tdb.prepare('UPDATE users SET password_hash = $1 WHERE id = $2').run(hash, admin.id);
+      res.json({ message: 'Admin password reset successfully' });
+    } finally {
+      if (resetRel) resetRel();
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -238,8 +252,10 @@ router.get('/stats', async (req, res) => {
 
     let totalCandidates = 0, totalClients = 0, totalInvoices = 0;
     for (const t of tenants.filter(t => t.status === 'active')) {
+      let sRel;
       try {
-        const tdb = await getTenantDb(t.slug);
+        const { wrapper: tdb, release } = await getTenantDb(t.slug);
+        sRel = release;
         const [cand, cli, inv] = await Promise.all([
           tdb.prepare("SELECT COUNT(*)::int AS c FROM candidates WHERE status='active'").get(),
           tdb.prepare("SELECT COUNT(*)::int AS c FROM clients").get(),
@@ -248,7 +264,9 @@ router.get('/stats', async (req, res) => {
         totalCandidates += cand.c;
         totalClients    += cli.c;
         totalInvoices   += inv.c;
-      } catch {}
+      } catch {} finally {
+        if (sRel) sRel();
+      }
     }
 
     res.json({ total, active, suspended, trial, totalCandidates, totalClients, totalInvoices });

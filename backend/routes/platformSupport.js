@@ -18,26 +18,36 @@ const router = express.Router();
 router.use(authenticate);
 
 // ── Helper: notify all admins of a tenant via their tenant DB ─────────────────
-function notifyTenantAdmins(tenantSlug, type, title, message, refId) {
+// Fire-and-forget — callers do not await this. getTenantDb is async so this
+// function must be async; connection is always released in finally.
+async function notifyTenantAdmins(tenantSlug, type, title, message, refId) {
+  let rel;
   try {
-    const tdb = getTenantDb(tenantSlug);
-    const admins = tdb.prepare("SELECT id FROM users WHERE role = 'admin'").all();
+    const { wrapper: tdb, release } = await getTenantDb(tenantSlug);
+    rel = release;
+    const admins = await tdb.prepare("SELECT id FROM users WHERE role = 'admin'").all();
     for (const a of admins) {
       createNotification(tdb, a.id, type, title, message, refId, 'platform_support_ticket');
     }
   } catch (err) {
     console.error('[PlatformSupport] notify error:', err.message);
+  } finally {
+    if (rel) rel();
   }
 }
 
 // ── Helper: notify a specific user in a tenant by email ───────────────────────
-function notifyTenantUserByEmail(tenantSlug, email, type, title, message, refId) {
+async function notifyTenantUserByEmail(tenantSlug, email, type, title, message, refId) {
+  let rel;
   try {
-    const tdb = getTenantDb(tenantSlug);
-    const user = tdb.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const { wrapper: tdb, release } = await getTenantDb(tenantSlug);
+    rel = release;
+    const user = await tdb.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (user) createNotification(tdb, user.id, type, title, message, refId, 'platform_support_ticket');
   } catch (err) {
     console.error('[PlatformSupport] notify-user error:', err.message);
+  } finally {
+    if (rel) rel();
   }
 }
 
