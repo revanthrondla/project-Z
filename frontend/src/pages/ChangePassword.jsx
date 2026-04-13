@@ -4,7 +4,7 @@ import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function ChangePassword() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const navigate         = useNavigate();
 
   const [form, setForm]       = useState({ currentPassword: '', newPassword: '', confirm: '' });
@@ -32,7 +32,11 @@ export default function ChangePassword() {
         currentPassword: form.currentPassword,
         newPassword: form.newPassword,
       });
-      // Redirect to dashboard after successful change
+      // The backend issues a fresh JWT with mustChangePw: false and sets it
+      // as the session cookie. We must re-fetch /api/auth/me so the in-memory
+      // AuthContext state reflects the new token before navigating — otherwise
+      // PrivateRoute still sees mustChangePw: true and bounces us back here.
+      await refreshUser();
       navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to update password. Please try again.');

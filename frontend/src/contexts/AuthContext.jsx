@@ -59,6 +59,22 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  /**
+   * Re-fetch the current user from the server using the active session cookie.
+   * Call this after any operation that changes the JWT payload (e.g. password
+   * change clears mustChangePw) so the in-memory auth state stays in sync.
+   */
+  const refreshUser = async () => {
+    try {
+      const res = await api.get('/api/auth/me');
+      setUser(res.data);
+      sessionStorage.setItem('flow_user', JSON.stringify(res.data));
+    } catch {
+      setUser(null);
+      sessionStorage.removeItem('flow_user');
+    }
+  };
+
   const isSuperAdmin  = user?.role === 'super_admin';
   const isAdmin       = user?.role === 'admin';
   const isCandidate   = user?.role === 'candidate';
@@ -71,6 +87,7 @@ export function AuthProvider({ children }) {
       user,
       login,
       logout,
+      refreshUser,
       loading,
       isSuperAdmin,
       isAdmin,
