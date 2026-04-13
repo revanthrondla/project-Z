@@ -4,6 +4,91 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModulesProvider, useModules } from './contexts/ModulesContext';
 import Layout from './components/Layout';
 
+// ── Error Boundary ─────────────────────────────────────────────────────────────
+// React 18: uncaught render errors unmount the entire tree and show a blank page.
+// This class component catches errors and shows a diagnostic screen instead.
+// Uses only inline styles so it renders even if the CSS bundle fails to load.
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('[ErrorBoundary] React render error:', error);
+    console.error('[ErrorBoundary] Component stack:', info?.componentStack);
+    this.setState({ errorInfo: info });
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    const msg   = this.state.error?.message || String(this.state.error);
+    const stack = this.state.errorInfo?.componentStack || '';
+
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '24px', background: '#f9fafb',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      }}>
+        <div style={{
+          maxWidth: '600px', width: '100%', background: '#fff',
+          borderRadius: '12px', padding: '32px',
+          boxShadow: '0 1px 4px rgba(0,0,0,.08)', border: '1px solid #fecaca',
+        }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
+          <h1 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', margin: '0 0 8px' }}>
+            Something went wrong
+          </h1>
+          <p style={{ color: '#6b7280', fontSize: '14px', margin: '0 0 20px' }}>
+            Flow encountered an unexpected error. The message below will help diagnose it.
+          </p>
+          <pre style={{
+            background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px',
+            padding: '12px 16px', fontSize: '12px', color: '#b91c1c',
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            margin: '0 0 12px', maxHeight: '160px', overflowY: 'auto',
+          }}>
+            {msg}
+          </pre>
+          {stack && (
+            <details style={{ marginBottom: '20px' }}>
+              <summary style={{ cursor: 'pointer', fontSize: '12px', color: '#9ca3af', userSelect: 'none' }}>
+                Component stack
+              </summary>
+              <pre style={{
+                marginTop: '8px', background: '#f3f4f6', borderRadius: '6px',
+                padding: '10px 14px', fontSize: '11px', color: '#374151',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                maxHeight: '200px', overflowY: 'auto',
+              }}>
+                {stack}
+              </pre>
+            </details>
+          )}
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              background: '#10b981', color: '#fff', border: 'none',
+              borderRadius: '8px', padding: '10px 22px',
+              fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+            }}
+          >
+            Reload page
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 // ── Eagerly loaded (needed on every page load) ────────────────────────────────
 import Login from './pages/Login';
 import ChangePassword from './pages/ChangePassword';
@@ -258,12 +343,16 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <ModulesProvider>
-          <AppRoutes />
-        </ModulesProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ErrorBoundary>
+          <AuthProvider>
+            <ModulesProvider>
+              <AppRoutes />
+            </ModulesProvider>
+          </AuthProvider>
+        </ErrorBoundary>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

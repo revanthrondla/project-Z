@@ -1,11 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useModules } from '../contexts/ModulesContext';
 import { useNotifications } from '../hooks/useNotifications';
-import { lazy, Suspense } from 'react';
-const AIChatWidget = lazy(() => import('./AIChatWidget'));
 import FlowLogo from './FlowLogo';
+
+const AIChatWidget = lazy(() => import('./AIChatWidget'));
 
 // ── Navigation definitions ────────────────────────────────────────────────────
 // moduleKey: if set, item is hidden when that module is disabled for the tenant.
