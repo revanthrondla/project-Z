@@ -170,11 +170,11 @@ app.get('/api/dashboard/stats', authenticate, injectTenantDb, requireAdmin, asyn
       db.prepare("SELECT COUNT(*)::int AS count FROM time_entries WHERE status = 'pending'").get(),
       db.prepare("SELECT COUNT(*)::int AS count FROM absences WHERE status = 'pending'").get(),
       db.prepare(`
-        SELECT COALESCE(SUM(hours), 0) AS hours FROM time_entries
+        SELECT COALESCE(SUM(hours), 0)::float AS hours FROM time_entries
         WHERE TO_CHAR(date, 'YYYY-MM') = $1 AND status != 'rejected'
       `).get(yearMonth),
       db.prepare(`
-        SELECT COALESCE(SUM(total_amount), 0) AS total FROM invoices
+        SELECT COALESCE(SUM(total_amount), 0)::float AS total FROM invoices
         WHERE status = 'paid' AND TO_CHAR(period_start, 'YYYY-MM') = $1
       `).get(yearMonth),
       db.prepare(`
@@ -218,14 +218,14 @@ app.get('/api/dashboard/stats', authenticate, injectTenantDb, requireAdmin, asyn
     } catch { /* table may not exist yet on first boot */ }
 
     res.json({
-      totalCandidates:     totalCandidates.count,
-      totalClients:        totalClients.count,
-      pendingTimesheets:   pendingTimesheets.count,
-      pendingAbsences:     pendingAbsences.count,
-      monthlyHours:        monthlyHours.hours,
-      revenueThisMonth:    revenueThisMonth.total,
-      openSupportTickets:  openSupportTickets.count,
-      urgentSupportTickets: urgentSupportTickets.count,
+      totalCandidates:      parseInt(totalCandidates.count)     || 0,
+      totalClients:         parseInt(totalClients.count)        || 0,
+      pendingTimesheets:    parseInt(pendingTimesheets.count)   || 0,
+      pendingAbsences:      parseInt(pendingAbsences.count)     || 0,
+      monthlyHours:         parseFloat(monthlyHours.hours)      || 0,
+      revenueThisMonth:     parseFloat(revenueThisMonth.total)  || 0,
+      openSupportTickets:   parseInt(openSupportTickets.count)  || 0,
+      urgentSupportTickets: parseInt(urgentSupportTickets.count) || 0,
       recentActivity,
     });
   } catch (err) {

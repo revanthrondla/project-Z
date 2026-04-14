@@ -64,11 +64,11 @@ export default function AdminDashboard() {
         <StatCard icon="🏢" label="Clients" value={stats?.totalClients} color="purple" to="/clients" />
         <StatCard icon="⏳" label="Pending Timesheets" value={stats?.pendingTimesheets} color="yellow" to="/timesheets" />
         <StatCard icon="🏖️" label="Pending Absences" value={stats?.pendingAbsences} color="red" to="/absences" />
-        <StatCard icon="⏱️" label="Hours This Month" value={stats?.monthlyHours?.toFixed(1)} color="green" />
+        <StatCard icon="⏱️" label="Hours This Month" value={Number(stats?.monthlyHours || 0).toFixed(1)} color="green" />
         <StatCard
           icon="💰"
           label="Revenue This Month"
-          value={`$${(stats?.revenueThisMonth || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}`}
+          value={`$${Number(stats?.revenueThisMonth || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}`}
           color="green"
           to="/invoices"
         />

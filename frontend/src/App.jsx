@@ -9,19 +9,45 @@ import Layout from './components/Layout';
 // This class component catches errors and shows a diagnostic screen instead.
 // Uses only inline styles so it renders even if the CSS bundle fails to load.
 
+// Detect stale-chunk errors that happen after a new deployment:
+// "Failed to fetch dynamically imported module" / "Importing a module script failed"
+function isChunkLoadError(error) {
+  const msg = error?.message || String(error);
+  return (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('Unable to preload CSS') ||
+    msg.includes('ChunkLoadError')
+  );
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = { hasError: false, error: null, errorInfo: null, isChunkError: false };
   }
 
   static getDerivedStateFromError(error) {
-    return { hasError: true, error };
+    return { hasError: true, error, isChunkError: isChunkLoadError(error) };
   }
 
   componentDidCatch(error, info) {
-    console.error('[ErrorBoundary] React render error:', error);
-    console.error('[ErrorBoundary] Component stack:', info?.componentStack);
+    if (isChunkLoadError(error)) {
+      // Stale assets after a new deployment — reload once automatically.
+      // Guard against infinite reload loops with a sessionStorage flag.
+      const RELOAD_KEY = 'flow_chunk_reload_attempted';
+      if (!sessionStorage.getItem(RELOAD_KEY)) {
+        sessionStorage.setItem(RELOAD_KEY, '1');
+        console.warn('[ErrorBoundary] Stale chunk detected — reloading for fresh assets.');
+        window.location.reload();
+        return;
+      }
+      // If we already reloaded and still failing, fall through to show error UI
+      console.error('[ErrorBoundary] Chunk reload did not resolve error:', error.message);
+    } else {
+      console.error('[ErrorBoundary] React render error:', error);
+      console.error('[ErrorBoundary] Component stack:', info?.componentStack);
+    }
     this.setState({ errorInfo: info });
   }
 
@@ -30,6 +56,7 @@ class ErrorBoundary extends React.Component {
 
     const msg   = this.state.error?.message || String(this.state.error);
     const stack = this.state.errorInfo?.componentStack || '';
+    const isChunk = this.state.isChunkError;
 
     return (
       <div style={{
@@ -41,24 +68,29 @@ class ErrorBoundary extends React.Component {
         <div style={{
           maxWidth: '600px', width: '100%', background: '#fff',
           borderRadius: '12px', padding: '32px',
-          boxShadow: '0 1px 4px rgba(0,0,0,.08)', border: '1px solid #fecaca',
+          boxShadow: '0 1px 4px rgba(0,0,0,.08)',
+          border: `1px solid ${isChunk ? '#d1fae5' : '#fecaca'}`,
         }}>
-          <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>{isChunk ? '🔄' : '⚠️'}</div>
           <h1 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', margin: '0 0 8px' }}>
-            Something went wrong
+            {isChunk ? 'New version available' : 'Something went wrong'}
           </h1>
           <p style={{ color: '#6b7280', fontSize: '14px', margin: '0 0 20px' }}>
-            Flow encountered an unexpected error. The message below will help diagnose it.
+            {isChunk
+              ? 'Flow has been updated. Please reload the page to get the latest version.'
+              : 'Flow encountered an unexpected error. The message below will help diagnose it.'}
           </p>
-          <pre style={{
-            background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px',
-            padding: '12px 16px', fontSize: '12px', color: '#b91c1c',
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            margin: '0 0 12px', maxHeight: '160px', overflowY: 'auto',
-          }}>
-            {msg}
-          </pre>
-          {stack && (
+          {!isChunk && (
+            <pre style={{
+              background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px',
+              padding: '12px 16px', fontSize: '12px', color: '#b91c1c',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              margin: '0 0 12px', maxHeight: '160px', overflowY: 'auto',
+            }}>
+              {msg}
+            </pre>
+          )}
+          {!isChunk && stack && (
             <details style={{ marginBottom: '20px' }}>
               <summary style={{ cursor: 'pointer', fontSize: '12px', color: '#9ca3af', userSelect: 'none' }}>
                 Component stack
@@ -74,14 +106,17 @@ class ErrorBoundary extends React.Component {
             </details>
           )}
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              sessionStorage.removeItem('flow_chunk_reload_attempted');
+              window.location.reload();
+            }}
             style={{
-              background: '#10b981', color: '#fff', border: 'none',
+              background: isChunk ? '#10b981' : '#10b981', color: '#fff', border: 'none',
               borderRadius: '8px', padding: '10px 22px',
               fontSize: '14px', fontWeight: '600', cursor: 'pointer',
             }}
           >
-            Reload page
+            {isChunk ? '🔄 Reload to update' : 'Reload page'}
           </button>
         </div>
       </div>

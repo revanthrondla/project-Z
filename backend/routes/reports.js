@@ -128,14 +128,14 @@ router.get('/absences', async (req, res) => {
         c.name  AS candidate_name,
         cl.name AS client_name,
         COUNT(a.id) AS absence_count,
-        SUM(CAST((julianday(a.end_date) - julianday(a.start_date) + 1) AS INTEGER)) AS total_days,
-        SUM(CASE WHEN a.type='vacation'       THEN CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER) ELSE 0 END) AS vacation_days,
-        SUM(CASE WHEN a.type='sick'           THEN CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER) ELSE 0 END) AS sick_days,
-        SUM(CASE WHEN a.type='personal'       THEN CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER) ELSE 0 END) AS personal_days,
-        SUM(CASE WHEN a.type='public_holiday' THEN CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER) ELSE 0 END) AS holiday_days,
-        SUM(CASE WHEN a.status='approved'     THEN CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER) ELSE 0 END) AS approved_days,
-        SUM(CASE WHEN a.status='pending'      THEN CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER) ELSE 0 END) AS pending_days,
-        SUM(CASE WHEN a.status='rejected'     THEN CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER) ELSE 0 END) AS rejected_days
+        SUM((a.end_date::date - a.start_date::date + 1)) AS total_days,
+        SUM(CASE WHEN a.type='vacation'       THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS vacation_days,
+        SUM(CASE WHEN a.type='sick'           THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS sick_days,
+        SUM(CASE WHEN a.type='personal'       THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS personal_days,
+        SUM(CASE WHEN a.type='public_holiday' THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS holiday_days,
+        SUM(CASE WHEN a.status='approved'     THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS approved_days,
+        SUM(CASE WHEN a.status='pending'      THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS pending_days,
+        SUM(CASE WHEN a.status='rejected'     THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS rejected_days
       FROM absences a
       JOIN candidates c  ON a.candidate_id = c.id
       LEFT JOIN clients cl ON c.client_id = cl.id
@@ -148,7 +148,7 @@ router.get('/absences', async (req, res) => {
     const detail = await req.db.prepare(`
       SELECT
         a.id, a.start_date, a.end_date, a.type, a.status, a.notes,
-        CAST((julianday(a.end_date) - julianday(a.start_date) + 1) AS INTEGER) AS days,
+        (a.end_date::date - a.start_date::date + 1) AS days,
         c.name AS candidate_name
       FROM absences a
       JOIN candidates c ON a.candidate_id = c.id
@@ -160,9 +160,9 @@ router.get('/absences', async (req, res) => {
     const totals = await req.db.prepare(`
       SELECT
         COUNT(a.id) AS absence_count,
-        SUM(CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER)) AS total_days,
-        SUM(CASE WHEN a.status='approved' THEN CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER) ELSE 0 END) AS approved_days,
-        SUM(CASE WHEN a.status='pending'  THEN CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER) ELSE 0 END) AS pending_days
+        SUM((a.end_date::date - a.start_date::date + 1)) AS total_days,
+        SUM(CASE WHEN a.status='approved' THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS approved_days,
+        SUM(CASE WHEN a.status='pending'  THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS pending_days
       FROM absences a
       JOIN candidates c ON a.candidate_id = c.id
       WHERE ${whereClause}
@@ -295,7 +295,7 @@ router.get('/summary', async (req, res) => {
     const absKpi = await req.db.prepare(`
       SELECT
         COUNT(a.id) AS total_absences,
-        SUM(CAST((julianday(a.end_date)-julianday(a.start_date)+1) AS INTEGER)) AS total_absence_days
+        SUM((a.end_date::date - a.start_date::date + 1)) AS total_absence_days
       FROM absences a WHERE ${abs.where}
     `).get(...abs.params);
 

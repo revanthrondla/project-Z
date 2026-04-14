@@ -2,9 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 
 /* ─── tiny helpers ─────────────────────────────────── */
-const fmt   = (n, dec = 1) => (n ?? 0).toFixed(dec);
-const money = (n) => `$${(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const pct   = (part, total) => total ? `${((part / total) * 100).toFixed(0)}%` : '0%';
+// PostgreSQL numeric/decimal columns are returned as strings by the pg driver.
+// Always coerce to Number before calling .toFixed() or .toLocaleString().
+const fmt   = (n, dec = 1) => Number(n || 0).toFixed(dec);
+const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const pct   = (part, total) => total ? `${((Number(part) / Number(total)) * 100).toFixed(0)}%` : '0%';
 
 function KpiCard({ icon, label, value, sub, color = 'blue' }) {
   const colours = {

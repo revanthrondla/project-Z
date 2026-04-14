@@ -542,6 +542,30 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    id: 12,
+    scope: 'tenant',
+    description: 'Add client approval fields to time_entries',
+    async up(client) {
+      // client_approval_status tracks whether the client has approved each
+      // time entry (null = not yet sent, pending, approved, rejected).
+      // client_approval_note and client_approved_at are populated when the
+      // client responds via the client portal.
+      await client.query(`
+        ALTER TABLE time_entries
+          ADD COLUMN IF NOT EXISTS client_approval_status TEXT DEFAULT NULL
+            CHECK (client_approval_status IN ('pending', 'approved', 'rejected') OR client_approval_status IS NULL),
+          ADD COLUMN IF NOT EXISTS client_approval_note   TEXT,
+          ADD COLUMN IF NOT EXISTS client_approved_at     TIMESTAMPTZ
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_te_client_approval
+          ON time_entries(client_approval_status)
+          WHERE client_approval_status IS NOT NULL
+      `);
+    },
+  },
 ];
 
 // ── Core migration runner ─────────────────────────────────────────────────────
