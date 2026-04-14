@@ -135,27 +135,35 @@ async function initMaster() {
 }
 
 async function seedSuperAdmin() {
-  const existing = await masterDb.prepare('SELECT id FROM super_admins LIMIT 1').get();
-  if (existing) return;
-
   const seedEmail    = process.env.SUPER_ADMIN_EMAIL;
   const seedPassword = process.env.SUPER_ADMIN_PASSWORD;
 
-  if (process.env.NODE_ENV === 'production') {
-    if (!seedEmail || !seedPassword) {
-      console.error('[FATAL] No super-admin found and NODE_ENV=production.');
-      console.error('        Set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD env vars in Railway.');
-      process.exit(1);
-    }
+  // If env vars are present, always upsert the super-admin with those credentials.
+  // This allows password recovery: set the env vars in Railway, redeploy, then
+  // optionally clear them again after logging in.
+  if (seedEmail && seedPassword) {
     const hash = await bcrypt.hash(seedPassword, 10);
-    await masterDb.prepare(
-      'INSERT INTO super_admins (name, email, password_hash) VALUES ($1, $2, $3)'
-    ).run('Flow Super Admin', seedEmail, hash);
-    console.log(`✅ Super-admin created: ${seedEmail}`);
-    console.warn('⚠️  Remove SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD from Railway after first login.');
+    await masterDb.prepare(`
+      INSERT INTO super_admins (name, email, password_hash)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (email) DO UPDATE
+        SET password_hash = EXCLUDED.password_hash
+    `).run('Flow Super Admin', seedEmail.toLowerCase().trim(), hash);
+    console.log(`✅ Super-admin upserted: ${seedEmail}`);
+    return;
+  }
+
+  // No env vars — only create a default row if none exists at all.
+  const existing = await masterDb.prepare('SELECT id FROM super_admins LIMIT 1').get();
+  if (existing) return;
+
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[FATAL] No super-admin found and NODE_ENV=production.');
+    console.error('        Set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD env vars in Railway and redeploy.');
+    process.exit(1);
   } else {
-    const devEmail = seedEmail || 'superadmin@hireiq.com';
-    const devPass  = seedPassword || 'superadmin123';
+    const devEmail = 'superadmin@hireiq.com';
+    const devPass  = 'superadmin123';
     const hash = await bcrypt.hash(devPass, 10);
     await masterDb.prepare(
       'INSERT INTO super_admins (name, email, password_hash) VALUES ($1, $2, $3)'
