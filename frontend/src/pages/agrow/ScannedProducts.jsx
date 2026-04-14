@@ -38,7 +38,7 @@ export default function ScannedProducts() {
     if (filter.date) params.set('date', filter.date);
     if (filter.crew) params.set('crew', filter.crew);
     api.get(`/api/agrow/scanned-products?${params}`)
-      .then(r => setItems(r.data))
+      .then(r => setItems(Array.isArray(r.data) ? r.data : []))
       .catch(() => setError('Failed to load data'))
       .finally(() => setLoading(false));
   };
@@ -74,7 +74,7 @@ export default function ScannedProducts() {
 
   const totals = {
     items: items.length,
-    quantity: items.reduce((s, i) => s + (i.quantity || 0), 0),
+    quantity: items.reduce((s, i) => s + Number(i.quantity || 0), 0),
     products: [...new Set(items.map(i => i.product_name))].length,
   };
 

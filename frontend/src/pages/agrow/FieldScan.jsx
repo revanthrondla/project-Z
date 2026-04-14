@@ -68,7 +68,7 @@ export default function FieldScan() {
     refreshPendingCount();
     if (navigator.onLine) {
       api.get('/api/agrow/reference-data')
-        .then(r => setRefData(r.data))
+        .then(r => setRefData(r.data && typeof r.data === 'object' ? r.data : {}))
         .catch(() => {});
       api.get('/api/agrow/scanned-products?synced=1')
         .then(r => setRecentScans(r.data.slice(0, 5)))

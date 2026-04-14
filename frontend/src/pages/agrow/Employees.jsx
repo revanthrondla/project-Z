@@ -35,7 +35,7 @@ export default function Employees() {
     setLoading(true);
     const params = search ? `?search=${encodeURIComponent(search)}` : '';
     api.get(`/api/agrow/employees${params}`)
-      .then(r => setEmployees(r.data))
+      .then(r => setEmployees(Array.isArray(r.data) ? r.data : []))
       .catch(() => setError('Failed to load employees'))
       .finally(() => setLoading(false));
   };

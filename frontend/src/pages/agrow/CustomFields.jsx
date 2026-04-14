@@ -28,7 +28,7 @@ export default function CustomFields() {
   const [error, setError]     = useState('');
 
   const load = () => {
-    api.get('/api/agrow/custom-fields').then(r => setFields(r.data)).catch(() => {});
+    api.get('/api/agrow/custom-fields').then(r => setFields(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   };
 
   useEffect(load, []);

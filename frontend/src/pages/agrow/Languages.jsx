@@ -10,7 +10,7 @@ export default function Languages() {
   const [error, setError]   = useState('');
   const [showAdd, setShowAdd] = useState(false);
 
-  const load = () => api.get('/api/agrow/languages').then(r => setLangs(r.data)).catch(() => {});
+  const load = () => api.get('/api/agrow/languages').then(r => setLangs(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   useEffect(load, []);
 
   const handleAdd = async (e) => {
