@@ -124,6 +124,11 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// Clear the chunk-reload guard on every successful JS execution so future
+// deploys can auto-reload again (guard only prevents infinite loops within
+// a single page load attempt, not across separate visits).
+sessionStorage.removeItem('flow_chunk_reload_attempted');
+
 // ── Eagerly loaded (needed on every page load) ────────────────────────────────
 import Login from './pages/Login';
 import ChangePassword from './pages/ChangePassword';

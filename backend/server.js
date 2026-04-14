@@ -244,12 +244,38 @@ app.get('/api/health', (req, res) => res.json({
 }));
 
 // ── Serve React frontend (SPA) ────────────────────────────────────────────────
+// Strategy:
+//   /assets/* — hashed filenames (e.g. Dashboard-DjbEQ12b.js) → 1 year cache
+//   index.html + everything else → no-cache so browsers always fetch the latest
+//   HTML on each deploy, preventing "Failed to fetch dynamically imported module"
+//   errors caused by stale chunk references after a redeploy.
 const FRONTEND_DIST = path.join(__dirname, '../frontend/dist');
-app.use(express.static(FRONTEND_DIST, {
-  maxAge: NODE_ENV === 'production' ? '1d' : 0,
-  etag: true,
+
+// 1. Hashed assets — long-lived cache (filenames change when content changes)
+app.use('/assets', express.static(path.join(FRONTEND_DIST, 'assets'), {
+  maxAge: NODE_ENV === 'production' ? '1y' : 0,
+  immutable: NODE_ENV === 'production',
+  etag: false,
 }));
+
+// 2. Everything else (including index.html, favicon, manifest, etc.) — no cache
+app.use(express.static(FRONTEND_DIST, {
+  maxAge: 0,
+  etag: true,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  },
+}));
+
+// 3. SPA fallback — always return index.html for unknown routes (no cache)
 app.get('*', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
 });
 
