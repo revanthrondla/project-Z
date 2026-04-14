@@ -308,7 +308,7 @@ export default function ClientInvoices() {
 
   const load = () => {
     api.get('/api/client-portal/invoices')
-      .then(r => setInvoices(r.data.invoices))
+      .then(r => setInvoices(Array.isArray(r.data.invoices) ? r.data.invoices : []))
       .catch(() => setError('Failed to load invoices.'))
       .finally(() => setLoading(false));
   };
@@ -318,10 +318,10 @@ export default function ClientInvoices() {
   const filtered = filter === 'all' ? invoices : invoices.filter(i => i.status === filter);
 
   const totals = {
-    total: invoices.reduce((s, i) => s + i.total_amount, 0),
-    approved: invoices.filter(i => i.status === 'client_approved').reduce((s, i) => s + i.total_amount, 0),
-    pending: invoices.filter(i => ['sent', 'draft'].includes(i.status)).reduce((s, i) => s + i.total_amount, 0),
-    paid: invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total_amount, 0),
+    total:    invoices.reduce((s, i) => s + Number(i.total_amount || 0), 0),
+    approved: invoices.filter(i => i.status === 'client_approved').reduce((s, i) => s + Number(i.total_amount || 0), 0),
+    pending:  invoices.filter(i => ['sent', 'draft'].includes(i.status)).reduce((s, i) => s + Number(i.total_amount || 0), 0),
+    paid:     invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.total_amount || 0), 0),
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"/></div>;

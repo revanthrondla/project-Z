@@ -23,13 +23,13 @@ export default function AdminTimesheets() {
     if (filters.status) params.status = filters.status;
     if (filters.month) params.month = filters.month;
     return api.get('/api/time-entries', { params })
-      .then(r => setEntries(r.data))
+      .then(r => setEntries(Array.isArray(r.data) ? r.data : []))
       .catch(() => setError('Failed to load timesheets. Is the server running?'))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    api.get('/api/candidates').then(r => setCandidates(r.data));
+    api.get('/api/candidates').then(r => setCandidates(Array.isArray(r.data) ? r.data : []));
   }, []);
 
   useEffect(() => { load(); }, [filters]);
@@ -65,8 +65,8 @@ export default function AdminTimesheets() {
     setSelected(prev => prev.length === pendingIds.length ? [] : pendingIds);
   };
 
-  const totalHours = entries.reduce((s, e) => s + e.hours, 0);
-  const totalAmount = entries.reduce((s, e) => s + e.hours * (e.hourly_rate || 0), 0);
+  const totalHours  = entries.reduce((s, e) => s + Number(e.hours  || 0), 0);
+  const totalAmount = entries.reduce((s, e) => s + Number(e.hours  || 0) * Number(e.hourly_rate || 0), 0);
 
   return (
     <div>
@@ -152,7 +152,7 @@ export default function AdminTimesheets() {
                   <td className="px-4 py-3 font-medium text-gray-900">{e.hours}h</td>
                   <td className="px-4 py-3 text-gray-600">{e.project || '—'}</td>
                   <td className="px-4 py-3 text-gray-500 max-w-[200px] truncate">{e.description || '—'}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">${(e.hours * (e.hourly_rate || 0)).toFixed(2)}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">${(Number(e.hours || 0) * Number(e.hourly_rate || 0)).toFixed(2)}</td>
                   <td className="px-4 py-3"><StatusBadge status={e.status} /></td>
                   <td className="px-4 py-3 text-right">
                     {e.status === 'pending' && (

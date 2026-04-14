@@ -31,7 +31,7 @@ export default function AdminCandidates() {
 
   const load = () => {
     Promise.all([api.get('/api/candidates'), api.get('/api/clients')])
-      .then(([c, cl]) => { setCandidates(c.data); setClients(cl.data); })
+      .then(([c, cl]) => { setCandidates(Array.isArray(c.data) ? c.data : []); setClients(Array.isArray(cl.data) ? cl.data : []); })
       .finally(() => setLoading(false));
   };
 
@@ -67,7 +67,10 @@ export default function AdminCandidates() {
   };
 
   const filtered = candidates.filter(c => {
-    const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase()) || c.role.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search ||
+      (c.name  || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.role  || '').toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === 'all' || c.status === filterStatus;
     return matchSearch && matchStatus;
   });

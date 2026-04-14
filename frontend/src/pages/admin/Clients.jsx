@@ -137,7 +137,7 @@ export default function AdminClients() {
   const [createLoginFor, setCreateLoginFor] = useState(null);
   const [removeLoginFor, setRemoveLoginFor] = useState(null);
 
-  const load = () => api.get('/api/clients').then(r => setClients(r.data)).finally(() => setLoading(false));
+  const load = () => api.get('/api/clients').then(r => setClients(Array.isArray(r.data) ? r.data : [])).finally(() => setLoading(false));
   useEffect(load, []);
 
   const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setError(''); setShowModal(true); };
@@ -185,7 +185,7 @@ export default function AdminClients() {
         ) : clients.map(c => (
           <div key={c.id} className="card p-5">
             <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-purple-700 font-bold text-lg shrink-0">{c.name[0]}</div>
+              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-purple-700 font-bold text-lg shrink-0">{c.name?.[0] ?? '?'}</div>
               <div className="flex gap-2">
                 <button onClick={() => openEdit(c)} className="text-emerald-600 hover:underline text-xs">Edit</button>
                 <button onClick={() => handleDelete(c.id)} className="text-red-500 hover:underline text-xs">Delete</button>

@@ -413,7 +413,7 @@ export default function EmailPayments() {
   const loadImports = useCallback(() => {
     const params = filter ? { status: filter } : {};
     return api.get('/api/email-payments/imports', { params })
-      .then(r => setImports(r.data))
+      .then(r => setImports(Array.isArray(r.data) ? r.data : []))
       .finally(() => setLoading(false));
   }, [filter]);
 
@@ -421,14 +421,12 @@ export default function EmailPayments() {
 
   useEffect(() => {
     // Load open invoices for the confirm modal dropdown
-    api.get('/api/invoices', { params: { status: 'sent' } })
-      .then(r => setInvoices(r.data))
-      .catch(() => {});
     // Also include client_approved and overdue
     Promise.all([
       api.get('/api/invoices', { params: {} }),
     ]).then(([r]) => {
-      setInvoices(r.data.filter(i => ['sent', 'client_approved', 'overdue', 'draft'].includes(i.status)));
+      const all = Array.isArray(r.data) ? r.data : [];
+      setInvoices(all.filter(i => ['sent', 'client_approved', 'overdue', 'draft'].includes(i.status)));
     }).catch(() => {});
   }, []);
 

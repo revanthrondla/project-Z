@@ -47,8 +47,8 @@ export default function ClientDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
           { label: 'Active Candidates', value: kpis.total_candidates, icon: '👥', color: 'text-emerald-600 bg-emerald-50' },
-          { label: 'Approved Hours', value: `${kpis.total_approved_hours?.toFixed(1)}h`, icon: '✅', color: 'text-green-600 bg-green-50' },
-          { label: 'Pending Hours', value: `${kpis.total_pending_hours?.toFixed(1)}h`, icon: '⏳', color: 'text-yellow-600 bg-yellow-50' },
+          { label: 'Approved Hours', value: `${Number(kpis.total_approved_hours || 0).toFixed(1)}h`, icon: '✅', color: 'text-green-600 bg-green-50' },
+          { label: 'Pending Hours', value: `${Number(kpis.total_pending_hours || 0).toFixed(1)}h`, icon: '⏳', color: 'text-yellow-600 bg-yellow-50' },
           { label: 'Total Cost', value: `$${Number(kpis.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, icon: '💰', color: 'text-purple-600 bg-purple-50' },
         ].map(k => (
           <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">

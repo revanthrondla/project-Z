@@ -279,7 +279,7 @@ export default function AIChatWidget() {
   }, [open, messages.length, convId]);
 
   function loadConversations() {
-    api.get('/api/ai-chat/conversations').then(r => setConvList(r.data)).catch(() => {});
+    api.get('/api/ai-chat/conversations').then(r => setConvList(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   }
 
   function startNewChat() {

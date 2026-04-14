@@ -23,12 +23,12 @@ export default function AdminAbsences() {
     if (filters.status) params.status = filters.status;
     if (filters.year) params.year = filters.year;
     return api.get('/api/absences', { params })
-      .then(r => setAbsences(r.data))
+      .then(r => setAbsences(Array.isArray(r.data) ? r.data : []))
       .catch(() => setError('Failed to load absences. Is the server running?'))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { api.get('/api/candidates').then(r => setCandidates(r.data)); }, []);
+  useEffect(() => { api.get('/api/candidates').then(r => setCandidates(Array.isArray(r.data) ? r.data : [])); }, []);
   useEffect(() => { load(); }, [filters]);
 
   const approve = async (id) => { await api.put(`/api/absences/${id}`, { status: 'approved' }); load(); };

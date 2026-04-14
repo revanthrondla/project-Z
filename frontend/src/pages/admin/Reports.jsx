@@ -63,8 +63,8 @@ export default function Reports() {
 
   // Load candidates + clients once
   useEffect(() => {
-    api.get('/api/candidates').then(r => setCandidates(r.data));
-    api.get('/api/clients').then(r => setClients(r.data));
+    api.get('/api/candidates').then(r => setCandidates(Array.isArray(r.data) ? r.data : []));
+    api.get('/api/clients').then(r => setClients(Array.isArray(r.data) ? r.data : []));
   }, []);
 
   // When client filter changes, clear candidate filter (to avoid hidden conflicts)

@@ -30,7 +30,7 @@ export default function LogHours() {
     const params = { candidate_id: user.candidateId };
     if (filterMonth) params.month = filterMonth;
     return api.get('/api/time-entries', { params })
-      .then(r => setEntries(r.data))
+      .then(r => setEntries(Array.isArray(r.data) ? r.data : []))
       .finally(() => setLoading(false));
   };
 
@@ -73,8 +73,8 @@ export default function LogHours() {
     catch (err) { alert(err.response?.data?.error || 'Delete failed'); }
   };
 
-  const totalHours = entries.reduce((s, e) => s + e.hours, 0);
-  const approvedHours = entries.filter(e => e.status === 'approved').reduce((s, e) => s + e.hours, 0);
+  const totalHours = entries.reduce((s, e) => s + Number(e.hours || 0), 0);
+  const approvedHours = entries.filter(e => e.status === 'approved').reduce((s, e) => s + Number(e.hours || 0), 0);
 
   return (
     <div>
@@ -103,7 +103,7 @@ export default function LogHours() {
           <p className="text-xs text-gray-500 mt-1">Approved</p>
         </div>
         <div className="card p-4 text-center">
-          <p className="text-2xl font-bold text-yellow-600">{entries.filter(e => e.status === 'pending').reduce((s, e) => s + e.hours, 0).toFixed(1)}</p>
+          <p className="text-2xl font-bold text-yellow-600">{entries.filter(e => e.status === 'pending').reduce((s, e) => s + Number(e.hours || 0), 0).toFixed(1)}</p>
           <p className="text-xs text-gray-500 mt-1">Pending</p>
         </div>
       </div>

@@ -361,9 +361,9 @@ export default function AdminDocuments() {
         api.get('/api/candidates'),
         api.get('/api/clients'),
       ]);
-      setDocs(d.data);
-      setCandidates(c.data);
-      setClients(cl.data);
+      setDocs(Array.isArray(d.data) ? d.data : []);
+      setCandidates(Array.isArray(c.data) ? c.data : []);
+      setClients(Array.isArray(cl.data) ? cl.data : []);
     } finally { setLoading(false); }
   };
 

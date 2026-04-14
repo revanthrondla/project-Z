@@ -41,7 +41,7 @@ export default function MyAbsences() {
   const load = () => {
     setLoadError('');
     return api.get('/api/absences')
-      .then(r => setAbsences(r.data))
+      .then(r => setAbsences(Array.isArray(r.data) ? r.data : []))
       .catch(() => setLoadError('Failed to load. Is the server running?'))
       .finally(() => setLoading(false));
   };

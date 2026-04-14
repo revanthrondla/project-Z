@@ -280,11 +280,11 @@ function InvoiceDetail({ invoice: initialInvoice, onClose, onStatusChange }) {
           <thead><tr><th>Date</th><th>Description</th><th>Hours</th><th>Rate</th><th>Amount</th></tr></thead>
           <tbody>
             ${(invoice.line_items || []).map(li => `
-              <tr><td>${li.date}</td><td>${li.description || ''}</td><td>${li.hours}</td><td>$${li.rate}</td><td>$${li.amount.toFixed(2)}</td></tr>
+              <tr><td>${li.date}</td><td>${li.description || ''}</td><td>${li.hours}</td><td>$${li.rate}</td><td>$${Number(li.amount || 0).toFixed(2)}</td></tr>
             `).join('')}
           </tbody>
         </table>
-        <div class="total">Total: $${invoice.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+        <div class="total">Total: $${Number(invoice.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
       </body></html>
     `);
     win.document.close();
@@ -335,7 +335,7 @@ function InvoiceDetail({ invoice: initialInvoice, onClose, onStatusChange }) {
             </div>
             <div className="bg-green-50 p-3 rounded-lg">
               <p className="text-green-500 text-xs mb-1">Total Amount</p>
-              <p className="font-bold text-green-700 text-lg">${invoice.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+              <p className="font-bold text-green-700 text-lg">${Number(invoice.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
             </div>
           </div>
 
@@ -356,7 +356,7 @@ function InvoiceDetail({ invoice: initialInvoice, onClose, onStatusChange }) {
                         <td className="px-3 py-2">{li.date}</td>
                         <td className="px-3 py-2 text-gray-500">{li.description}</td>
                         <td className="px-3 py-2 text-right font-medium">{li.hours}</td>
-                        <td className="px-3 py-2 text-right font-medium">${li.amount.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right font-medium">${Number(li.amount || 0).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -651,13 +651,13 @@ export default function AdminInvoices() {
     if (filters.status) params.status = filters.status;
     if (filters.candidate_id) params.candidate_id = filters.candidate_id;
     return api.get('/api/invoices', { params })
-      .then(r => setInvoices(r.data))
+      .then(r => setInvoices(Array.isArray(r.data) ? r.data : []))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    api.get('/api/candidates').then(r => setCandidates(r.data));
-    api.get('/api/clients').then(r => setClients(r.data));
+    api.get('/api/candidates').then(r => setCandidates(Array.isArray(r.data) ? r.data : []));
+    api.get('/api/clients').then(r => setClients(Array.isArray(r.data) ? r.data : []));
   }, []);
   useEffect(() => { load(); }, [filters]);
 
@@ -666,8 +666,8 @@ export default function AdminInvoices() {
     setInvoiceDetail(r.data);
   };
 
-  const totalRevenue = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + i.total_amount, 0);
-  const totalPending = invoices.filter(i => ['sent', 'draft'].includes(i.status)).reduce((s, i) => s + i.total_amount, 0);
+  const totalRevenue = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.total_amount || 0), 0);
+  const totalPending = invoices.filter(i => ['sent', 'draft'].includes(i.status)).reduce((s, i) => s + Number(i.total_amount || 0), 0);
 
   return (
     <div>
@@ -727,7 +727,7 @@ export default function AdminInvoices() {
                   <td className="px-4 py-3 text-gray-500">{inv.client_name || '—'}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{inv.period_start}<br />{inv.period_end}</td>
                   <td className="px-4 py-3 text-gray-700">{inv.total_hours}h</td>
-                  <td className="px-4 py-3 font-bold text-gray-900">${inv.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                  <td className="px-4 py-3 font-bold text-gray-900">${Number(inv.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   <td className="px-4 py-3 text-gray-500">{inv.due_date || '—'}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center text-xs px-2.5 py-1 rounded-full font-medium ${

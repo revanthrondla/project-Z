@@ -43,7 +43,7 @@ export default function AdminJobs() {
     setLoading(true);
     try {
       const res = await api.get('/api/jobs');
-      setJobs(res.data);
+      setJobs(Array.isArray(res.data) ? res.data : []);
     } catch { setError('Failed to load jobs'); }
     setLoading(false);
   }
@@ -51,7 +51,7 @@ export default function AdminJobs() {
   async function fetchClients() {
     try {
       const res = await api.get('/api/clients');
-      setClients(res.data);
+      setClients(Array.isArray(res.data) ? res.data : []);
     } catch {}
   }
 

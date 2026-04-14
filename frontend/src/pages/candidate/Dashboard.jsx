@@ -34,14 +34,14 @@ export default function CandidateDashboard() {
     ]).then(([s, c, te]) => {
       setStats(s.data);
       setCandidate(c.data);
-      setRecentEntries(te.data.slice(0, 5));
+      setRecentEntries((Array.isArray(te.data) ? te.data : []).slice(0, 5));
     }).finally(() => setLoading(false));
   }, [user]);
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>;
 
-  const paidTotal = stats?.invoiceStats?.find(i => i.status === 'paid')?.total || 0;
-  const pendingTotal = stats?.invoiceStats?.find(i => i.status === 'sent')?.total || 0;
+  const paidTotal = Number(stats?.invoiceStats?.find(i => i.status === 'paid')?.total || 0);
+  const pendingTotal = Number(stats?.invoiceStats?.find(i => i.status === 'sent')?.total || 0);
 
   return (
     <div>
@@ -53,8 +53,8 @@ export default function CandidateDashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard icon="⏱️" label="Hours This Month" value={(stats?.monthlyHours || 0).toFixed(1)} color="blue" />
-        <StatCard icon="📅" label="Hours This Year" value={(stats?.yearlyHours || 0).toFixed(1)} color="purple" />
+        <StatCard icon="⏱️" label="Hours This Month" value={Number(stats?.monthlyHours || 0).toFixed(1)} color="blue" />
+        <StatCard icon="📅" label="Hours This Year" value={Number(stats?.yearlyHours || 0).toFixed(1)} color="purple" />
         <StatCard icon="⏳" label="Pending Approvals" value={stats?.pendingEntries || 0} color="yellow" />
         <StatCard icon="💰" label="Total Earned" value={`$${paidTotal.toLocaleString('en-US', { maximumFractionDigits: 0 })}`} color="green" />
       </div>

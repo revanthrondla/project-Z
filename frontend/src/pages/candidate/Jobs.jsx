@@ -34,7 +34,7 @@ export default function CandidateJobs() {
     setLoading(true);
     try {
       const res = await api.get('/api/jobs');
-      setJobs(res.data);
+      setJobs(Array.isArray(res.data) ? res.data : []);
     } catch { setError('Failed to load jobs'); }
     setLoading(false);
   }
@@ -42,7 +42,7 @@ export default function CandidateJobs() {
   async function fetchMyApplications() {
     try {
       const res = await api.get('/api/jobs/my/applications');
-      setMyApplications(res.data);
+      setMyApplications(Array.isArray(res.data) ? res.data : []);
     } catch {}
   }
 

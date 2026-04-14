@@ -400,7 +400,7 @@ export default function Tenants() {
   const load = useCallback(() => {
     setLoading(true);
     api.get('/api/super-admin/tenants')
-      .then(r => setTenants(r.data))
+      .then(r => setTenants(Array.isArray(r.data) ? r.data : []))
       .finally(() => setLoading(false));
   }, []);
 
