@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 
 const STATUS_COLORS = { draft: 'badge-draft', sent: 'badge-sent', paid: 'badge-paid', overdue: 'badge-overdue', cancelled: 'badge-inactive' };
@@ -8,8 +8,14 @@ export default function MyInvoices() {
   const [loading, setLoading] = useState(true);
   const [viewInvoice, setViewInvoice] = useState(null);
 
-  const load = () => api.get('/api/invoices').then(r => setInvoices(Array.isArray(r.data) ? r.data : [])).finally(() => setLoading(false));
-  useEffect(load, []);
+  const load = useCallback(() => {
+    api.get('/api/invoices')
+      .then(res => { setInvoices(Array.isArray(res.data) ? res.data : []); })
+      .catch(() => {})
+      .finally(() => { setLoading(false); });
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const handleView = async (inv) => {
     const r = await api.get(`/api/invoices/${inv.id}`);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../api';
 
@@ -26,15 +26,15 @@ export default function LogHours() {
   const [error, setError] = useState('');
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7));
 
-  const load = () => {
+  const load = useCallback(() => {
     const params = { candidate_id: user.candidateId };
     if (filterMonth) params.month = filterMonth;
     return api.get('/api/time-entries', { params })
       .then(r => setEntries(Array.isArray(r.data) ? r.data : []))
       .finally(() => setLoading(false));
-  };
+  }, [filterMonth, user.candidateId]);
 
-  useEffect(load, [filterMonth]);
+  useEffect(() => { load(); }, [load]);
 
   const openCreate = () => {
     setEditing(null);

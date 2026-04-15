@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../../api';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -28,14 +28,14 @@ function GeneralTab() {
   const [form, setForm] = useState({ company_name:'', contact_email:'', contact_phone:'', company_logo:'' });
   const fileRef = useRef(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     api.get('/api/settings')
       .then(r => { setSettings(r.data); setForm({ company_name: r.data.company_name||'', contact_email: r.data.contact_email||'', contact_phone: r.data.contact_phone||'', company_logo: r.data.company_logo||'' }); })
       .catch(() => setError('Failed to load settings.'))
       .finally(() => setLoading(false));
-  };
-  useEffect(load, []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];

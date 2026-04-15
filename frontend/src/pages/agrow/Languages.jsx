@@ -1,20 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 
 const FLAG = { EN:'🇬🇧', ES:'🇪🇸', FR:'🇫🇷', DE:'🇩🇪', PT:'🇵🇹', ZH:'🇨🇳', AR:'🇸🇦', HI:'🇮🇳' };
 
 export default function Languages() {
-  const [langs, setLangs]   = useState([]);
-  const [form, setForm]     = useState({ language_name:'', language_code:'', is_default: false });
-  const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState('');
+  const [langs, setLangs]     = useState([]);
+  const [form, setForm]       = useState({ language_name:'', language_code:'', is_default: false });
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState('');
   const [showAdd, setShowAdd] = useState(false);
 
-  const load = () => api.get('/api/agrow/languages').then(r => setLangs(Array.isArray(r.data) ? r.data : [])).catch(() => {});
-  useEffect(load, []);
+  const load = useCallback(() => {
+    api.get('/api/agrow/languages')
+      .then(r => { setLangs(Array.isArray(r.data) ? r.data : []); })
+      .catch(() => {});
+  }, []);
 
-  const handleAdd = async (e) => {
-    e.preventDefault();
+  useEffect(() => { load(); }, [load]);
+
+  const handleAdd = async (evt) => {
+    evt.preventDefault();
     setSaving(true);
     setError('');
     try {
@@ -30,14 +35,18 @@ export default function Languages() {
   };
 
   const setDefault = async (id) => {
-    await api.put(`/api/agrow/languages/${id}`, { is_default: true });
-    load();
+    try {
+      await api.put(`/api/agrow/languages/${id}`, { is_default: true });
+      load();
+    } catch (_) { /* ignore */ }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this language?')) return;
-    await api.delete(`/api/agrow/languages/${id}`);
-    load();
+    try {
+      await api.delete(`/api/agrow/languages/${id}`);
+      load();
+    } catch (_) { /* ignore */ }
   };
 
   return (
@@ -89,24 +98,26 @@ export default function Languages() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {langs.map(lang => (
+        {langs.map(lang => {
+          const isDefault = Boolean(lang.is_default);
+          return (
           <div
             key={lang.id}
             className={`bg-white rounded-xl border p-5 flex items-center gap-4 transition-all
-              ${lang.is_default ? 'border-green-400 ring-1 ring-green-300' : 'border-gray-200'}`}
+              ${isDefault ? 'border-green-400 ring-1 ring-green-300' : 'border-gray-200'}`}
           >
-            <div className="text-4xl">{FLAG[lang.language_code] || '🌐'}</div>
+            <div className="text-4xl">{FLAG[lang.language_code || ''] || '🌐'}</div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <p className="font-semibold text-gray-900">{lang.language_name}</p>
-                {lang.is_default && (
+                {isDefault && (
                   <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Default</span>
                 )}
               </div>
               <p className="text-sm text-gray-400 font-mono">{lang.language_code}</p>
             </div>
             <div className="flex flex-col gap-1.5 items-end">
-              {!lang.is_default && (
+              {!isDefault && (
                 <button
                   onClick={() => setDefault(lang.id)}
                   className="text-xs text-green-600 hover:text-green-800 font-medium"
@@ -122,7 +133,8 @@ export default function Languages() {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
         {langs.length === 0 && (
           <div className="col-span-3 text-center py-16 text-gray-400">
             <p className="text-4xl mb-3">🌐</p>

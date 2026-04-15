@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api';
 
@@ -29,13 +29,13 @@ export default function AdminCandidates() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
-  const load = () => {
+  const load = useCallback(() => {
     Promise.all([api.get('/api/candidates'), api.get('/api/clients')])
       .then(([c, cl]) => { setCandidates(Array.isArray(c.data) ? c.data : []); setClients(Array.isArray(cl.data) ? cl.data : []); })
       .finally(() => setLoading(false));
-  };
+  }, []);
 
-  useEffect(load, []);
+  useEffect(() => { load(); }, [load]);
 
   const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setError(''); setShowModal(true); };
   const openEdit = (c) => { setEditing(c); setForm({ ...c, password: '' }); setError(''); setShowModal(true); };

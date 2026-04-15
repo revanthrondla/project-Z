@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -32,7 +32,7 @@ export default function ScannedProducts() {
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
     if (filter.date) params.set('date', filter.date);
@@ -41,9 +41,9 @@ export default function ScannedProducts() {
       .then(r => setItems(Array.isArray(r.data) ? r.data : []))
       .catch(() => setError('Failed to load data'))
       .finally(() => setLoading(false));
-  };
+  }, [filter]);
 
-  useEffect(load, [filter]);
+  useEffect(() => { load(); }, [load]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

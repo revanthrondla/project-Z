@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -31,16 +31,16 @@ export default function Employees() {
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState('');
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     const params = search ? `?search=${encodeURIComponent(search)}` : '';
     api.get(`/api/agrow/employees${params}`)
       .then(r => setEmployees(Array.isArray(r.data) ? r.data : []))
       .catch(() => setError('Failed to load employees'))
       .finally(() => setLoading(false));
-  };
+  }, [search]);
 
-  useEffect(load, [search]);
+  useEffect(() => { load(); }, [load]);
 
   const openNew  = () => { setEditing('new'); setForm(EMPTY); setError(''); };
   const openEdit = (emp) => {

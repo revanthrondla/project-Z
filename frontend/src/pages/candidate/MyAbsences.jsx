@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../api';
 
@@ -38,14 +38,14 @@ export default function MyAbsences() {
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoadError('');
     return api.get('/api/absences')
       .then(r => setAbsences(Array.isArray(r.data) ? r.data : []))
       .catch(() => setLoadError('Failed to load. Is the server running?'))
       .finally(() => setLoading(false));
-  };
-  useEffect(load, []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   const openCreate = () => { setForm({ start_date: '', end_date: '', type: 'vacation', notes: '' }); setError(''); setShowModal(true); };
 

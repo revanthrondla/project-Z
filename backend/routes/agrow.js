@@ -32,11 +32,11 @@ router.post('/languages', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'language_name and language_code are required' });
     }
     if (is_default) {
-      await req.db.prepare('UPDATE ag_languages SET is_default = 0').run();
+      await req.db.prepare('UPDATE ag_languages SET is_default = FALSE').run();
     }
     const r = await req.db.prepare(
       'INSERT INTO ag_languages (language_name, language_code, is_default) VALUES (?, ?, ?)'
-    ).run(language_name.trim(), language_code.toUpperCase().trim(), is_default ? 1 : 0);
+    ).run(language_name.trim(), language_code.toUpperCase().trim(), Boolean(is_default));
     res.status(201).json(await req.db.prepare('SELECT * FROM ag_languages WHERE id = ?').get(r.lastInsertRowid));
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(400).json({ error: 'Language code already exists' });
@@ -47,14 +47,14 @@ router.post('/languages', requireAdmin, async (req, res) => {
 router.put('/languages/:id', requireAdmin, async (req, res) => {
   try {
     const { language_name, language_code, is_default } = req.body;
-    if (is_default) await req.db.prepare('UPDATE ag_languages SET is_default = 0').run();
+    if (is_default) await req.db.prepare('UPDATE ag_languages SET is_default = FALSE').run();
     await req.db.prepare(`
       UPDATE ag_languages SET
         language_name = COALESCE(?, language_name),
         language_code = COALESCE(?, language_code),
         is_default    = COALESCE(?, is_default)
       WHERE id = ?
-    `).run(language_name || null, language_code?.toUpperCase() || null, is_default != null ? (is_default ? 1 : 0) : null, req.params.id);
+    `).run(language_name || null, language_code?.toUpperCase() || null, is_default != null ? Boolean(is_default) : null, req.params.id);
     res.json(await req.db.prepare('SELECT * FROM ag_languages WHERE id = ?').get(req.params.id));
   } catch (err) {
     res.status(500).json({ error: err.message });

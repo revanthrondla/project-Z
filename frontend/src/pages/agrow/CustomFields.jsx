@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 
 const FIELD_TYPES = ['text','number','dropdown','date','time','boolean','image'];
@@ -27,11 +27,11 @@ export default function CustomFields() {
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState('');
 
-  const load = () => {
+  const load = useCallback(() => {
     api.get('/api/agrow/custom-fields').then(r => setFields(Array.isArray(r.data) ? r.data : [])).catch(() => {});
-  };
+  }, []);
 
-  useEffect(load, []);
+  useEffect(() => { load(); }, [load]);
 
   const openNew  = () => { setEditing('new'); setForm(EMPTY); setError(''); };
   const openEdit = (f) => {

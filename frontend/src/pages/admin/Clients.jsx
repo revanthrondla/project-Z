@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 
 function Modal({ title, onClose, children, size = 'md' }) {
@@ -137,8 +137,14 @@ export default function AdminClients() {
   const [createLoginFor, setCreateLoginFor] = useState(null);
   const [removeLoginFor, setRemoveLoginFor] = useState(null);
 
-  const load = () => api.get('/api/clients').then(r => setClients(Array.isArray(r.data) ? r.data : [])).finally(() => setLoading(false));
-  useEffect(load, []);
+  const load = useCallback(() => {
+    api.get('/api/clients')
+      .then(r => { setClients(Array.isArray(r.data) ? r.data : []); })
+      .catch(() => {})
+      .finally(() => { setLoading(false); });
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setError(''); setShowModal(true); };
   const openEdit = (c) => { setEditing(c); setForm(c); setError(''); setShowModal(true); };
