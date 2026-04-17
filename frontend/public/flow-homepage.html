@@ -667,13 +667,17 @@
       <span class="section-label">Pricing</span>
       <h2 class="section-title" id="pricing-heading">Simple, transparent pricing</h2>
       <p class="section-sub">No hidden fees. No per-seat surprises. Pick the plan that fits your team — scale up any time.</p>
+      <div id="currency-pill" style="display:none;margin-top:12px;display:inline-flex;align-items:center;gap:6px;background:var(--emerald-50);border:1px solid var(--emerald-200);border-radius:100px;padding:4px 12px;font-size:12px;font-weight:600;color:var(--emerald-700);">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span id="currency-pill-text">Prices in GBP</span>
+      </div>
     </header>
     <div class="pricing-grid">
 
       <!-- Starter -->
       <div class="pricing-card fade-in">
         <div class="plan-name">Starter</div>
-        <div class="plan-price"><sup>£</sup>49<sub>/mo</sub></div>
+        <div class="plan-price" id="price-starter" data-gbp="49"><sup>£</sup>49<sub>/mo</sub></div>
         <p class="plan-desc">Perfect for small agencies getting started with digital time tracking.</p>
         <div class="plan-divider"></div>
         <ul class="plan-features">
@@ -692,7 +696,7 @@
       <div class="pricing-card popular fade-in">
         <div class="popular-badge">Most popular</div>
         <div class="plan-name">Growth</div>
-        <div class="plan-price"><sup>£</sup>129<sub>/mo</sub></div>
+        <div class="plan-price" id="price-growth" data-gbp="129"><sup>£</sup>129<sub>/mo</sub></div>
         <p class="plan-desc">For growing staffing agencies managing multiple clients and candidates.</p>
         <div class="plan-divider"></div>
         <ul class="plan-features">
@@ -790,6 +794,122 @@
 </footer>
 
 <script>
+// ── Currency-aware pricing ────────────────────────────────────────────────────
+// Detects the visitor's currency via ipapi.co (free, no API key).
+// Converts GBP base prices using open.er-api.com live rates (free, no key).
+// Caches both responses in sessionStorage to avoid redundant fetches on
+// subsequent navigation within the same tab.
+(function () {
+  // Base prices in GBP — single source of truth
+  const PLANS = [
+    { id: 'price-starter', gbp: 49  },
+    { id: 'price-growth',  gbp: 129 },
+  ];
+
+  // Currency symbol map for the most common currencies
+  const SYMBOLS = {
+    GBP: '£', USD: '$', EUR: '€', AUD: '$', CAD: '$', NZD: '$',
+    JPY: '¥', CNY: '¥', INR: '₹', BRL: 'R$', MXN: '$', ZAR: 'R',
+    SGD: '$', HKD: '$', KRW: '₩', SEK: 'kr', NOK: 'kr', DKK: 'kr',
+    CHF: 'Fr', AED: 'د.إ', SAR: '﷼', TRY: '₺', PLN: 'zł', CZK: 'Kč',
+  };
+
+  // Smart price rounding: keeps prices "clean" (e.g. $67 → $69, €154 → €155)
+  function roundPrice(amount) {
+    if (amount < 10)   return Math.round(amount);
+    if (amount < 100)  return Math.round(amount / 5) * 5;   // nearest 5
+    if (amount < 1000) return Math.round(amount / 10) * 10; // nearest 10
+    return Math.round(amount / 100) * 100;
+  }
+
+  function formatPrice(amount, currency) {
+    // JPY, KRW have no decimals and can be large — skip rounding multiples
+    const noDecimal = ['JPY', 'KRW', 'IDR', 'VND', 'CLP'];
+    const rounded = noDecimal.includes(currency)
+      ? Math.round(amount)
+      : roundPrice(amount);
+
+    const sym = SYMBOLS[currency] || currency + ' ';
+    return { sym, amount: rounded.toLocaleString() };
+  }
+
+  function renderPrices(currency, rate) {
+    PLANS.forEach(({ id, gbp }) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const converted = gbp * rate;
+      const { sym, amount } = formatPrice(converted, currency);
+      el.innerHTML = `<sup>${sym}</sup>${amount}<sub>/mo</sub>`;
+    });
+
+    // Show + update the currency pill
+    const pill = document.getElementById('currency-pill');
+    const pillText = document.getElementById('currency-pill-text');
+    if (pill && pillText) {
+      pillText.textContent = `Prices shown in ${currency}`;
+      pill.style.display = 'inline-flex';
+    }
+  }
+
+  async function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+    ]);
+  }
+
+  async function initCurrencyPricing() {
+    const CACHE_KEY_GEO   = 'flow_geo_currency';
+    const CACHE_KEY_RATES = 'flow_fx_rates';
+
+    try {
+      // ── Step 1: detect currency (cached per session) ──
+      let currency = sessionStorage.getItem(CACHE_KEY_GEO);
+      if (!currency) {
+        const geo = await withTimeout(
+          fetch('https://ipapi.co/json/').then(r => r.json()),
+          2500
+        );
+        currency = geo?.currency || 'GBP';
+        sessionStorage.setItem(CACHE_KEY_GEO, currency);
+      }
+
+      // No conversion needed for base currency
+      if (currency === 'GBP') return;
+
+      // ── Step 2: fetch exchange rates (cached per session) ──
+      let rates;
+      const cachedRates = sessionStorage.getItem(CACHE_KEY_RATES);
+      if (cachedRates) {
+        rates = JSON.parse(cachedRates);
+      } else {
+        const fx = await withTimeout(
+          fetch('https://open.er-api.com/v6/latest/GBP').then(r => r.json()),
+          2500
+        );
+        if (fx?.result !== 'success' || !fx.rates) throw new Error('bad fx response');
+        rates = fx.rates;
+        sessionStorage.setItem(CACHE_KEY_RATES, JSON.stringify(rates));
+      }
+
+      const rate = rates[currency];
+      if (!rate) return; // currency not in rate table — show GBP silently
+
+      renderPrices(currency, rate);
+
+    } catch (_) {
+      // Timeout or network failure — silently keep GBP prices
+    }
+  }
+
+  // Run after DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCurrencyPricing);
+  } else {
+    initCurrencyPricing();
+  }
+})();
+
   // ── Scroll-based fade-in animations ──
   const observer = new IntersectionObserver(entries => {
     entries.forEach((entry, i) => {
