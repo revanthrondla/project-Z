@@ -17,20 +17,20 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
     const params = [];
 
     if (req.user.role === 'candidate') {
-      query += ' AND a.candidate_id = ?';
+      query += ' AND a.candidate_id = $' + (params.length + 1);
       params.push(req.user.candidateId);
     } else if (candidate_id) {
-      query += ' AND a.candidate_id = ?';
+      query += ' AND a.candidate_id = $' + (params.length + 1);
       params.push(candidate_id);
     }
 
-    if (status) { query += ' AND a.status = ?'; params.push(status); }
-    if (year) { query += ' AND (TO_CHAR(a.start_date, \'YYYY\') = ? OR TO_CHAR(a.end_date, \'YYYY\') = ?)'; params.push(year, year); }
+    if (status) { query += ' AND a.status = $' + (params.length + 1); params.push(status); }
+    if (year) { query += ' AND (TO_CHAR(a.start_date, \'YYYY\') = $' + (params.length + 1) + ' OR TO_CHAR(a.end_date, \'YYYY\') = $' + (params.length + 2) + ')'; params.push(year, year); }
 
     query += ' ORDER BY a.start_date DESC';
 
-    const absences = await req.db.prepare(query).all(...params);
-    res.json(absences);
+    const result = await req.db.query(query, params);
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -55,16 +55,20 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
     if (req.user.role === 'candidate') cid = req.user.candidateId;
     if (!cid) return res.status(400).json({ error: 'Candidate ID required' });
 
-    const result = await req.db.prepare(`
+    const insertResult = await req.db.query(`
       INSERT INTO absences (candidate_id, start_date, end_date, type, status, notes)
-      VALUES (?, ?, ?, ?, 'pending', ?)
-    `).run(cid, start_date, end_date, type, notes || null);
+      VALUES ($1, $2, $3, $4, 'pending', $5)
+      RETURNING id
+    `, [cid, start_date, end_date, type, notes || null]);
 
-    const absence = await req.db.prepare(`
+    const absenceId = insertResult.rows[0].id;
+
+    const result = await req.db.query(`
       SELECT a.*, c.name as candidate_name FROM absences a
-      JOIN candidates c ON a.candidate_id = c.id WHERE a.id = ?
-    `).get(result.lastInsertRowid);
-    res.status(201).json(absence);
+      JOIN candidates c ON a.candidate_id = c.id WHERE a.id = $1
+    `, [absenceId]);
+
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -74,7 +78,8 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
 router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const absence = await req.db.prepare('SELECT * FROM absences WHERE id = ?').get(id);
+    const absenceResult = await req.db.query('SELECT * FROM absences WHERE id = $1', [id]);
+    const absence = absenceResult.rows[0];
     if (!absence) return res.status(404).json({ error: 'Absence not found' });
 
     if (req.user.role === 'candidate') {
@@ -86,11 +91,12 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
 
     if (req.user.role === 'admin' && status) {
       const approvedAt = (status === 'approved' || status === 'rejected') ? new Date().toISOString() : null;
-      await req.db.prepare('UPDATE absences SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?')
-        .run(status, req.user.id, approvedAt, id);
+      await req.db.query('UPDATE absences SET status = $1, approved_by = $2, approved_at = $3 WHERE id = $4',
+        [status, req.user.id, approvedAt, id]);
 
       // Notify the candidate
-      const candidate = await req.db.prepare('SELECT user_id FROM candidates WHERE id = ?').get(absence.candidate_id);
+      const candidateResult = await req.db.query('SELECT user_id FROM candidates WHERE id = $1', [absence.candidate_id]);
+      const candidate = candidateResult.rows[0];
       if (candidate) {
         const label = status === 'approved' ? 'approved' : 'rejected';
         await createNotification(
@@ -104,21 +110,21 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
         );
       }
     } else {
-      await req.db.prepare(`
+      await req.db.query(`
         UPDATE absences SET
-          start_date = COALESCE(?, start_date),
-          end_date = COALESCE(?, end_date),
-          type = COALESCE(?, type),
-          notes = COALESCE(?, notes)
-        WHERE id = ?
-      `).run(start_date || null, end_date || null, type || null, notes !== undefined ? notes : null, id);
+          start_date = COALESCE($1, start_date),
+          end_date = COALESCE($2, end_date),
+          type = COALESCE($3, type),
+          notes = COALESCE($4, notes)
+        WHERE id = $5
+      `, [start_date || null, end_date || null, type || null, notes !== undefined ? notes : null, id]);
     }
 
-    const updated = await req.db.prepare(`
+    const result = await req.db.query(`
       SELECT a.*, c.name as candidate_name FROM absences a
-      JOIN candidates c ON a.candidate_id = c.id WHERE a.id = ?
-    `).get(id);
-    res.json(updated);
+      JOIN candidates c ON a.candidate_id = c.id WHERE a.id = $1
+    `, [id]);
+    res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -128,7 +134,8 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
 router.delete('/:id', authenticate, injectTenantDb, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const absence = await req.db.prepare('SELECT * FROM absences WHERE id = ?').get(id);
+    const absenceResult = await req.db.query('SELECT * FROM absences WHERE id = $1', [id]);
+    const absence = absenceResult.rows[0];
     if (!absence) return res.status(404).json({ error: 'Absence not found' });
 
     if (req.user.role === 'candidate') {
@@ -136,7 +143,7 @@ router.delete('/:id', authenticate, injectTenantDb, async (req, res) => {
       if (absence.status !== 'pending') return res.status(400).json({ error: 'Cannot delete non-pending absence' });
     }
 
-    await req.db.prepare('DELETE FROM absences WHERE id = ?').run(id);
+    await req.db.query('DELETE FROM absences WHERE id = $1', [id]);
     res.json({ message: 'Absence deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });

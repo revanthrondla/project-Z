@@ -10,6 +10,30 @@ const VALID_ABS_TYPES    = ['vacation', 'sick', 'personal', 'public_holiday', 'o
 // All report endpoints are admin-only
 router.use(authenticate, requireAdmin, injectTenantDb);
 
+// ── Helper: replace ? placeholders with $N and return [sql, params] ──────────
+// Converts a WHERE clause built with ? placeholders + array of values into
+// PostgreSQL positional-param format.  The offset lets us share the same
+// params array across multiple clauses in one query.
+function toPositional(sql, params, offset = 0) {
+  let i = offset;
+  const converted = sql.replace(/\?/g, () => `$${++i}`);
+  return converted;
+}
+
+// Build a WHERE clause with PostgreSQL positional params from the start.
+function buildWherePg(conditions) {
+  // conditions: array of { sql: 'col >= $N', value } — we index them here.
+  // Actually simpler: we accumulate params and return both.
+  const parts = ['1=1'];
+  const params = [];
+  for (const { fragment, value } of conditions) {
+    if (value === undefined || value === null || value === '') continue;
+    params.push(value);
+    parts.push(fragment.replace('?', `$${params.length}`));
+  }
+  return { whereClause: parts.join(' AND '), params };
+}
+
 /**
  * GET /api/reports/hours
  * Total hours (and revenue) per candidate, filtered by date range + optional candidate.
@@ -17,80 +41,79 @@ router.use(authenticate, requireAdmin, injectTenantDb);
  */
 router.get('/hours', async (req, res) => {
   try {
-    // Validate + sanitize query params to prevent unexpected DB queries
     const start_date   = sanitizeQueryDate(req.query.start_date, 'start_date');
     const end_date     = sanitizeQueryDate(req.query.end_date,   'end_date');
     const candidate_id = sanitizeQueryInt(req.query.candidate_id, 'candidate_id');
     const client_id    = sanitizeQueryInt(req.query.client_id,    'client_id');
     const status       = sanitizeQueryEnum(req.query.status, VALID_TE_STATUSES, 'status');
 
-    // NOTE: All user-supplied values are bound as ? parameters — no SQL injection risk.
-    let where = ['1=1'];
-    const params = [];
-
-    if (start_date)   { where.push('te.date >= ?');          params.push(start_date); }
-    if (end_date)     { where.push('te.date <= ?');          params.push(end_date); }
-    if (candidate_id) { where.push('te.candidate_id = ?');   params.push(candidate_id); }
-    if (client_id)    { where.push('c.client_id = ?');       params.push(client_id); }
-    if (status)       { where.push('te.status = ?');         params.push(status); }
-
-    const whereClause = where.join(' AND ');
+    const { whereClause, params } = buildWherePg([
+      { fragment: 'te.date >= ?',        value: start_date   },
+      { fragment: 'te.date <= ?',        value: end_date     },
+      { fragment: 'te.candidate_id = ?', value: candidate_id },
+      { fragment: 'c.client_id = ?',     value: client_id    },
+      { fragment: 'te.status = ?',       value: status       },
+    ]);
 
     // Per-candidate summary
-    const summary = await req.db.prepare(`
+    const summaryResult = await req.db.query(`
       SELECT
         c.id          AS candidate_id,
         c.name        AS candidate_name,
-        c.hourly_rate,
+        c.hourly_rate::float,
         c.role,
         cl.name       AS client_name,
-        COUNT(te.id)                                          AS entry_count,
-        ROUND(SUM(te.hours), 2)                               AS total_hours,
-        ROUND(SUM(CASE WHEN te.status='approved'  THEN te.hours ELSE 0 END), 2) AS approved_hours,
-        ROUND(SUM(CASE WHEN te.status='pending'   THEN te.hours ELSE 0 END), 2) AS pending_hours,
-        ROUND(SUM(CASE WHEN te.status='rejected'  THEN te.hours ELSE 0 END), 2) AS rejected_hours,
-        ROUND(SUM(te.hours * c.hourly_rate), 2)               AS total_amount,
-        ROUND(SUM(CASE WHEN te.status='approved'  THEN te.hours * c.hourly_rate ELSE 0 END), 2) AS approved_amount
+        COUNT(te.id)::int                                                                          AS entry_count,
+        ROUND(COALESCE(SUM(te.hours), 0)::numeric, 2)::float                                       AS total_hours,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 0)::numeric, 2)::float AS approved_hours,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='pending'  THEN te.hours ELSE 0 END), 0)::numeric, 2)::float AS pending_hours,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='rejected' THEN te.hours ELSE 0 END), 0)::numeric, 2)::float AS rejected_hours,
+        ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float                       AS total_amount,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS approved_amount
       FROM time_entries te
       JOIN candidates c  ON te.candidate_id = c.id
       LEFT JOIN clients cl ON c.client_id = cl.id
       WHERE ${whereClause}
-      GROUP BY c.id
+      GROUP BY c.id, c.name, c.hourly_rate, c.role, cl.name
       ORDER BY total_hours DESC
-    `).all(...params);
+    `, params);
 
     // Daily breakdown (for chart)
-    const daily = await req.db.prepare(`
+    const dailyResult = await req.db.query(`
       SELECT
         te.date,
-        ROUND(SUM(te.hours), 2)  AS hours,
-        ROUND(SUM(te.hours * c.hourly_rate), 2) AS amount,
-        COUNT(te.id) AS entries
+        ROUND(COALESCE(SUM(te.hours), 0)::numeric, 2)::float                    AS hours,
+        ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float    AS amount,
+        COUNT(te.id)::int AS entries
       FROM time_entries te
       JOIN candidates c ON te.candidate_id = c.id
       WHERE ${whereClause}
       GROUP BY te.date
       ORDER BY te.date ASC
-    `).all(...params);
+    `, params);
 
     // Totals row
-    const totals = await req.db.prepare(`
+    const totalsResult = await req.db.query(`
       SELECT
-        ROUND(SUM(te.hours), 2)  AS total_hours,
-        ROUND(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 2) AS approved_hours,
-        ROUND(SUM(CASE WHEN te.status='pending'  THEN te.hours ELSE 0 END), 2) AS pending_hours,
-        ROUND(SUM(CASE WHEN te.status='rejected' THEN te.hours ELSE 0 END), 2) AS rejected_hours,
-        ROUND(SUM(te.hours * c.hourly_rate), 2)  AS total_amount,
-        ROUND(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 2) AS approved_amount,
-        COUNT(te.id) AS entry_count
+        ROUND(COALESCE(SUM(te.hours), 0)::numeric, 2)::float                                                AS total_hours,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 0)::numeric, 2)::float AS approved_hours,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='pending'  THEN te.hours ELSE 0 END), 0)::numeric, 2)::float AS pending_hours,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='rejected' THEN te.hours ELSE 0 END), 0)::numeric, 2)::float AS rejected_hours,
+        ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float                                AS total_amount,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS approved_amount,
+        COUNT(te.id)::int AS entry_count
       FROM time_entries te
       JOIN candidates c ON te.candidate_id = c.id
       WHERE ${whereClause}
-    `).get(...params);
+    `, params);
 
-    res.json({ summary, daily, totals });
+    res.json({
+      summary: summaryResult.rows,
+      daily:   dailyResult.rows,
+      totals:  totalsResult.rows[0] || null,
+    });
   } catch (err) {
-    console.error(err);
+    console.error('[reports/hours]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -109,68 +132,74 @@ router.get('/absences', async (req, res) => {
     const status       = sanitizeQueryEnum(req.query.status, VALID_ABS_STATUSES, 'status');
     const type         = sanitizeQueryEnum(req.query.type,   VALID_ABS_TYPES,    'type');
 
-    let where = ['1=1'];
-    const params = [];
-
-    if (start_date)   { where.push('a.start_date >= ?'); params.push(start_date); }
-    if (end_date)     { where.push('a.end_date   <= ?'); params.push(end_date); }
-    if (candidate_id) { where.push('a.candidate_id = ?'); params.push(candidate_id); }
-    if (client_id)    { where.push('c.client_id = ?');   params.push(client_id); }
-    if (status)       { where.push('a.status = ?'); params.push(status); }
-    if (type)         { where.push('a.type = ?');   params.push(type); }
-
-    const whereClause = where.join(' AND ');
+    const { whereClause, params } = buildWherePg([
+      { fragment: 'a.start_date >= ?',   value: start_date   },
+      { fragment: 'a.end_date <= ?',     value: end_date     },
+      { fragment: 'a.candidate_id = ?',  value: candidate_id },
+      { fragment: 'c.client_id = ?',     value: client_id    },
+      { fragment: 'a.status = ?',        value: status       },
+      { fragment: 'a.type = ?',          value: type         },
+    ]);
 
     // Per-candidate summary
-    const summary = await req.db.prepare(`
+    const summaryResult = await req.db.query(`
       SELECT
         c.id    AS candidate_id,
         c.name  AS candidate_name,
         cl.name AS client_name,
-        COUNT(a.id) AS absence_count,
-        SUM((a.end_date::date - a.start_date::date + 1)) AS total_days,
-        SUM(CASE WHEN a.type='vacation'       THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS vacation_days,
-        SUM(CASE WHEN a.type='sick'           THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS sick_days,
-        SUM(CASE WHEN a.type='personal'       THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS personal_days,
-        SUM(CASE WHEN a.type='public_holiday' THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS holiday_days,
-        SUM(CASE WHEN a.status='approved'     THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS approved_days,
-        SUM(CASE WHEN a.status='pending'      THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS pending_days,
-        SUM(CASE WHEN a.status='rejected'     THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS rejected_days
+        COUNT(a.id)::int AS absence_count,
+        COALESCE(SUM(a.end_date::date - a.start_date::date + 1), 0)::int                                                          AS total_days,
+        COALESCE(SUM(CASE WHEN a.type='vacation'       THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int        AS vacation_days,
+        COALESCE(SUM(CASE WHEN a.type='sick'           THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int        AS sick_days,
+        COALESCE(SUM(CASE WHEN a.type='personal'       THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int        AS personal_days,
+        COALESCE(SUM(CASE WHEN a.type='public_holiday' THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int        AS holiday_days,
+        COALESCE(SUM(CASE WHEN a.status='approved'     THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int        AS approved_days,
+        COALESCE(SUM(CASE WHEN a.status='pending'      THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int        AS pending_days,
+        COALESCE(SUM(CASE WHEN a.status='rejected'     THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int        AS rejected_days
       FROM absences a
       JOIN candidates c  ON a.candidate_id = c.id
       LEFT JOIN clients cl ON c.client_id = cl.id
       WHERE ${whereClause}
-      GROUP BY c.id
+      GROUP BY c.id, c.name, cl.name
       ORDER BY total_days DESC
-    `).all(...params);
+    `, params);
 
     // Detail rows
-    const detail = await req.db.prepare(`
+    const detailResult = await req.db.query(`
       SELECT
-        a.id, a.start_date, a.end_date, a.type, a.status, a.notes,
-        (a.end_date::date - a.start_date::date + 1) AS days,
+        a.id,
+        a.start_date,
+        a.end_date,
+        a.type,
+        a.status,
+        a.notes,
+        (a.end_date::date - a.start_date::date + 1)::int AS days,
         c.name AS candidate_name
       FROM absences a
       JOIN candidates c ON a.candidate_id = c.id
       WHERE ${whereClause}
       ORDER BY a.start_date DESC
-    `).all(...params);
+    `, params);
 
-    // Totals — join candidates so c.client_id filter works
-    const totals = await req.db.prepare(`
+    // Totals
+    const totalsResult = await req.db.query(`
       SELECT
-        COUNT(a.id) AS absence_count,
-        SUM((a.end_date::date - a.start_date::date + 1)) AS total_days,
-        SUM(CASE WHEN a.status='approved' THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS approved_days,
-        SUM(CASE WHEN a.status='pending'  THEN (a.end_date::date - a.start_date::date + 1) ELSE 0 END) AS pending_days
+        COUNT(a.id)::int AS absence_count,
+        COALESCE(SUM(a.end_date::date - a.start_date::date + 1), 0)::int                                                   AS total_days,
+        COALESCE(SUM(CASE WHEN a.status='approved' THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int    AS approved_days,
+        COALESCE(SUM(CASE WHEN a.status='pending'  THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int    AS pending_days
       FROM absences a
       JOIN candidates c ON a.candidate_id = c.id
       WHERE ${whereClause}
-    `).get(...params);
+    `, params);
 
-    res.json({ summary, detail, totals });
+    res.json({
+      summary: summaryResult.rows,
+      detail:  detailResult.rows,
+      totals:  totalsResult.rows[0] || null,
+    });
   } catch (err) {
-    console.error(err);
+    console.error('[reports/absences]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -178,7 +207,7 @@ router.get('/absences', async (req, res) => {
 /**
  * GET /api/reports/revenue
  * Invoice & billable revenue summary.
- * Query params: start_date, end_date, candidate_id
+ * Query params: start_date, end_date, candidate_id, client_id
  */
 router.get('/revenue', async (req, res) => {
   try {
@@ -186,122 +215,134 @@ router.get('/revenue', async (req, res) => {
     const end_date     = sanitizeQueryDate(req.query.end_date,   'end_date');
     const candidate_id = sanitizeQueryInt(req.query.candidate_id, 'candidate_id');
     const client_id    = sanitizeQueryInt(req.query.client_id,    'client_id');
-    // All values are bound as ? parameters — no SQL injection risk.
 
-    let teWhere = ['1=1'];
-    const teParams = [];
-    if (start_date)   { teWhere.push('te.date >= ?'); teParams.push(start_date); }
-    if (end_date)     { teWhere.push('te.date <= ?'); teParams.push(end_date); }
-    if (candidate_id) { teWhere.push('te.candidate_id = ?'); teParams.push(candidate_id); }
-    if (client_id)    { teWhere.push('c.client_id = ?');     teParams.push(client_id); }
+    // Billable hours — filter on time_entries + candidates
+    const { whereClause: teWhere, params: teParams } = buildWherePg([
+      { fragment: 'te.date >= ?',        value: start_date   },
+      { fragment: 'te.date <= ?',        value: end_date     },
+      { fragment: 'te.candidate_id = ?', value: candidate_id },
+      { fragment: 'c.client_id = ?',     value: client_id    },
+    ]);
 
-    // Billable hours revenue per candidate
-    const billable = await req.db.prepare(`
+    const billableResult = await req.db.query(`
       SELECT
         c.id    AS candidate_id,
         c.name  AS candidate_name,
-        c.hourly_rate,
+        c.hourly_rate::float,
         cl.name AS client_name,
-        ROUND(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 2)                        AS approved_hours,
-        ROUND(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 2)         AS approved_amount,
-        ROUND(SUM(CASE WHEN te.status='pending'  THEN te.hours * c.hourly_rate ELSE 0 END), 2)         AS pending_amount,
-        ROUND(SUM(te.hours * c.hourly_rate), 2)                                                        AS total_billable
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 0)::numeric, 2)::float                       AS approved_hours,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float        AS approved_amount,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='pending'  THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float        AS pending_amount,
+        ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float                                                       AS total_billable
       FROM time_entries te
       JOIN candidates c  ON te.candidate_id = c.id
       LEFT JOIN clients cl ON c.client_id = cl.id
-      WHERE ${teWhere.join(' AND ')}
-      GROUP BY c.id
+      WHERE ${teWhere}
+      GROUP BY c.id, c.name, c.hourly_rate, cl.name
       ORDER BY total_billable DESC
-    `).all(...teParams);
+    `, teParams);
 
-    // Invoice status summary
-    let invWhere = ['1=1'];
-    const invParams = [];
-    if (start_date)   { invWhere.push('i.period_start >= ?'); invParams.push(start_date); }
-    if (end_date)     { invWhere.push('i.period_end <= ?'); invParams.push(end_date); }
-    if (candidate_id) { invWhere.push('i.candidate_id = ?'); invParams.push(candidate_id); }
-    if (client_id)    { invWhere.push('c.client_id = ?');    invParams.push(client_id); }
+    // Invoice status summary — filter on invoices + candidates
+    const { whereClause: invWhere, params: invParams } = buildWherePg([
+      { fragment: 'i.period_start >= ?', value: start_date   },
+      { fragment: 'i.period_end <= ?',   value: end_date     },
+      { fragment: 'i.candidate_id = ?',  value: candidate_id },
+      { fragment: 'c.client_id = ?',     value: client_id    },
+    ]);
 
-    const invoices = await req.db.prepare(`
+    const invoicesResult = await req.db.query(`
       SELECT
         c.name  AS candidate_name,
         cl.name AS client_name,
         i.invoice_number,
         i.period_start AS issue_date,
         i.due_date,
-        i.total_amount,
+        i.total_amount::float,
         i.status,
-        i.total_hours AS hours_billed
+        i.total_hours::float AS hours_billed
       FROM invoices i
       JOIN candidates c  ON i.candidate_id = c.id
       LEFT JOIN clients cl ON c.client_id = cl.id
-      WHERE ${invWhere.join(' AND ')}
+      WHERE ${invWhere}
       ORDER BY i.period_start DESC
-    `).all(...invParams);
+    `, invParams);
 
-    const invTotals = await req.db.prepare(`
+    const invTotalsResult = await req.db.query(`
       SELECT
-        ROUND(SUM(CASE WHEN i.status='paid'  THEN i.total_amount ELSE 0 END), 2) AS paid,
-        ROUND(SUM(CASE WHEN i.status='sent'  THEN i.total_amount ELSE 0 END), 2) AS outstanding,
-        ROUND(SUM(CASE WHEN i.status='draft' THEN i.total_amount ELSE 0 END), 2) AS draft,
-        ROUND(SUM(i.total_amount), 2) AS total,
-        COUNT(i.id) AS invoice_count
+        ROUND(COALESCE(SUM(CASE WHEN i.status='paid'  THEN i.total_amount ELSE 0 END), 0)::numeric, 2)::float  AS paid,
+        ROUND(COALESCE(SUM(CASE WHEN i.status='sent'  THEN i.total_amount ELSE 0 END), 0)::numeric, 2)::float  AS outstanding,
+        ROUND(COALESCE(SUM(CASE WHEN i.status='draft' THEN i.total_amount ELSE 0 END), 0)::numeric, 2)::float  AS draft,
+        ROUND(COALESCE(SUM(i.total_amount), 0)::numeric, 2)::float                                             AS total,
+        COUNT(i.id)::int AS invoice_count
       FROM invoices i
       JOIN candidates c ON i.candidate_id = c.id
-      WHERE ${invWhere.join(' AND ')}
-    `).get(...invParams);
+      WHERE ${invWhere}
+    `, invParams);
 
-    res.json({ billable, invoices, invTotals });
+    res.json({
+      billable:  billableResult.rows,
+      invoices:  invoicesResult.rows,
+      invTotals: invTotalsResult.rows[0] || null,
+    });
   } catch (err) {
-    console.error(err);
+    console.error('[reports/revenue]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 /**
  * GET /api/reports/summary
- * Single-call overview: KPIs + all three report datasets.
- * Used by the dashboard to populate all tabs in one shot.
+ * Single-call overview: KPIs — used by the dashboard to populate all tabs in one shot.
  */
 router.get('/summary', async (req, res) => {
   try {
-    const { start_date, end_date, candidate_id } = req.query;
+    const start_date   = sanitizeQueryDate(req.query.start_date,   'start_date');
+    const end_date     = sanitizeQueryDate(req.query.end_date,     'end_date');
+    const candidate_id = sanitizeQueryInt(req.query.candidate_id,  'candidate_id');
 
-    // Build reusable where
-    const buildWhere = (alias, dateField = 'date', idField = 'candidate_id') => {
-      const w = ['1=1'], p = [];
-      if (start_date)   { w.push(`${alias}.${dateField} >= ?`); p.push(start_date); }
-      if (end_date)     { w.push(`${alias}.${dateField} <= ?`); p.push(end_date); }
-      if (candidate_id) { w.push(`${alias}.${idField} = ?`);    p.push(candidate_id); }
-      return { where: w.join(' AND '), params: p };
-    };
+    const { whereClause: teWhere, params: teParams } = buildWherePg([
+      { fragment: 'te.date >= ?',        value: start_date   },
+      { fragment: 'te.date <= ?',        value: end_date     },
+      { fragment: 'te.candidate_id = ?', value: candidate_id },
+    ]);
 
-    const te  = buildWhere('te', 'date');
-    const abs = buildWhere('a',  'start_date');
+    const { whereClause: absWhere, params: absParams } = buildWherePg([
+      { fragment: 'a.start_date >= ?',   value: start_date   },
+      { fragment: 'a.start_date <= ?',   value: end_date     },
+      { fragment: 'a.candidate_id = ?',  value: candidate_id },
+    ]);
 
-    const kpis = await req.db.prepare(`
-      SELECT
-        ROUND(SUM(te.hours), 2)                                                                  AS total_hours,
-        ROUND(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 2)                   AS approved_hours,
-        ROUND(SUM(CASE WHEN te.status='pending'  THEN te.hours ELSE 0 END), 2)                   AS pending_hours,
-        ROUND(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 2)   AS approved_revenue,
-        ROUND(SUM(te.hours * c.hourly_rate), 2)                                                  AS total_revenue,
-        COUNT(DISTINCT te.candidate_id) AS active_candidates
-      FROM time_entries te
-      JOIN candidates c ON te.candidate_id = c.id
-      WHERE ${te.where}
-    `).get(...te.params);
+    const [kpisResult, absKpiResult] = await Promise.all([
+      req.db.query(`
+        SELECT
+          ROUND(COALESCE(SUM(te.hours), 0)::numeric, 2)::float                                                                 AS total_hours,
+          ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 0)::numeric, 2)::float                  AS approved_hours,
+          ROUND(COALESCE(SUM(CASE WHEN te.status='pending'  THEN te.hours ELSE 0 END), 0)::numeric, 2)::float                  AS pending_hours,
+          ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float  AS approved_revenue,
+          ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float                                                 AS total_revenue,
+          COUNT(DISTINCT te.candidate_id)::int AS active_candidates
+        FROM time_entries te
+        JOIN candidates c ON te.candidate_id = c.id
+        WHERE ${teWhere}
+      `, teParams),
 
-    const absKpi = await req.db.prepare(`
-      SELECT
-        COUNT(a.id) AS total_absences,
-        SUM((a.end_date::date - a.start_date::date + 1)) AS total_absence_days
-      FROM absences a WHERE ${abs.where}
-    `).get(...abs.params);
+      req.db.query(`
+        SELECT
+          COUNT(a.id)::int AS total_absences,
+          COALESCE(SUM(a.end_date::date - a.start_date::date + 1), 0)::int AS total_absence_days
+        FROM absences a
+        WHERE ${absWhere}
+      `, absParams),
+    ]);
 
-    res.json({ kpis: { ...kpis, ...absKpi } });
+    res.json({
+      kpis: {
+        ...(kpisResult.rows[0]  || {}),
+        ...(absKpiResult.rows[0] || {}),
+      },
+    });
   } catch (err) {
-    console.error(err);
+    console.error('[reports/summary]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

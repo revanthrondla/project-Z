@@ -25,11 +25,17 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 // ── Helper: read tenant AI settings ──────────────────────────────────────────
 
 async function getTenantAISettings(db) {
-  try { return await db.prepare('SELECT * FROM ai_settings WHERE id=1').get(); } catch { return null; }
+  try {
+    const result = await db.query('SELECT * FROM ai_settings WHERE id=1');
+    return result.rows[0];
+  } catch { return null; }
 }
 
 async function getPlatformAIConfig() {
-  try { return await masterDb.prepare('SELECT * FROM platform_ai_config WHERE id=1').get(); } catch { return null; }
+  try {
+    const result = await masterDb.query('SELECT * FROM platform_ai_config WHERE id=1');
+    return result.rows[0];
+  } catch { return null; }
 }
 
 /** FTS document search — returns top-3 relevant snippets (PostgreSQL tsvector) */
@@ -38,38 +44,42 @@ async function searchDocuments(db, query) {
     // Strip characters that aren't valid in websearch_to_tsquery
     const safeQuery = query.replace(/[^a-zA-Z0-9 ]/g, ' ').trim();
     if (!safeQuery) return [];
-    const rows = await db.prepare(`
+    const result = await db.query(`
       SELECT d.title,
-             ts_headline('english', d.content, websearch_to_tsquery('english', ?),
+             ts_headline('english', d.content, websearch_to_tsquery('english', $1),
                'MaxWords=35, MinWords=15, StartSel=, StopSel=, HighlightAll=FALSE') AS excerpt
       FROM ai_documents d
-      WHERE d.search_vector @@ websearch_to_tsquery('english', ?)
-      ORDER BY ts_rank(d.search_vector, websearch_to_tsquery('english', ?)) DESC
+      WHERE d.search_vector @@ websearch_to_tsquery('english', $2)
+      ORDER BY ts_rank(d.search_vector, websearch_to_tsquery('english', $3)) DESC
       LIMIT 3
-    `).all(safeQuery, safeQuery, safeQuery);
-    return rows;
+    `, [safeQuery, safeQuery, safeQuery]);
+    return result.rows;
   } catch { return []; }
 }
 
 /** Pull a concise snapshot of tenant data the AI can use as context */
 async function buildDataContext(db) {
   try {
-    const employees = await db.prepare(`
+    const employeesResult = await db.query(`
       SELECT name, role AS job_title, hourly_rate, status
       FROM candidates WHERE deleted_at IS NULL LIMIT 20
-    `).all();
+    `);
+    const employees = employeesResult.rows;
 
-    const clients = await db.prepare(`
+    const clientsResult = await db.query(`
       SELECT name, contact_name, email FROM clients LIMIT 10
-    `).all();
+    `);
+    const clients = clientsResult.rows;
 
-    const pendingTS = await db.prepare(`
+    const pendingTSResult = await db.query(`
       SELECT COUNT(*) as count FROM time_entries WHERE status='pending'
-    `).get();
+    `);
+    const pendingTS = pendingTSResult.rows[0];
 
-    const pendingAbs = await db.prepare(`
+    const pendingAbsResult = await db.query(`
       SELECT COUNT(*) as count FROM absences WHERE status='pending'
-    `).get();
+    `);
+    const pendingAbs = pendingAbsResult.rows[0];
 
     return { employees, clients, pendingTimesheets: pendingTS?.count || 0, pendingAbsences: pendingAbs?.count || 0 };
   } catch { return { employees: [], clients: [], pendingTimesheets: 0, pendingAbsences: 0 }; }
@@ -203,13 +213,19 @@ async function executeTool(db, toolName, input, userId) {
   try {
     switch (toolName) {
       case 'get_headcount': {
-        const total   = await db.prepare("SELECT COUNT(*) as c FROM candidates WHERE deleted_at IS NULL").get();
-        const active  = await db.prepare("SELECT COUNT(*) as c FROM candidates WHERE deleted_at IS NULL AND status='active'").get();
-        const byTitle = await db.prepare(`
+        const totalResult = await db.query("SELECT COUNT(*) as c FROM candidates WHERE deleted_at IS NULL");
+        const total = totalResult.rows[0];
+
+        const activeResult = await db.query("SELECT COUNT(*) as c FROM candidates WHERE deleted_at IS NULL AND status=$1", ['active']);
+        const active = activeResult.rows[0];
+
+        const byTitleResult = await db.query(`
           SELECT role AS job_title, COUNT(*) as count FROM candidates
           WHERE deleted_at IS NULL AND role IS NOT NULL AND role != ''
           GROUP BY role ORDER BY count DESC LIMIT 8
-        `).all();
+        `);
+        const byTitle = byTitleResult.rows;
+
         return { total: total?.c || 0, active: active?.c || 0, inactive: (total?.c || 0) - (active?.c || 0), by_job_title: byTitle };
       }
 
@@ -217,39 +233,50 @@ async function executeTool(db, toolName, input, userId) {
         const { status, job_title, limit = 10 } = input;
         let sql = `SELECT name, email, role AS job_title, hourly_rate, status, phone FROM candidates WHERE deleted_at IS NULL`;
         const params = [];
-        if (status) { sql += ` AND status = ?`; params.push(status); }
-        if (job_title) { sql += ` AND role ILIKE ?`; params.push(`%${job_title}%`); }
-        sql += ` ORDER BY name LIMIT ?`;
+        let paramIndex = 1;
+        if (status) { sql += ` AND status = $${paramIndex}`; params.push(status); paramIndex++; }
+        if (job_title) { sql += ` AND role ILIKE $${paramIndex}`; params.push(`%${job_title}%`); paramIndex++; }
+        sql += ` ORDER BY name LIMIT $${paramIndex}`;
         params.push(Math.min(limit, 50));
-        return { employees: await db.prepare(sql).all(...params) };
+        const result = await db.query(sql, params);
+        return { employees: result.rows };
       }
 
       case 'list_clients': {
         const { limit = 10 } = input;
-        const clients = await db.prepare(
-          `SELECT name, contact_name, email, phone FROM clients ORDER BY name LIMIT ?`
-        ).all(Math.min(limit, 50));
-        return { clients };
+        const result = await db.query(
+          `SELECT name, contact_name, email, phone FROM clients ORDER BY name LIMIT $1`,
+          [Math.min(limit, 50)]
+        );
+        return { clients: result.rows };
       }
 
       case 'get_timesheet_summary': {
         const { employee_name } = input;
         const month = new Date().toISOString().slice(0, 7);
-        let pending = await db.prepare(`
+        let pendingSql = `
           SELECT te.id, c.name as employee, te.date, te.hours, te.status, te.project
           FROM time_entries te JOIN candidates c ON te.candidate_id = c.id
           WHERE te.status = 'pending'
-          ${employee_name ? "AND c.name LIKE ?" : ''}
-          ORDER BY te.date DESC LIMIT 10
-        `).all(...(employee_name ? [`%${employee_name}%`] : []));
+        `;
+        const pendingParams = [];
+        if (employee_name) { pendingSql += " AND c.name ILIKE $1"; pendingParams.push(`%${employee_name}%`); }
+        pendingSql += ' ORDER BY te.date DESC LIMIT 10';
+        const pendingResult = await db.query(pendingSql, pendingParams);
+        const pending = pendingResult.rows;
 
-        const monthlyHours = await db.prepare(`
+        let monthlySql = `
           SELECT COALESCE(SUM(te.hours),0) as hours, COUNT(*) as entries
           FROM time_entries te
-          ${employee_name ? 'JOIN candidates c ON te.candidate_id=c.id' : ''}
-          WHERE TO_CHAR(te.date, 'YYYY-MM') = ? AND te.status != 'rejected'
-          ${employee_name ? 'AND c.name LIKE ?' : ''}
-        `).get(...[month, ...(employee_name ? [`%${employee_name}%`] : [])]);
+        `;
+        const monthlyParams = [month];
+        let monthlyParamIndex = 2;
+        if (employee_name) { monthlySql += ' JOIN candidates c ON te.candidate_id=c.id'; }
+        monthlySql += ` WHERE TO_CHAR(te.date, 'YYYY-MM') = $1 AND te.status != 'rejected'`;
+        if (employee_name) { monthlySql += ` AND c.name ILIKE $${monthlyParamIndex}`; monthlyParams.push(`%${employee_name}%`); }
+
+        const monthlyResult = await db.query(monthlySql, monthlyParams);
+        const monthlyHours = monthlyResult.rows[0];
 
         return { pending_approvals: pending, monthly_hours: monthlyHours?.hours || 0, monthly_entries: monthlyHours?.entries || 0 };
       }
@@ -262,30 +289,35 @@ async function executeTool(db, toolName, input, userId) {
           WHERE 1=1
         `;
         const params = [];
-        if (status !== 'all') { sql += ` AND a.status = ?`; params.push(status); }
-        if (employee_name) { sql += ` AND c.name LIKE ?`; params.push(`%${employee_name}%`); }
+        let paramIndex = 1;
+        if (status !== 'all') { sql += ` AND a.status = $${paramIndex}`; params.push(status); paramIndex++; }
+        if (employee_name) { sql += ` AND c.name ILIKE $${paramIndex}`; params.push(`%${employee_name}%`); paramIndex++; }
         sql += ` ORDER BY a.created_at DESC LIMIT 15`;
-        return { absences: await db.prepare(sql).all(...params) };
+        const result = await db.query(sql, params);
+        return { absences: result.rows };
       }
 
       case 'get_revenue_report': {
         const now = new Date();
         const month = now.toISOString().slice(0, 7);
-        const year  = now.getFullYear();
-        const totals = await db.prepare(`
+        const totalsResult = await db.query(`
           SELECT
             COUNT(*) as total_invoices,
             COALESCE(SUM(total_amount),0) as total_billed,
             COALESCE(SUM(CASE WHEN status='paid' THEN total_amount ELSE 0 END),0) as total_paid,
             COALESCE(SUM(CASE WHEN status IN ('sent','viewed') THEN total_amount ELSE 0 END),0) as outstanding
-          FROM invoices WHERE TO_CHAR(period_start, 'YYYY-MM') = ?
-        `).get(month);
-        const byClient = await db.prepare(`
+          FROM invoices WHERE TO_CHAR(period_start, 'YYYY-MM') = $1
+        `, [month]);
+        const totals = totalsResult.rows[0];
+
+        const byClientResult = await db.query(`
           SELECT cl.name as client, COALESCE(SUM(i.total_amount),0) as billed, i.status
           FROM invoices i JOIN clients cl ON i.client_id = cl.id
-          WHERE TO_CHAR(i.period_start, 'YYYY-MM') = ?
+          WHERE TO_CHAR(i.period_start, 'YYYY-MM') = $1
           GROUP BY cl.name, i.status ORDER BY billed DESC LIMIT 8
-        `).all(month);
+        `, [month]);
+        const byClient = byClientResult.rows;
+
         return { period: `${month} (current month)`, ...totals, by_client: byClient };
       }
 
@@ -293,7 +325,8 @@ async function executeTool(db, toolName, input, userId) {
         const { name, email, hourly_rate, job_title = '', phone = '', start_date = null } = input;
 
         // Check duplicate email
-        const existing = await db.prepare('SELECT id FROM candidates WHERE email = ?').get(email);
+        const existingResult = await db.query('SELECT id FROM candidates WHERE email = $1', [email]);
+        const existing = existingResult.rows[0];
         if (existing) return { success: false, error: `An employee with email ${email} already exists.` };
 
         // Create user account
@@ -301,16 +334,16 @@ async function executeTool(db, toolName, input, userId) {
         const tempPw = `Flow_${Math.random().toString(36).slice(2, 10)}`;
         const hash   = await bcrypt.hash(tempPw, 10);
 
-        const userRes = await db.prepare(`
+        const userRes = await db.query(`
           INSERT INTO users (name, email, password_hash, role, must_change_password)
-          VALUES (?, ?, ?, 'candidate', TRUE)
-        `).run(name, email, hash);
-        const userId = userRes.lastInsertRowid;
+          VALUES ($1, $2, $3, $4, $5) RETURNING id
+        `, [name, email, hash, 'candidate', true]);
+        const newUserId = userRes.rows[0].id;
 
-        await db.prepare(`
+        await db.query(`
           INSERT INTO candidates (user_id, name, email, phone, role, hourly_rate, status, start_date)
-          VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
-        `).run(userId, name, email, phone, job_title, hourly_rate, start_date);
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [newUserId, name, email, phone, job_title, hourly_rate, 'active', start_date]);
 
         return {
           success: true,
@@ -323,18 +356,19 @@ async function executeTool(db, toolName, input, userId) {
         const { client_name, description, hours_worked, rate, period_start, period_end } = input;
 
         // Find client
-        const client = await db.prepare(`SELECT id, name FROM clients WHERE name LIKE ? LIMIT 1`).get(`%${client_name}%`);
+        const clientResult = await db.query(`SELECT id, name FROM clients WHERE name ILIKE $1 LIMIT 1`, [`%${client_name}%`]);
+        const client = clientResult.rows[0];
         if (!client) return { success: false, error: `No client found matching "${client_name}". Use list_clients to see available clients.` };
 
         const total_amount = parseFloat((hours_worked * rate).toFixed(2));
         const now = new Date().toISOString().slice(0, 10);
         const invoiceNum = `INV-${Date.now().toString().slice(-6)}`;
 
-        await db.prepare(`
+        await db.query(`
           INSERT INTO invoices (invoice_number, client_id, description, hours, rate, total_amount, status, period_start, period_end, due_date)
-          VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, CURRENT_DATE + INTERVAL '30 days')
-        `).run(invoiceNum, client.id, description, hours_worked, rate, total_amount,
-               period_start || now, period_end || now);
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE + INTERVAL '30 days')
+        `, [invoiceNum, client.id, description, hours_worked, rate, total_amount, 'draft',
+            period_start || now, period_end || now]);
 
         return {
           success: true,
@@ -412,22 +446,22 @@ router.put('/settings', requireAdmin, async (req, res) => {
     const current = await getTenantAISettings(req.db);
     if (!current) {
       // Seed the row first
-      await req.db.prepare('INSERT INTO ai_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING').run();
+      await req.db.query('INSERT INTO ai_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
     }
 
     const updates = [];
     const params  = [];
-    if (provider)              { updates.push('provider=?');             params.push(provider); }
-    if (model)                 { updates.push('model=?');                params.push(model); }
-    if (system_prompt_suffix !== undefined) { updates.push('system_prompt_suffix=?'); params.push(system_prompt_suffix); }
-    if (api_key)               { updates.push('api_key=?');              params.push(api_key); }
+    let paramIndex = 1;
+    if (provider)              { updates.push(`provider=$${paramIndex}`); params.push(provider); paramIndex++; }
+    if (model)                 { updates.push(`model=$${paramIndex}`); params.push(model); paramIndex++; }
+    if (system_prompt_suffix !== undefined) { updates.push(`system_prompt_suffix=$${paramIndex}`); params.push(system_prompt_suffix); paramIndex++; }
+    if (api_key)               { updates.push(`api_key=$${paramIndex}`); params.push(api_key); paramIndex++; }
     if (clear_api_key)         { updates.push('api_key=NULL'); }
 
     if (updates.length) {
       updates.push('updated_at=NOW()');
-      params.push(req.user.id);
       params.push(1);
-      await req.db.prepare(`UPDATE ai_settings SET ${updates.join(',')} WHERE id=?`).run(...params);
+      await req.db.query(`UPDATE ai_settings SET ${updates.join(',')} WHERE id=$${paramIndex}`, params);
     }
 
     res.json({ ok: true });
@@ -463,21 +497,24 @@ router.post('/message', async (req, res) => {
   let convId = conversationId;
   if (!convId) {
     const title = message.slice(0, 60) + (message.length > 60 ? '…' : '');
-    const r = await db.prepare(
-      `INSERT INTO ai_conversations (user_id, title) VALUES (?, ?)`
-    ).run(userId, title);
-    convId = r.lastInsertRowid;
+    const r = await db.query(
+      `INSERT INTO ai_conversations (user_id, title) VALUES ($1, $2) RETURNING id`,
+      [userId, title]
+    );
+    convId = r.rows[0].id;
   } else {
-    const conv = await db.prepare('SELECT id FROM ai_conversations WHERE id=? AND user_id=?').get(convId, userId);
+    const convResult = await db.query('SELECT id FROM ai_conversations WHERE id=$1 AND user_id=$2', [convId, userId]);
+    const conv = convResult.rows[0];
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
-    await db.prepare(`UPDATE ai_conversations SET updated_at=NOW() WHERE id=?`).run(convId);
+    await db.query(`UPDATE ai_conversations SET updated_at=NOW() WHERE id=$1`, [convId]);
   }
 
   // ── 2. Load history ────────────────────────────────────────────────────────
-  const history = (await db.prepare(`
+  const historyResult = await db.query(`
     SELECT role, content FROM ai_messages
-    WHERE conversation_id=? ORDER BY id DESC LIMIT 20
-  `).all(convId)).reverse();
+    WHERE conversation_id=$1 ORDER BY id DESC LIMIT 20
+  `, [convId]);
+  const history = historyResult.rows.reverse();
 
   // ── 3. Document context via FTS ───────────────────────────────────────────
   const docHits = await searchDocuments(db, message);
@@ -548,10 +585,10 @@ GUIDELINES:
   if (!finalText) finalText = "I wasn't able to generate a response. Please try again.";
 
   // ── 8. Persist messages ───────────────────────────────────────────────────
-  await db.prepare(`INSERT INTO ai_messages (conversation_id, role, content) VALUES (?, 'user', ?)`).run(convId, message);
-  await db.prepare(`INSERT INTO ai_messages (conversation_id, role, content, tool_data) VALUES (?, 'assistant', ?, ?)`).run(
-    convId, finalText, toolCallsAccum.length ? JSON.stringify(toolCallsAccum) : null
-  );
+  await db.query(`INSERT INTO ai_messages (conversation_id, role, content) VALUES ($1, $2, $3)`, [convId, 'user', message]);
+  await db.query(`INSERT INTO ai_messages (conversation_id, role, content, tool_data) VALUES ($1, $2, $3, $4)`, [
+    convId, 'assistant', finalText, toolCallsAccum.length ? JSON.stringify(toolCallsAccum) : null
+  ]);
 
   res.json({
     conversationId: convId,
@@ -565,12 +602,12 @@ GUIDELINES:
 
 router.get('/conversations', async (req, res) => {
   try {
-    const rows = await req.db.prepare(`
+    const result = await req.db.query(`
       SELECT id, title, created_at, updated_at,
              (SELECT content FROM ai_messages WHERE conversation_id=ai_conversations.id AND role='assistant' ORDER BY id DESC LIMIT 1) as last_reply
-      FROM ai_conversations WHERE user_id=? ORDER BY updated_at DESC LIMIT 30
-    `).all(req.user.id);
-    res.json(rows);
+      FROM ai_conversations WHERE user_id=$1 ORDER BY updated_at DESC LIMIT 30
+    `, [req.user.id]);
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -578,14 +615,18 @@ router.get('/conversations', async (req, res) => {
 
 router.get('/conversations/:id', async (req, res) => {
   try {
-    const conv = await req.db.prepare(
-      'SELECT id,title,created_at FROM ai_conversations WHERE id=? AND user_id=?'
-    ).get(req.params.id, req.user.id);
+    const convResult = await req.db.query(
+      'SELECT id,title,created_at FROM ai_conversations WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    const conv = convResult.rows[0];
     if (!conv) return res.status(404).json({ error: 'Not found' });
 
-    const messages = await req.db.prepare(
-      'SELECT id, role, content, tool_data, created_at FROM ai_messages WHERE conversation_id=? ORDER BY id ASC'
-    ).all(req.params.id);
+    const messagesResult = await req.db.query(
+      'SELECT id, role, content, tool_data, created_at FROM ai_messages WHERE conversation_id=$1 ORDER BY id ASC',
+      [req.params.id]
+    );
+    const messages = messagesResult.rows;
 
     res.json({ ...conv, messages });
   } catch (err) {
@@ -595,11 +636,13 @@ router.get('/conversations/:id', async (req, res) => {
 
 router.delete('/conversations/:id', async (req, res) => {
   try {
-    const conv = await req.db.prepare(
-      'SELECT id FROM ai_conversations WHERE id=? AND user_id=?'
-    ).get(req.params.id, req.user.id);
+    const convResult = await req.db.query(
+      'SELECT id FROM ai_conversations WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    const conv = convResult.rows[0];
     if (!conv) return res.status(404).json({ error: 'Not found' });
-    await req.db.prepare('DELETE FROM ai_conversations WHERE id=?').run(req.params.id);
+    await req.db.query('DELETE FROM ai_conversations WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -627,12 +670,12 @@ router.get('/config', async (req, res) => {
 
 router.get('/documents', requireAdmin, async (req, res) => {
   try {
-    const docs = await req.db.prepare(`
+    const result = await req.db.query(`
       SELECT d.id, d.title, d.file_name, d.file_type, d.file_size, d.created_at, u.name as uploaded_by_name
       FROM ai_documents d JOIN users u ON d.uploaded_by = u.id
       ORDER BY d.created_at DESC
-    `).all();
-    res.json(docs);
+    `);
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -664,28 +707,29 @@ router.post('/documents', requireAdmin, upload.single('file'), async (req, res) 
 
   if (!content.trim()) return res.status(400).json({ error: 'Document has no readable content' });
 
-  const r = await req.db.prepare(`
+  const result = await req.db.query(`
     INSERT INTO ai_documents (title, content, file_name, file_type, file_size, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
+    VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+  `, [
     title.trim(),
     content.trim(),
     req.file?.originalname || null,
     req.file?.mimetype || 'text/plain',
     req.file?.size || content.length,
     req.user.id
-  );
+  ]);
 
-  res.json({ id: r.lastInsertRowid, title: title.trim(), message: 'Document added to knowledge base' });
+  res.json({ id: result.rows[0].id, title: title.trim(), message: 'Document added to knowledge base' });
 });
 
 // ── DELETE /api/ai-chat/documents/:id ─────────────────────────────────────────
 
 router.delete('/documents/:id', requireAdmin, async (req, res) => {
   try {
-    const doc = await req.db.prepare('SELECT id FROM ai_documents WHERE id=?').get(req.params.id);
+    const docResult = await req.db.query('SELECT id FROM ai_documents WHERE id=$1', [req.params.id]);
+    const doc = docResult.rows[0];
     if (!doc) return res.status(404).json({ error: 'Document not found' });
-    await req.db.prepare('DELETE FROM ai_documents WHERE id=?').run(req.params.id);
+    await req.db.query('DELETE FROM ai_documents WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

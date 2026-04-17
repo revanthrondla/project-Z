@@ -26,9 +26,11 @@ router.get('/me', authenticate, async (req, res) => {
     // Ensure modules are seeded for this tenant
     try { seedDefaultModulesForTenant(slug); } catch {}
 
-    const rows = await masterDb.prepare(
-      'SELECT module_key, enabled FROM tenant_modules WHERE tenant_slug = ?'
-    ).all(slug);
+    const result = await masterDb.query(
+      'SELECT module_key, enabled FROM tenant_modules WHERE tenant_slug = $1',
+      [slug]
+    );
+    const rows = result.rows;
 
     const enabledSet = new Set(rows.filter(r => r.enabled).map(r => r.module_key));
 

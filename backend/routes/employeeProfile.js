@@ -22,12 +22,14 @@ async function resolveCandidate(req, res) {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: 'Invalid employee id' }); return null; }
 
-  const cand = await db.prepare('SELECT * FROM candidates WHERE id = ? AND deleted_at IS NULL').get(id);
+  const candResult = await db.query('SELECT * FROM candidates WHERE id = $1 AND deleted_at IS NULL', [id]);
+  const cand = candResult.rows[0];
   if (!cand) { res.status(404).json({ error: 'Employee not found' }); return null; }
 
   // Candidates can only see their own profile
   if (req.user.role === 'candidate') {
-    const self = await db.prepare('SELECT * FROM candidates WHERE user_id = ?').get(req.user.id);
+    const selfResult = await db.query('SELECT * FROM candidates WHERE user_id = $1', [req.user.id]);
+    const self = selfResult.rows[0];
     if (!self || self.id !== id) { res.status(403).json({ error: 'Forbidden' }); return null; }
   }
 
@@ -43,7 +45,8 @@ router.get('/:id/contact', async (req, res) => {
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
 
-  const ext = await db.prepare('SELECT * FROM employee_contact_ext WHERE candidate_id = ?').get(cand.id) || {};
+  const extResult = await db.query('SELECT * FROM employee_contact_ext WHERE candidate_id = $1', [cand.id]);
+  const ext = extResult.rows[0] || {};
   res.json({
     // core fields
     name: cand.name,
@@ -69,25 +72,26 @@ router.put('/:id/contact', requireAdmin, async (req, res) => {
 
   // Update core candidate fields
   if (name || phone !== undefined) {
-    await db.prepare('UPDATE candidates SET name = COALESCE(?, name), phone = COALESCE(?, phone) WHERE id = ?')
-      .run(name || null, phone !== undefined ? phone : null, cand.id);
+    await db.query('UPDATE candidates SET name = COALESCE($1, name), phone = COALESCE($2, phone) WHERE id = $3',
+      [name || null, phone !== undefined ? phone : null, cand.id]);
   }
 
   // Upsert extended contact
-  const existing = await db.prepare('SELECT id FROM employee_contact_ext WHERE candidate_id = ?').get(cand.id);
+  const existingResult = await db.query('SELECT id FROM employee_contact_ext WHERE candidate_id = $1', [cand.id]);
+  const existing = existingResult.rows[0];
   if (existing) {
-    await db.prepare(`
+    await db.query(`
       UPDATE employee_contact_ext SET
-        alt_phone = ?, personal_email = ?,
-        home_street = ?, home_city = ?, home_state = ?, home_postcode = ?, home_country = ?,
+        alt_phone = $1, personal_email = $2,
+        home_street = $3, home_city = $4, home_state = $5, home_postcode = $6, home_country = $7,
         updated_at = NOW()
-      WHERE candidate_id = ?
-    `).run(alt_phone || null, personal_email || null, home_street || null, home_city || null, home_state || null, home_postcode || null, home_country || null, cand.id);
+      WHERE candidate_id = $8
+    `, [alt_phone || null, personal_email || null, home_street || null, home_city || null, home_state || null, home_postcode || null, home_country || null, cand.id]);
   } else {
-    await db.prepare(`
+    await db.query(`
       INSERT INTO employee_contact_ext (candidate_id, alt_phone, personal_email, home_street, home_city, home_state, home_postcode, home_country)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(cand.id, alt_phone || null, personal_email || null, home_street || null, home_city || null, home_state || null, home_postcode || null, home_country || null);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [cand.id, alt_phone || null, personal_email || null, home_street || null, home_city || null, home_state || null, home_postcode || null, home_country || null]);
   }
 
   res.json({ message: 'Contact information updated' });
@@ -101,7 +105,8 @@ router.get('/:id/emergency-contacts', async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
-  res.json(await db.prepare('SELECT * FROM emergency_contacts WHERE candidate_id = ? ORDER BY id').all(cand.id));
+  const result = await db.query('SELECT * FROM emergency_contacts WHERE candidate_id = $1 ORDER BY id', [cand.id]);
+  res.json(result.rows);
 });
 
 router.post('/:id/emergency-contacts', requireAdmin, async (req, res) => {
@@ -112,11 +117,12 @@ router.post('/:id/emergency-contacts', requireAdmin, async (req, res) => {
   const { name, relationship, phone1, phone2 } = req.body;
   if (!name || !phone1) return res.status(400).json({ error: 'name and phone1 are required' });
 
-  const result = await db.prepare(
-    'INSERT INTO emergency_contacts (candidate_id, name, relationship, phone1, phone2) VALUES (?, ?, ?, ?, ?)'
-  ).run(cand.id, name, relationship || null, phone1, phone2 || null);
+  const result = await db.query(
+    'INSERT INTO emergency_contacts (candidate_id, name, relationship, phone1, phone2) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+    [cand.id, name, relationship || null, phone1, phone2 || null]
+  );
 
-  res.status(201).json({ id: result.lastInsertRowid, message: 'Emergency contact added' });
+  res.status(201).json({ id: result.rows[0].id, message: 'Emergency contact added' });
 });
 
 router.put('/:id/emergency-contacts/:ecId', requireAdmin, async (req, res) => {
@@ -125,17 +131,18 @@ router.put('/:id/emergency-contacts/:ecId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const ecId = parseInt(req.params.ecId, 10);
-  const ec = await db.prepare('SELECT * FROM emergency_contacts WHERE id = ? AND candidate_id = ?').get(ecId, cand.id);
+  const ecResult = await db.query('SELECT * FROM emergency_contacts WHERE id = $1 AND candidate_id = $2', [ecId, cand.id]);
+  const ec = ecResult.rows[0];
   if (!ec) return res.status(404).json({ error: 'Emergency contact not found' });
 
   const { name, relationship, phone1, phone2 } = req.body;
-  await db.prepare(`
+  await db.query(`
     UPDATE emergency_contacts SET
-      name = COALESCE(?, name), relationship = COALESCE(?, relationship),
-      phone1 = COALESCE(?, phone1), phone2 = COALESCE(?, phone2),
+      name = COALESCE($1, name), relationship = COALESCE($2, relationship),
+      phone1 = COALESCE($3, phone1), phone2 = COALESCE($4, phone2),
       updated_at = NOW()
-    WHERE id = ?
-  `).run(name || null, relationship || null, phone1 || null, phone2 || null, ecId);
+    WHERE id = $5
+  `, [name || null, relationship || null, phone1 || null, phone2 || null, ecId]);
 
   res.json({ message: 'Emergency contact updated' });
 });
@@ -146,8 +153,8 @@ router.delete('/:id/emergency-contacts/:ecId', requireAdmin, async (req, res) =>
   if (!cand) return;
 
   const ecId = parseInt(req.params.ecId, 10);
-  const result = await db.prepare('DELETE FROM emergency_contacts WHERE id = ? AND candidate_id = ?').run(ecId, cand.id);
-  if (!result.changes) return res.status(404).json({ error: 'Emergency contact not found' });
+  const result = await db.query('DELETE FROM emergency_contacts WHERE id = $1 AND candidate_id = $2', [ecId, cand.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Emergency contact not found' });
   res.json({ message: 'Emergency contact deleted' });
 });
 
@@ -159,7 +166,8 @@ router.get('/:id/employment-history', async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
-  res.json(await db.prepare('SELECT * FROM employment_history WHERE candidate_id = ? ORDER BY start_date DESC').all(cand.id));
+  const result = await db.query('SELECT * FROM employment_history WHERE candidate_id = $1 ORDER BY start_date DESC', [cand.id]);
+  res.json(result.rows);
 });
 
 router.post('/:id/employment-history', requireAdmin, async (req, res) => {
@@ -170,12 +178,13 @@ router.post('/:id/employment-history', requireAdmin, async (req, res) => {
   const { position_title, start_date, end_date, remuneration, currency, frequency, notes } = req.body;
   if (!position_title || !start_date) return res.status(400).json({ error: 'position_title and start_date are required' });
 
-  const result = await db.prepare(`
+  const result = await db.query(`
     INSERT INTO employment_history (candidate_id, position_title, start_date, end_date, remuneration, currency, frequency, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(cand.id, position_title, start_date, end_date || null, remuneration || null, currency || 'USD', frequency || 'annual', notes || null);
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    RETURNING id
+  `, [cand.id, position_title, start_date, end_date || null, remuneration || null, currency || 'USD', frequency || 'annual', notes || null]);
 
-  res.status(201).json({ id: result.lastInsertRowid, message: 'Employment record added' });
+  res.status(201).json({ id: result.rows[0].id, message: 'Employment record added' });
 });
 
 router.put('/:id/employment-history/:ehId', requireAdmin, async (req, res) => {
@@ -184,18 +193,19 @@ router.put('/:id/employment-history/:ehId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const ehId = parseInt(req.params.ehId, 10);
-  const row = await db.prepare('SELECT id FROM employment_history WHERE id = ? AND candidate_id = ?').get(ehId, cand.id);
+  const rowResult = await db.query('SELECT id FROM employment_history WHERE id = $1 AND candidate_id = $2', [ehId, cand.id]);
+  const row = rowResult.rows[0];
   if (!row) return res.status(404).json({ error: 'Employment record not found' });
 
   const { position_title, start_date, end_date, remuneration, currency, frequency, notes } = req.body;
-  await db.prepare(`
+  await db.query(`
     UPDATE employment_history SET
-      position_title = COALESCE(?, position_title), start_date = COALESCE(?, start_date),
-      end_date = ?, remuneration = ?, currency = COALESCE(?, currency),
-      frequency = COALESCE(?, frequency), notes = ?,
+      position_title = COALESCE($1, position_title), start_date = COALESCE($2, start_date),
+      end_date = $3, remuneration = $4, currency = COALESCE($5, currency),
+      frequency = COALESCE($6, frequency), notes = $7,
       updated_at = NOW()
-    WHERE id = ?
-  `).run(position_title || null, start_date || null, end_date || null, remuneration || null, currency || null, frequency || null, notes || null, ehId);
+    WHERE id = $8
+  `, [position_title || null, start_date || null, end_date || null, remuneration || null, currency || null, frequency || null, notes || null, ehId]);
 
   res.json({ message: 'Employment record updated' });
 });
@@ -206,8 +216,8 @@ router.delete('/:id/employment-history/:ehId', requireAdmin, async (req, res) =>
   if (!cand) return;
 
   const ehId = parseInt(req.params.ehId, 10);
-  const result = await db.prepare('DELETE FROM employment_history WHERE id = ? AND candidate_id = ?').run(ehId, cand.id);
-  if (!result.changes) return res.status(404).json({ error: 'Employment record not found' });
+  const result = await db.query('DELETE FROM employment_history WHERE id = $1 AND candidate_id = $2', [ehId, cand.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Employment record not found' });
   res.json({ message: 'Employment record deleted' });
 });
 
@@ -220,7 +230,8 @@ router.get('/:id/bank-accounts', requireAdmin, async (req, res) => {
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
 
-  const accounts = await db.prepare('SELECT * FROM bank_accounts WHERE candidate_id = ? ORDER BY is_primary DESC, id').all(cand.id);
+  const result = await db.query('SELECT * FROM bank_accounts WHERE candidate_id = $1 ORDER BY is_primary DESC, id', [cand.id]);
+  const accounts = result.rows;
   // Mask account number: show only last 4 digits
   const masked = accounts.map(a => ({
     ...a,
@@ -243,15 +254,16 @@ router.post('/:id/bank-accounts', requireAdmin, async (req, res) => {
 
   // If setting as primary, clear other primaries
   if (is_primary) {
-    await db.prepare('UPDATE bank_accounts SET is_primary = 0 WHERE candidate_id = ?').run(cand.id);
+    await db.query('UPDATE bank_accounts SET is_primary = false WHERE candidate_id = $1', [cand.id]);
   }
 
-  const result = await db.prepare(`
+  const result = await db.query(`
     INSERT INTO bank_accounts (candidate_id, account_name, bank_name, account_number, routing_number, swift_code, country, is_primary)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(cand.id, account_name, bank_name, account_number, routing_number || null, swift_code || null, country || 'US', is_primary ? 1 : 0);
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    RETURNING id
+  `, [cand.id, account_name, bank_name, account_number, routing_number || null, swift_code || null, country || 'US', is_primary ? true : false]);
 
-  res.status(201).json({ id: result.lastInsertRowid, message: 'Bank account added' });
+  res.status(201).json({ id: result.rows[0].id, message: 'Bank account added' });
 });
 
 router.put('/:id/bank-accounts/:baId', requireAdmin, async (req, res) => {
@@ -260,23 +272,24 @@ router.put('/:id/bank-accounts/:baId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const baId = parseInt(req.params.baId, 10);
-  const row = await db.prepare('SELECT id FROM bank_accounts WHERE id = ? AND candidate_id = ?').get(baId, cand.id);
+  const rowResult = await db.query('SELECT id FROM bank_accounts WHERE id = $1 AND candidate_id = $2', [baId, cand.id]);
+  const row = rowResult.rows[0];
   if (!row) return res.status(404).json({ error: 'Bank account not found' });
 
   const { account_name, bank_name, account_number, routing_number, swift_code, country, is_primary } = req.body;
 
   if (is_primary) {
-    await db.prepare('UPDATE bank_accounts SET is_primary = 0 WHERE candidate_id = ?').run(cand.id);
+    await db.query('UPDATE bank_accounts SET is_primary = false WHERE candidate_id = $1', [cand.id]);
   }
 
-  await db.prepare(`
+  await db.query(`
     UPDATE bank_accounts SET
-      account_name = COALESCE(?, account_name), bank_name = COALESCE(?, bank_name),
-      account_number = COALESCE(?, account_number), routing_number = ?,
-      swift_code = ?, country = COALESCE(?, country), is_primary = COALESCE(?, is_primary),
+      account_name = COALESCE($1, account_name), bank_name = COALESCE($2, bank_name),
+      account_number = COALESCE($3, account_number), routing_number = $4,
+      swift_code = $5, country = COALESCE($6, country), is_primary = COALESCE($7, is_primary),
       updated_at = NOW()
-    WHERE id = ?
-  `).run(account_name || null, bank_name || null, account_number || null, routing_number || null, swift_code || null, country || null, is_primary !== undefined ? (is_primary ? 1 : 0) : null, baId);
+    WHERE id = $8
+  `, [account_name || null, bank_name || null, account_number || null, routing_number || null, swift_code || null, country || null, is_primary !== undefined ? (is_primary ? true : false) : null, baId]);
 
   res.json({ message: 'Bank account updated' });
 });
@@ -287,8 +300,8 @@ router.delete('/:id/bank-accounts/:baId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const baId = parseInt(req.params.baId, 10);
-  const result = await db.prepare('DELETE FROM bank_accounts WHERE id = ? AND candidate_id = ?').run(baId, cand.id);
-  if (!result.changes) return res.status(404).json({ error: 'Bank account not found' });
+  const result = await db.query('DELETE FROM bank_accounts WHERE id = $1 AND candidate_id = $2', [baId, cand.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Bank account not found' });
   res.json({ message: 'Bank account deleted' });
 });
 
@@ -304,12 +317,15 @@ router.get('/:id/leave-balances', async (req, res) => {
   if (!cand) return;
 
   const year = parseInt(req.query.year, 10) || new Date().getFullYear();
-  const rows = await db.prepare('SELECT * FROM leave_balances WHERE candidate_id = ? AND year = ?').all(cand.id, year);
+  const rowsResult = await db.query('SELECT * FROM leave_balances WHERE candidate_id = $1 AND year = $2', [cand.id, year]);
+  const rows = rowsResult.rows;
 
   // Also pull absence records for usage cross-reference
-  const absences = await db.prepare(
-    "SELECT type, start_date, end_date, status FROM absences WHERE candidate_id = ? AND status = 'approved' AND EXTRACT(YEAR FROM start_date::date)::TEXT = ?"
-  ).all(cand.id, String(year));
+  const absencesResult = await db.query(
+    "SELECT type, start_date, end_date, status FROM absences WHERE candidate_id = $1 AND status = 'approved' AND EXTRACT(YEAR FROM start_date::date) = $2",
+    [cand.id, year]
+  );
+  const absences = absencesResult.rows;
 
   // Calculate used days from approved absences
   const usedMap = {};
@@ -347,14 +363,14 @@ router.put('/:id/leave-balances', requireAdmin, async (req, res) => {
   }
   const yr = year || new Date().getFullYear();
 
-  await db.prepare(`
+  await db.query(`
     INSERT INTO leave_balances (candidate_id, leave_type, year, entitlement_days, carry_over_days)
-    VALUES (?, ?, ?, ?, ?)
+    VALUES ($1, $2, $3, $4, $5)
     ON CONFLICT(candidate_id, leave_type, year) DO UPDATE SET
       entitlement_days = excluded.entitlement_days,
       carry_over_days  = excluded.carry_over_days,
       updated_at       = NOW()
-  `).run(cand.id, leave_type, yr, entitlement_days || 0, carry_over_days || 0);
+  `, [cand.id, leave_type, yr, entitlement_days || 0, carry_over_days || 0]);
 
   res.json({ message: 'Leave balance updated' });
 });
@@ -367,7 +383,8 @@ router.get('/:id/assets', async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
-  res.json(await db.prepare('SELECT * FROM employee_assets WHERE candidate_id = ? ORDER BY checkout_date DESC').all(cand.id));
+  const result = await db.query('SELECT * FROM employee_assets WHERE candidate_id = $1 ORDER BY checkout_date DESC', [cand.id]);
+  res.json(result.rows);
 });
 
 router.post('/:id/assets', requireAdmin, async (req, res) => {
@@ -378,12 +395,13 @@ router.post('/:id/assets', requireAdmin, async (req, res) => {
   const { serial_number, description, category, checkout_date, checkin_date, status, photo_url, notes } = req.body;
   if (!description || !checkout_date) return res.status(400).json({ error: 'description and checkout_date are required' });
 
-  const result = await db.prepare(`
+  const result = await db.query(`
     INSERT INTO employee_assets (candidate_id, serial_number, description, category, checkout_date, checkin_date, status, photo_url, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(cand.id, serial_number || null, description, category || 'other', checkout_date, checkin_date || null, status || 'on_loan', photo_url || null, notes || null);
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    RETURNING id
+  `, [cand.id, serial_number || null, description, category || 'other', checkout_date, checkin_date || null, status || 'on_loan', photo_url || null, notes || null]);
 
-  res.status(201).json({ id: result.lastInsertRowid, message: 'Asset recorded' });
+  res.status(201).json({ id: result.rows[0].id, message: 'Asset recorded' });
 });
 
 router.put('/:id/assets/:asId', requireAdmin, async (req, res) => {
@@ -392,18 +410,19 @@ router.put('/:id/assets/:asId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const asId = parseInt(req.params.asId, 10);
-  const row = await db.prepare('SELECT id FROM employee_assets WHERE id = ? AND candidate_id = ?').get(asId, cand.id);
+  const rowResult = await db.query('SELECT id FROM employee_assets WHERE id = $1 AND candidate_id = $2', [asId, cand.id]);
+  const row = rowResult.rows[0];
   if (!row) return res.status(404).json({ error: 'Asset not found' });
 
   const { serial_number, description, category, checkout_date, checkin_date, status, photo_url, notes } = req.body;
-  await db.prepare(`
+  await db.query(`
     UPDATE employee_assets SET
-      serial_number = COALESCE(?, serial_number), description = COALESCE(?, description),
-      category = COALESCE(?, category), checkout_date = COALESCE(?, checkout_date),
-      checkin_date = ?, status = COALESCE(?, status), photo_url = ?, notes = ?,
+      serial_number = COALESCE($1, serial_number), description = COALESCE($2, description),
+      category = COALESCE($3, category), checkout_date = COALESCE($4, checkout_date),
+      checkin_date = $5, status = COALESCE($6, status), photo_url = $7, notes = $8,
       updated_at = NOW()
-    WHERE id = ?
-  `).run(serial_number || null, description || null, category || null, checkout_date || null, checkin_date || null, status || null, photo_url || null, notes || null, asId);
+    WHERE id = $9
+  `, [serial_number || null, description || null, category || null, checkout_date || null, checkin_date || null, status || null, photo_url || null, notes || null, asId]);
 
   res.json({ message: 'Asset updated' });
 });
@@ -414,8 +433,8 @@ router.delete('/:id/assets/:asId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const asId = parseInt(req.params.asId, 10);
-  const result = await db.prepare('DELETE FROM employee_assets WHERE id = ? AND candidate_id = ?').run(asId, cand.id);
-  if (!result.changes) return res.status(404).json({ error: 'Asset not found' });
+  const result = await db.query('DELETE FROM employee_assets WHERE id = $1 AND candidate_id = $2', [asId, cand.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Asset not found' });
   res.json({ message: 'Asset deleted' });
 });
 
@@ -427,7 +446,8 @@ router.get('/:id/benefits', async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
-  res.json(await db.prepare('SELECT * FROM employee_benefits WHERE candidate_id = ? ORDER BY id').all(cand.id));
+  const result = await db.query('SELECT * FROM employee_benefits WHERE candidate_id = $1 ORDER BY id', [cand.id]);
+  res.json(result.rows);
 });
 
 router.post('/:id/benefits', requireAdmin, async (req, res) => {
@@ -438,12 +458,13 @@ router.post('/:id/benefits', requireAdmin, async (req, res) => {
   const { benefit_type, provider, value, currency, access_details, notes, effective_date, end_date } = req.body;
   if (!benefit_type) return res.status(400).json({ error: 'benefit_type is required' });
 
-  const result = await db.prepare(`
+  const result = await db.query(`
     INSERT INTO employee_benefits (candidate_id, benefit_type, provider, value, currency, access_details, notes, effective_date, end_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(cand.id, benefit_type, provider || null, value || null, currency || 'USD', access_details || null, notes || null, effective_date || null, end_date || null);
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    RETURNING id
+  `, [cand.id, benefit_type, provider || null, value || null, currency || 'USD', access_details || null, notes || null, effective_date || null, end_date || null]);
 
-  res.status(201).json({ id: result.lastInsertRowid, message: 'Benefit added' });
+  res.status(201).json({ id: result.rows[0].id, message: 'Benefit added' });
 });
 
 router.put('/:id/benefits/:bId', requireAdmin, async (req, res) => {
@@ -452,17 +473,18 @@ router.put('/:id/benefits/:bId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const bId = parseInt(req.params.bId, 10);
-  const row = await db.prepare('SELECT id FROM employee_benefits WHERE id = ? AND candidate_id = ?').get(bId, cand.id);
+  const rowResult = await db.query('SELECT id FROM employee_benefits WHERE id = $1 AND candidate_id = $2', [bId, cand.id]);
+  const row = rowResult.rows[0];
   if (!row) return res.status(404).json({ error: 'Benefit not found' });
 
   const { benefit_type, provider, value, currency, access_details, notes, effective_date, end_date } = req.body;
-  await db.prepare(`
+  await db.query(`
     UPDATE employee_benefits SET
-      benefit_type = COALESCE(?, benefit_type), provider = ?,
-      value = ?, currency = COALESCE(?, currency), access_details = ?, notes = ?,
-      effective_date = ?, end_date = ?, updated_at = NOW()
-    WHERE id = ?
-  `).run(benefit_type || null, provider || null, value || null, currency || null, access_details || null, notes || null, effective_date || null, end_date || null, bId);
+      benefit_type = COALESCE($1, benefit_type), provider = $2,
+      value = $3, currency = COALESCE($4, currency), access_details = $5, notes = $6,
+      effective_date = $7, end_date = $8, updated_at = NOW()
+    WHERE id = $9
+  `, [benefit_type || null, provider || null, value || null, currency || null, access_details || null, notes || null, effective_date || null, end_date || null, bId]);
 
   res.json({ message: 'Benefit updated' });
 });
@@ -473,8 +495,8 @@ router.delete('/:id/benefits/:bId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const bId = parseInt(req.params.bId, 10);
-  const result = await db.prepare('DELETE FROM employee_benefits WHERE id = ? AND candidate_id = ?').run(bId, cand.id);
-  if (!result.changes) return res.status(404).json({ error: 'Benefit not found' });
+  const result = await db.query('DELETE FROM employee_benefits WHERE id = $1 AND candidate_id = $2', [bId, cand.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Benefit not found' });
   res.json({ message: 'Benefit deleted' });
 });
 
@@ -486,7 +508,8 @@ router.get('/:id/performance-reviews', async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
-  res.json(await db.prepare('SELECT * FROM performance_reviews WHERE candidate_id = ? ORDER BY review_date DESC').all(cand.id));
+  const result = await db.query('SELECT * FROM performance_reviews WHERE candidate_id = $1 ORDER BY review_date DESC', [cand.id]);
+  res.json(result.rows);
 });
 
 router.post('/:id/performance-reviews', requireAdmin, async (req, res) => {
@@ -500,12 +523,13 @@ router.post('/:id/performance-reviews', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'overall_score must be between 1 and 5' });
   }
 
-  const result = await db.prepare(`
+  const result = await db.query(`
     INSERT INTO performance_reviews (candidate_id, review_date, reviewer_id, reviewer_name, overall_score, evaluation, next_steps)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(cand.id, review_date, req.user.id, reviewer_name || req.user.name || req.user.email, overall_score || null, evaluation || null, next_steps || null);
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING id
+  `, [cand.id, review_date, req.user.id, reviewer_name || req.user.name || req.user.email, overall_score || null, evaluation || null, next_steps || null]);
 
-  res.status(201).json({ id: result.lastInsertRowid, message: 'Performance review added' });
+  res.status(201).json({ id: result.rows[0].id, message: 'Performance review added' });
 });
 
 router.put('/:id/performance-reviews/:prId', requireAdmin, async (req, res) => {
@@ -514,7 +538,8 @@ router.put('/:id/performance-reviews/:prId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const prId = parseInt(req.params.prId, 10);
-  const row = await db.prepare('SELECT id FROM performance_reviews WHERE id = ? AND candidate_id = ?').get(prId, cand.id);
+  const rowResult = await db.query('SELECT id FROM performance_reviews WHERE id = $1 AND candidate_id = $2', [prId, cand.id]);
+  const row = rowResult.rows[0];
   if (!row) return res.status(404).json({ error: 'Review not found' });
 
   const { review_date, reviewer_name, overall_score, evaluation, next_steps } = req.body;
@@ -522,13 +547,13 @@ router.put('/:id/performance-reviews/:prId', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'overall_score must be between 1 and 5' });
   }
 
-  await db.prepare(`
+  await db.query(`
     UPDATE performance_reviews SET
-      review_date = COALESCE(?, review_date), reviewer_name = COALESCE(?, reviewer_name),
-      overall_score = ?, evaluation = ?, next_steps = ?,
+      review_date = COALESCE($1, review_date), reviewer_name = COALESCE($2, reviewer_name),
+      overall_score = $3, evaluation = $4, next_steps = $5,
       updated_at = NOW()
-    WHERE id = ?
-  `).run(review_date || null, reviewer_name || null, overall_score || null, evaluation || null, next_steps || null, prId);
+    WHERE id = $6
+  `, [review_date || null, reviewer_name || null, overall_score || null, evaluation || null, next_steps || null, prId]);
 
   res.json({ message: 'Review updated' });
 });
@@ -539,8 +564,8 @@ router.delete('/:id/performance-reviews/:prId', requireAdmin, async (req, res) =
   if (!cand) return;
 
   const prId = parseInt(req.params.prId, 10);
-  const result = await db.prepare('DELETE FROM performance_reviews WHERE id = ? AND candidate_id = ?').run(prId, cand.id);
-  if (!result.changes) return res.status(404).json({ error: 'Review not found' });
+  const result = await db.query('DELETE FROM performance_reviews WHERE id = $1 AND candidate_id = $2', [prId, cand.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Review not found' });
   res.json({ message: 'Review deleted' });
 });
 
@@ -552,7 +577,8 @@ router.get('/:id/training', async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
-  res.json(await db.prepare('SELECT * FROM training_records WHERE candidate_id = ? ORDER BY training_date DESC').all(cand.id));
+  const result = await db.query('SELECT * FROM training_records WHERE candidate_id = $1 ORDER BY training_date DESC', [cand.id]);
+  res.json(result.rows);
 });
 
 router.post('/:id/training', requireAdmin, async (req, res) => {
@@ -563,12 +589,13 @@ router.post('/:id/training', requireAdmin, async (req, res) => {
   const { training_date, name, content, results, certificate_url } = req.body;
   if (!training_date || !name) return res.status(400).json({ error: 'training_date and name are required' });
 
-  const result = await db.prepare(`
+  const result = await db.query(`
     INSERT INTO training_records (candidate_id, training_date, name, content, results, certificate_url)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(cand.id, training_date, name, content || null, results || null, certificate_url || null);
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING id
+  `, [cand.id, training_date, name, content || null, results || null, certificate_url || null]);
 
-  res.status(201).json({ id: result.lastInsertRowid, message: 'Training record added' });
+  res.status(201).json({ id: result.rows[0].id, message: 'Training record added' });
 });
 
 router.put('/:id/training/:trId', requireAdmin, async (req, res) => {
@@ -577,17 +604,18 @@ router.put('/:id/training/:trId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const trId = parseInt(req.params.trId, 10);
-  const row = await db.prepare('SELECT id FROM training_records WHERE id = ? AND candidate_id = ?').get(trId, cand.id);
+  const rowResult = await db.query('SELECT id FROM training_records WHERE id = $1 AND candidate_id = $2', [trId, cand.id]);
+  const row = rowResult.rows[0];
   if (!row) return res.status(404).json({ error: 'Training record not found' });
 
   const { training_date, name, content, results, certificate_url } = req.body;
-  await db.prepare(`
+  await db.query(`
     UPDATE training_records SET
-      training_date = COALESCE(?, training_date), name = COALESCE(?, name),
-      content = ?, results = ?, certificate_url = ?,
+      training_date = COALESCE($1, training_date), name = COALESCE($2, name),
+      content = $3, results = $4, certificate_url = $5,
       updated_at = NOW()
-    WHERE id = ?
-  `).run(training_date || null, name || null, content || null, results || null, certificate_url || null, trId);
+    WHERE id = $6
+  `, [training_date || null, name || null, content || null, results || null, certificate_url || null, trId]);
 
   res.json({ message: 'Training record updated' });
 });
@@ -598,8 +626,8 @@ router.delete('/:id/training/:trId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const trId = parseInt(req.params.trId, 10);
-  const result = await db.prepare('DELETE FROM training_records WHERE id = ? AND candidate_id = ?').run(trId, cand.id);
-  if (!result.changes) return res.status(404).json({ error: 'Training record not found' });
+  const result = await db.query('DELETE FROM training_records WHERE id = $1 AND candidate_id = $2', [trId, cand.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Training record not found' });
   res.json({ message: 'Training record deleted' });
 });
 
@@ -613,7 +641,8 @@ router.get('/:id/licenses', async (req, res) => {
   if (!cand) return;
 
   const today = new Date().toISOString().split('T')[0];
-  const licenses = await db.prepare('SELECT * FROM employee_licenses WHERE candidate_id = ? ORDER BY expiry_date ASC').all(cand.id);
+  const result = await db.query('SELECT * FROM employee_licenses WHERE candidate_id = $1 ORDER BY expiry_date ASC', [cand.id]);
+  const licenses = result.rows;
 
   // Enrich with urgency flags
   const enriched = licenses.map(lic => {
@@ -642,12 +671,13 @@ router.post('/:id/licenses', requireAdmin, async (req, res) => {
   let status = 'valid';
   if (expiry_date && expiry_date < today) status = 'expired';
 
-  const result = await db.prepare(`
+  const result = await db.query(`
     INSERT INTO employee_licenses (candidate_id, document_type, document_url, issue_date, expiry_date, reminder_days_before, status, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(cand.id, document_type, document_url || null, issue_date || null, expiry_date || null, reminder_days_before || 30, status, notes || null);
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    RETURNING id
+  `, [cand.id, document_type, document_url || null, issue_date || null, expiry_date || null, reminder_days_before || 30, status, notes || null]);
 
-  res.status(201).json({ id: result.lastInsertRowid, message: 'License record added' });
+  res.status(201).json({ id: result.rows[0].id, message: 'License record added' });
 });
 
 router.put('/:id/licenses/:licId', requireAdmin, async (req, res) => {
@@ -656,7 +686,8 @@ router.put('/:id/licenses/:licId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const licId = parseInt(req.params.licId, 10);
-  const row = await db.prepare('SELECT id FROM employee_licenses WHERE id = ? AND candidate_id = ?').get(licId, cand.id);
+  const rowResult = await db.query('SELECT id FROM employee_licenses WHERE id = $1 AND candidate_id = $2', [licId, cand.id]);
+  const row = rowResult.rows[0];
   if (!row) return res.status(404).json({ error: 'License not found' });
 
   const { document_type, document_url, issue_date, expiry_date, reminder_days_before, status, notes } = req.body;
@@ -667,15 +698,15 @@ router.put('/:id/licenses/:licId', requireAdmin, async (req, res) => {
     computedStatus = expiry_date < today ? 'expired' : 'valid';
   }
 
-  await db.prepare(`
+  await db.query(`
     UPDATE employee_licenses SET
-      document_type = COALESCE(?, document_type), document_url = ?,
-      issue_date = ?, expiry_date = ?,
-      reminder_days_before = COALESCE(?, reminder_days_before),
-      status = COALESCE(?, status), notes = ?,
+      document_type = COALESCE($1, document_type), document_url = $2,
+      issue_date = $3, expiry_date = $4,
+      reminder_days_before = COALESCE($5, reminder_days_before),
+      status = COALESCE($6, status), notes = $7,
       updated_at = NOW()
-    WHERE id = ?
-  `).run(document_type || null, document_url || null, issue_date || null, expiry_date || null, reminder_days_before || null, computedStatus || null, notes || null, licId);
+    WHERE id = $8
+  `, [document_type || null, document_url || null, issue_date || null, expiry_date || null, reminder_days_before || null, computedStatus || null, notes || null, licId]);
 
   res.json({ message: 'License updated' });
 });
@@ -686,8 +717,8 @@ router.delete('/:id/licenses/:licId', requireAdmin, async (req, res) => {
   if (!cand) return;
 
   const licId = parseInt(req.params.licId, 10);
-  const result = await db.prepare('DELETE FROM employee_licenses WHERE id = ? AND candidate_id = ?').run(licId, cand.id);
-  if (!result.changes) return res.status(404).json({ error: 'License not found' });
+  const result = await db.query('DELETE FROM employee_licenses WHERE id = $1 AND candidate_id = $2', [licId, cand.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'License not found' });
   res.json({ message: 'License deleted' });
 });
 
@@ -702,19 +733,38 @@ router.get('/:id/summary', async (req, res) => {
 
   const today = new Date().toISOString().split('T')[0];
 
-  const emergencyCount  = await db.prepare('SELECT COUNT(*) AS n FROM emergency_contacts WHERE candidate_id = ?').get(cand.id).n;
-  const assetCount      = await db.prepare("SELECT COUNT(*) AS n FROM employee_assets WHERE candidate_id = ? AND status = 'on_loan'").get(cand.id).n;
-  const benefitCount    = await db.prepare('SELECT COUNT(*) AS n FROM employee_benefits WHERE candidate_id = ?').get(cand.id).n;
-  const reviewCount     = await db.prepare('SELECT COUNT(*) AS n FROM performance_reviews WHERE candidate_id = ?').get(cand.id).n;
-  const trainingCount   = await db.prepare('SELECT COUNT(*) AS n FROM training_records WHERE candidate_id = ?').get(cand.id).n;
-  const expiringLicenses = await db.prepare(
-    "SELECT COUNT(*) AS n FROM employee_licenses WHERE candidate_id = ? AND expiry_date IS NOT NULL AND expiry_date <= date(?, '+' || reminder_days_before || ' days')"
-  ).get(cand.id, today).n;
-  const expiredLicenses = await db.prepare(
-    "SELECT COUNT(*) AS n FROM employee_licenses WHERE candidate_id = ? AND expiry_date < ?"
-  ).get(cand.id, today).n;
-  const latestHistory = await db.prepare('SELECT * FROM employment_history WHERE candidate_id = ? ORDER BY start_date DESC LIMIT 1').get(cand.id);
-  const hasBankAccount = !!db.prepare('SELECT id FROM bank_accounts WHERE candidate_id = ? LIMIT 1').get(cand.id);
+  const emergencyCountResult = await db.query('SELECT COUNT(*) AS n FROM emergency_contacts WHERE candidate_id = $1', [cand.id]);
+  const emergencyCount = parseInt(emergencyCountResult.rows[0].n, 10);
+
+  const assetCountResult = await db.query("SELECT COUNT(*) AS n FROM employee_assets WHERE candidate_id = $1 AND status = 'on_loan'", [cand.id]);
+  const assetCount = parseInt(assetCountResult.rows[0].n, 10);
+
+  const benefitCountResult = await db.query('SELECT COUNT(*) AS n FROM employee_benefits WHERE candidate_id = $1', [cand.id]);
+  const benefitCount = parseInt(benefitCountResult.rows[0].n, 10);
+
+  const reviewCountResult = await db.query('SELECT COUNT(*) AS n FROM performance_reviews WHERE candidate_id = $1', [cand.id]);
+  const reviewCount = parseInt(reviewCountResult.rows[0].n, 10);
+
+  const trainingCountResult = await db.query('SELECT COUNT(*) AS n FROM training_records WHERE candidate_id = $1', [cand.id]);
+  const trainingCount = parseInt(trainingCountResult.rows[0].n, 10);
+
+  const expiringLicensesResult = await db.query(
+    "SELECT COUNT(*) AS n FROM employee_licenses WHERE candidate_id = $1 AND expiry_date IS NOT NULL AND expiry_date <= (CURRENT_DATE + (reminder_days_before || ' days')::interval)",
+    [cand.id]
+  );
+  const expiringLicenses = parseInt(expiringLicensesResult.rows[0].n, 10);
+
+  const expiredLicensesResult = await db.query(
+    "SELECT COUNT(*) AS n FROM employee_licenses WHERE candidate_id = $1 AND expiry_date < CURRENT_DATE",
+    [cand.id]
+  );
+  const expiredLicenses = parseInt(expiredLicensesResult.rows[0].n, 10);
+
+  const latestHistoryResult = await db.query('SELECT * FROM employment_history WHERE candidate_id = $1 ORDER BY start_date DESC LIMIT 1', [cand.id]);
+  const latestHistory = latestHistoryResult.rows[0];
+
+  const hasBankAccountResult = await db.query('SELECT id FROM bank_accounts WHERE candidate_id = $1 LIMIT 1', [cand.id]);
+  const hasBankAccount = !!hasBankAccountResult.rows[0];
 
   res.json({
     has_emergency_contact: emergencyCount > 0,

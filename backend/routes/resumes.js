@@ -18,7 +18,8 @@ function parseJson(str, fallback) {
 // ── Candidate self-service routes (/me) ──────────────────────────────────────
 
 async function getCandidateForUser(db, userId) {
-  return db.prepare('SELECT * FROM candidates WHERE user_id = ?').get(userId);
+  const result = await db.query('SELECT * FROM candidates WHERE user_id = $1', [userId]);
+  return result.rows[0];
 }
 
 // GET /api/resumes/me
@@ -27,7 +28,8 @@ router.get('/me', async (req, res) => {
   const candidate = await getCandidateForUser(req.db, req.user.id);
   if (!candidate) return res.status(404).json({ error: 'Candidate profile not found' });
 
-  let resume = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidate.id);
+  const resumeResult = await req.db.query('SELECT * FROM candidate_resumes WHERE candidate_id = $1', [candidate.id]);
+  let resume = resumeResult.rows[0];
   if (!resume) {
     return res.json({
       candidate_id: candidate.id, candidate_name: candidate.name,
@@ -52,24 +54,25 @@ router.put('/me', async (req, res) => {
   if (!candidate) return res.status(404).json({ error: 'Candidate profile not found' });
 
   const { headline, summary, experience, education, skills, certifications, languages } = req.body;
-  await req.db.prepare(`
+  await req.db.query(`
     INSERT INTO candidate_resumes (candidate_id, headline, summary, experience, education, skills, certifications, languages, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
     ON CONFLICT(candidate_id) DO UPDATE SET
       headline = excluded.headline, summary = excluded.summary,
       experience = excluded.experience, education = excluded.education,
       skills = excluded.skills, certifications = excluded.certifications,
       languages = excluded.languages, updated_at = NOW()
-  `).run(
+  `, [
     candidate.id, headline || null, summary || null,
     JSON.stringify(Array.isArray(experience) ? experience : []),
     JSON.stringify(Array.isArray(education)  ? education  : []),
     JSON.stringify(Array.isArray(skills)     ? skills     : []),
     JSON.stringify(Array.isArray(certifications) ? certifications : []),
     JSON.stringify(Array.isArray(languages)  ? languages  : []),
-  );
+  ]);
 
-  const saved = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidate.id);
+  const savedResult = await req.db.query('SELECT * FROM candidate_resumes WHERE candidate_id = $1', [candidate.id]);
+  const saved = savedResult.rows[0];
   res.json({
     ...saved, candidate_name: candidate.name,
     experience:     parseJson(saved.experience, []),
@@ -86,7 +89,8 @@ router.get('/me/pdf', async (req, res) => {
   const candidate = await getCandidateForUser(req.db, req.user.id);
   if (!candidate) return res.status(404).json({ error: 'Candidate profile not found' });
 
-  const resume = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidate.id);
+  const resumeResult = await req.db.query('SELECT * FROM candidate_resumes WHERE candidate_id = $1', [candidate.id]);
+  const resume = resumeResult.rows[0];
   const exp    = parseJson(resume?.experience, []);
   const edu    = parseJson(resume?.education, []);
   const skills = parseJson(resume?.skills, []);
@@ -161,18 +165,21 @@ function buildResumePdf(doc, candidate, resume, exp, edu, skills, certs) {
 // GET /api/resumes/:candidateId
 router.get('/:candidateId', async (req, res) => {
   const { candidateId } = req.params;
-  const candidate = await req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
+  const candResult = await req.db.query('SELECT * FROM candidates WHERE id = $1', [candidateId]);
+  const candidate = candResult.rows[0];
   if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
 
   // Candidates can only read their own resume
   if (req.user.role === 'candidate') {
-    const me = await req.db.prepare('SELECT id FROM candidates WHERE user_id = ?').get(req.user.id);
+    const meResult = await req.db.query('SELECT id FROM candidates WHERE user_id = $1', [req.user.id]);
+    const me = meResult.rows[0];
     if (!me || String(me.id) !== String(candidateId)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
   }
 
-  let resume = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidateId);
+  const resumeResult = await req.db.query('SELECT * FROM candidate_resumes WHERE candidate_id = $1', [candidateId]);
+  let resume = resumeResult.rows[0];
   if (!resume) {
     // Return an empty template
     return res.json({
@@ -197,12 +204,14 @@ router.get('/:candidateId', async (req, res) => {
 // PUT /api/resumes/:candidateId — create or full replace
 router.put('/:candidateId', async (req, res) => {
   const { candidateId } = req.params;
-  const candidate = await req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
+  const candResult = await req.db.query('SELECT * FROM candidates WHERE id = $1', [candidateId]);
+  const candidate = candResult.rows[0];
   if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
 
   // Candidate can update own resume; admin can update any
   if (req.user.role === 'candidate') {
-    const me = await req.db.prepare('SELECT id FROM candidates WHERE user_id = ?').get(req.user.id);
+    const meResult = await req.db.query('SELECT id FROM candidates WHERE user_id = $1', [req.user.id]);
+    const me = meResult.rows[0];
     if (!me || String(me.id) !== String(candidateId)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
@@ -210,9 +219,9 @@ router.put('/:candidateId', async (req, res) => {
 
   const { headline, summary, experience, education, skills, certifications, languages } = req.body;
 
-  await req.db.prepare(`
+  await req.db.query(`
     INSERT INTO candidate_resumes (candidate_id, headline, summary, experience, education, skills, certifications, languages, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
     ON CONFLICT(candidate_id) DO UPDATE SET
       headline       = excluded.headline,
       summary        = excluded.summary,
@@ -222,7 +231,7 @@ router.put('/:candidateId', async (req, res) => {
       certifications = excluded.certifications,
       languages      = excluded.languages,
       updated_at     = NOW()
-  `).run(
+  `, [
     candidateId,
     headline || null,
     summary || null,
@@ -231,9 +240,10 @@ router.put('/:candidateId', async (req, res) => {
     JSON.stringify(Array.isArray(skills)     ? skills     : []),
     JSON.stringify(Array.isArray(certifications) ? certifications : []),
     JSON.stringify(Array.isArray(languages)  ? languages  : []),
-  );
+  ]);
 
-  const saved = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidateId);
+  const savedResult = await req.db.query('SELECT * FROM candidate_resumes WHERE candidate_id = $1', [candidateId]);
+  const saved = savedResult.rows[0];
   res.json({
     ...saved,
     candidate_name: candidate.name,
@@ -248,10 +258,12 @@ router.put('/:candidateId', async (req, res) => {
 // GET /api/resumes/:candidateId/pdf
 router.get('/:candidateId/pdf', async (req, res) => {
   const { candidateId } = req.params;
-  const candidate = await req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
+  const candResult = await req.db.query('SELECT * FROM candidates WHERE id = $1', [candidateId]);
+  const candidate = candResult.rows[0];
   if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
 
-  const resume = await req.db.prepare('SELECT * FROM candidate_resumes WHERE candidate_id = ?').get(candidateId);
+  const resumeResult = await req.db.query('SELECT * FROM candidate_resumes WHERE candidate_id = $1', [candidateId]);
+  const resume = resumeResult.rows[0];
   const exp    = parseJson(resume?.experience, []);
   const edu    = parseJson(resume?.education, []);
   const skills = parseJson(resume?.skills, []);

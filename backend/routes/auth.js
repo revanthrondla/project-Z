@@ -34,9 +34,11 @@ router.post('/login', async (req, res) => {
 
     // ── Super-admin path (no companySlug) ──────────────────────────────────────
     if (!companySlug) {
-      const superAdmin = await masterDb.prepare(
-        'SELECT * FROM super_admins WHERE email = ?'
-      ).get(normalizedEmail);
+      const superAdminResult = await masterDb.query(
+        'SELECT * FROM super_admins WHERE email = $1',
+        [normalizedEmail]
+      );
+      const superAdmin = superAdminResult.rows[0];
 
       if (!superAdmin) {
         return res.status(401).json({ error: 'Invalid credentials or missing organization code' });
@@ -59,9 +61,11 @@ router.post('/login', async (req, res) => {
     }
 
     // ── Tenant path (companySlug provided) ─────────────────────────────────────
-    const tenant = await masterDb.prepare(
-      'SELECT * FROM tenants WHERE slug = ?'
-    ).get(companySlug.toLowerCase().trim());
+    const tenantResult = await masterDb.query(
+      'SELECT * FROM tenants WHERE slug = $1',
+      [companySlug.toLowerCase().trim()]
+    );
+    const tenant = tenantResult.rows[0];
 
     if (!tenant) {
       return res.status(401).json({ error: `Organization '${companySlug}' not found` });
@@ -77,7 +81,8 @@ router.post('/login', async (req, res) => {
       const { wrapper: tenantDb, release } = await getTenantDb(tenant.slug);
       tenantRelease = release;
 
-      const user = await tenantDb.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail);
+      const userResult = await tenantDb.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
+      const user = userResult.rows[0];
       if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
       const valid = bcrypt.compareSync(password, user.password_hash);
@@ -85,13 +90,15 @@ router.post('/login', async (req, res) => {
 
       let candidateId = null;
       if (user.role === 'candidate') {
-        const cand = await tenantDb.prepare('SELECT id FROM candidates WHERE user_id = ?').get(user.id);
+        const candResult = await tenantDb.query('SELECT id FROM candidates WHERE user_id = $1', [user.id]);
+        const cand = candResult.rows[0];
         if (cand) candidateId = cand.id;
       }
 
       let clientId = null;
       if (user.role === 'client') {
-        const clientRec = await tenantDb.prepare('SELECT id FROM clients WHERE user_id = ?').get(user.id);
+        const clientRecResult = await tenantDb.query('SELECT id FROM clients WHERE user_id = $1', [user.id]);
+        const clientRec = clientRecResult.rows[0];
         if (clientRec) clientId = clientRec.id;
       }
 
@@ -142,15 +149,18 @@ router.post('/logout', async (req, res) => {
 router.get('/me', authenticate, injectTenantDb, async (req, res) => {
   try {
     if (req.user.role === 'super_admin') {
-      const sa = await masterDb.prepare(
-        'SELECT id, name, email, created_at FROM super_admins WHERE id = ?'
-      ).get(req.user.id);
+      const saResult = await masterDb.query(
+        'SELECT id, name, email, created_at FROM super_admins WHERE id = $1',
+        [req.user.id]
+      );
+      const sa = saResult.rows[0];
       if (!sa) return res.status(404).json({ error: 'User not found' });
       return res.json({ ...sa, role: 'super_admin' });
     }
 
     const db   = req.db;
-    const user = await db.prepare('SELECT id, name, email, role, created_at FROM users WHERE id = ?').get(req.user.id);
+    const userResult = await db.query('SELECT id, name, email, role, created_at FROM users WHERE id = $1', [req.user.id]);
+    const user = userResult.rows[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (err) {
@@ -167,7 +177,8 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
     }
 
     if (req.user.role === 'super_admin') {
-      const sa = await masterDb.prepare('SELECT * FROM super_admins WHERE id = ?').get(req.user.id);
+      const saResult = await masterDb.query('SELECT * FROM super_admins WHERE id = $1', [req.user.id]);
+      const sa = saResult.rows[0];
       if (!bcrypt.compareSync(currentPassword, sa.password_hash)) {
         return res.status(401).json({ error: 'Current password is incorrect' });
       }
@@ -175,7 +186,7 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
         return res.status(400).json({ error: 'New password must be at least 8 characters' });
       }
       const newHash = await bcrypt.hash(newPassword, 10);
-      await masterDb.prepare('UPDATE super_admins SET password_hash = ? WHERE id = ?').run(newHash, req.user.id);
+      await masterDb.query('UPDATE super_admins SET password_hash = $1 WHERE id = $2', [newHash, req.user.id]);
       const freshToken = jwt.sign(
         { id: sa.id, email: sa.email, name: sa.name, role: 'super_admin', mustChangePw: false },
         JWT_SECRET, { expiresIn: '8h' }
@@ -185,7 +196,8 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
     }
 
     const db   = req.db;
-    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    const userResult = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    const user = userResult.rows[0];
     if (!bcrypt.compareSync(currentPassword, user.password_hash)) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
@@ -193,7 +205,7 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
       return res.status(400).json({ error: 'New password must be at least 8 characters' });
     }
     const tenantNewHash = await bcrypt.hash(newPassword, 10);
-    await db.prepare('UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE id = ?').run(tenantNewHash, req.user.id);
+    await db.query('UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE id = $2', [tenantNewHash, req.user.id]);
 
     // Issue a fresh token with mustChangePw cleared so the UI unlocks immediately
     const freshToken = jwt.sign(

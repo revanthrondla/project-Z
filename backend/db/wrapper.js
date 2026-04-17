@@ -161,7 +161,9 @@ function createWrapper(client, schema) {
     }
   }
 
-  return { prepare, exec, transaction, _client: client };
+  // Also expose query() directly so route code can call req.db.query(sql, params)
+  // without going through prepare(). The same toPostgresParams() conversion is applied.
+  return { prepare, exec, transaction, query, _client: client };
 }
 
 /**

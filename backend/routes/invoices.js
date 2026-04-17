@@ -6,7 +6,8 @@ const router = express.Router();
 
 async function generateInvoiceNumber(db) {
   const year = new Date().getFullYear();
-  const last = await db.prepare("SELECT invoice_number FROM invoices ORDER BY id DESC LIMIT 1").get();
+  const result = await db.query("SELECT invoice_number FROM invoices ORDER BY id DESC LIMIT 1");
+  const last = result.rows[0];
   let seq = 1;
   if (last) {
     const parts = last.invoice_number.split('-');
@@ -30,39 +31,46 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
 
   if (req.user.role === 'candidate') {
     // Candidates see only their own invoices
-    query += ' AND i.candidate_id = ?';
+    query += ' AND i.candidate_id = $' + (params.length + 1);
     params.push(req.user.candidateId);
   } else if (req.user.role === 'client') {
     // Clients see only invoices for their client_id (regardless of query params)
-    query += ' AND i.client_id = ?';
+    query += ' AND i.client_id = $' + (params.length + 1);
     params.push(req.user.clientId);
   } else if (candidate_id) {
     // Admin may filter by candidate
-    query += ' AND i.candidate_id = ?';
+    query += ' AND i.candidate_id = $' + (params.length + 1);
     params.push(parseInt(candidate_id, 10));
   }
 
-  if (status) { query += ' AND i.status = ?'; params.push(status); }
-  if (year) { query += " AND EXTRACT(YEAR FROM i.period_start)::TEXT = ?"; params.push(String(year)); }
+  if (status) {
+    query += ' AND i.status = $' + (params.length + 1);
+    params.push(status);
+  }
+  if (year) {
+    query += " AND EXTRACT(YEAR FROM i.period_start)::TEXT = $" + (params.length + 1);
+    params.push(String(year));
+  }
 
   query += ' ORDER BY i.created_at DESC';
 
-  const invoices = await req.db.prepare(query).all(...params);
-  res.json(invoices);
+  const result = await req.db.query(query, params);
+  res.json(result.rows);
 });
 
 // GET /api/invoices/:id
 router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
-  const invoice = await req.db.prepare(`
+  const result = await req.db.query(`
     SELECT i.*, c.name as candidate_name, c.email as candidate_email,
            c.role as candidate_role, c.hourly_rate as candidate_rate,
            cl.name as client_name, cl.contact_email as client_email, cl.address as client_address
     FROM invoices i
     JOIN candidates c ON i.candidate_id = c.id
     LEFT JOIN clients cl ON i.client_id = cl.id
-    WHERE i.id = ?
-  `).get(req.params.id);
+    WHERE i.id = $1
+  `, [req.params.id]);
 
+  const invoice = result.rows[0];
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
   // Candidates can only see their own invoices
   if (req.user.role === 'candidate' && invoice.candidate_id !== req.user.candidateId) {
@@ -73,13 +81,13 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  const lineItems = await req.db.prepare('SELECT * FROM invoice_line_items WHERE invoice_id = ? ORDER BY date').all(invoice.id);
-  res.json({ ...invoice, line_items: lineItems });
+  const lineItemsResult = await req.db.query('SELECT * FROM invoice_line_items WHERE invoice_id = $1 ORDER BY date', [invoice.id]);
+  res.json({ ...invoice, line_items: lineItemsResult.rows });
 });
 
 // GET /api/invoices/:id/pdf — Download invoice as PDF (admin, candidate, client)
 router.get('/:id/pdf', authenticate, injectTenantDb, async (req, res) => {
-  const invoice = await req.db.prepare(`
+  const result = await req.db.query(`
     SELECT i.*,
            c.name  AS candidate_name, c.email AS candidate_email, c.role AS candidate_role,
            c.hourly_rate AS candidate_rate,
@@ -88,9 +96,10 @@ router.get('/:id/pdf', authenticate, injectTenantDb, async (req, res) => {
     FROM invoices i
     JOIN candidates c  ON i.candidate_id = c.id
     LEFT JOIN clients cl ON i.client_id = cl.id
-    WHERE i.id = ?
-  `).get(req.params.id);
+    WHERE i.id = $1
+  `, [req.params.id]);
 
+  const invoice = result.rows[0];
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
   if (req.user.role === 'candidate' && invoice.candidate_id !== req.user.candidateId) {
     return res.status(403).json({ error: 'Access denied' });
@@ -99,9 +108,11 @@ router.get('/:id/pdf', authenticate, injectTenantDb, async (req, res) => {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  const lineItems = await req.db.prepare(
-    'SELECT * FROM invoice_line_items WHERE invoice_id = ? ORDER BY date'
-  ).all(invoice.id);
+  const lineItemsResult = await req.db.query(
+    'SELECT * FROM invoice_line_items WHERE invoice_id = $1 ORDER BY date',
+    [invoice.id]
+  );
+  const lineItems = lineItemsResult.rows;
 
   const companyName = req.user.tenantName || 'Flow';
 
@@ -241,14 +252,16 @@ router.get('/:id/pdf', authenticate, injectTenantDb, async (req, res) => {
 
 // ── Helper: generate one invoice for a single candidate ──────────────────────
 async function generateOneInvoice(db, candidateId, period_start, period_end, due_date, notes) {
-  const candidate = await db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
+  const candResult = await db.query('SELECT * FROM candidates WHERE id = $1', [candidateId]);
+  const candidate = candResult.rows[0];
   if (!candidate) return { skipped: true, reason: `Candidate ${candidateId} not found` };
 
-  const entries = await db.prepare(`
+  const entriesResult = await db.query(`
     SELECT * FROM time_entries
-    WHERE candidate_id = ? AND date >= ? AND date <= ? AND status = 'approved'
+    WHERE candidate_id = $1 AND date >= $2 AND date <= $3 AND status = 'approved'
     ORDER BY date
-  `).all(candidateId, period_start, period_end);
+  `, [candidateId, period_start, period_end]);
+  const entries = entriesResult.rows;
 
   if (entries.length === 0) {
     return { skipped: true, reason: `No approved time entries for ${candidate.name} in this period` };
@@ -258,36 +271,41 @@ async function generateOneInvoice(db, candidateId, period_start, period_end, due
   const totalAmount   = totalHours * candidate.hourly_rate;
   const invoiceNumber = await generateInvoiceNumber(db);
 
-  const invoiceId = await db.transaction(async () => {
-    const result = await db.prepare(`
+  const client = require('pg');
+
+  // For PostgreSQL, we'll execute the transaction manually
+  const invoiceId = await (async () => {
+    const insertResult = await db.query(`
       INSERT INTO invoices (invoice_number, candidate_id, client_id, period_start, period_end,
                             total_hours, hourly_rate, total_amount, status, due_date, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
-    `).run(invoiceNumber, candidateId, candidate.client_id,
-           period_start, period_end, totalHours,
-           candidate.hourly_rate, totalAmount, due_date || null, notes || null);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10)
+      RETURNING id
+    `, [invoiceNumber, candidateId, candidate.client_id,
+        period_start, period_end, totalHours,
+        candidate.hourly_rate, totalAmount, due_date || null, notes || null]);
 
-    const iid = result.lastInsertRowid;
-    const insertLine = db.prepare(`
-      INSERT INTO invoice_line_items (invoice_id, date, description, hours, rate, amount)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
+    const iid = insertResult.rows[0].id;
+
     for (const entry of entries) {
-      await insertLine.run(iid, entry.date,
-        entry.description || entry.project || 'Work',
-        entry.hours, candidate.hourly_rate,
-        entry.hours * candidate.hourly_rate);
+      await db.query(`
+        INSERT INTO invoice_line_items (invoice_id, date, description, hours, rate, amount)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [iid, entry.date,
+          entry.description || entry.project || 'Work',
+          entry.hours, candidate.hourly_rate,
+          entry.hours * candidate.hourly_rate]);
     }
     return iid;
-  });
+  })();
 
-  const invoice = await db.prepare(`
+  const invoiceResult = await db.query(`
     SELECT i.*, c.name AS candidate_name, cl.name AS client_name
     FROM invoices i
     JOIN candidates c ON i.candidate_id = c.id
     LEFT JOIN clients cl ON i.client_id = cl.id
-    WHERE i.id = ?
-  `).get(invoiceId);
+    WHERE i.id = $1
+  `, [invoiceId]);
+  const invoice = invoiceResult.rows[0];
 
   return { success: true, invoice, candidate_name: candidate.name };
 }
@@ -309,10 +327,11 @@ router.post('/generate', authenticate, requireAdmin, injectTenantDb, async (req,
 
   if (client_id) {
     // All active candidates belonging to this client
-    const clientCandidates = await req.db.prepare(
-      'SELECT id FROM candidates WHERE client_id = ? AND status = ?'
-    ).all(client_id, 'active');
-    ids = clientCandidates.map(c => c.id);
+    const clientCandidatesResult = await req.db.query(
+      'SELECT id FROM candidates WHERE client_id = $1 AND status = $2',
+      [client_id, 'active']
+    );
+    ids = clientCandidatesResult.rows.map(c => c.id);
     if (ids.length === 0) {
       return res.status(400).json({ error: 'No active employees found for this client' });
     }
@@ -329,10 +348,11 @@ router.post('/generate', authenticate, requireAdmin, injectTenantDb, async (req,
     try {
       const result = await generateOneInvoice(req.db, ids[0], period_start, period_end, due_date, notes);
       if (result.skipped) return res.status(400).json({ error: result.reason });
-      const lineItems = await req.db.prepare(
-        'SELECT * FROM invoice_line_items WHERE invoice_id = ? ORDER BY date'
-      ).all(result.invoice.id);
-      return res.status(201).json({ ...result.invoice, line_items: lineItems });
+      const lineItemsResult = await req.db.query(
+        'SELECT * FROM invoice_line_items WHERE invoice_id = $1 ORDER BY date',
+        [result.invoice.id]
+      );
+      return res.status(201).json({ ...result.invoice, line_items: lineItemsResult.rows });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -373,64 +393,75 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
   }
 
   const invoiceNumber = await generateInvoiceNumber(req.db);
-  const candidate = await req.db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidate_id);
+  const candResult = await req.db.query('SELECT * FROM candidates WHERE id = $1', [candidate_id]);
+  const candidate = candResult.rows[0];
   const rate = hourly_rate || (candidate ? candidate.hourly_rate : 0);
   const hours = total_hours || 0;
   const amount = total_amount || hours * rate;
 
-  const result = await req.db.prepare(`
+  const result = await req.db.query(`
     INSERT INTO invoices (invoice_number, candidate_id, client_id, period_start, period_end,
                           total_hours, hourly_rate, total_amount, status, due_date, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(invoiceNumber, candidate_id, candidate?.client_id || null, period_start, period_end, hours, rate, amount, status || 'draft', due_date || null, notes || null);
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    RETURNING id
+  `, [invoiceNumber, candidate_id, candidate?.client_id || null, period_start, period_end, hours, rate, amount, status || 'draft', due_date || null, notes || null]);
 
-  const invoice = await req.db.prepare('SELECT i.*, c.name as candidate_name, cl.name as client_name FROM invoices i JOIN candidates c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id WHERE i.id = ?').get(result.lastInsertRowid);
-  res.status(201).json(invoice);
+  const newId = result.rows[0].id;
+  const invoiceResult = await req.db.query('SELECT i.*, c.name as candidate_name, cl.name as client_name FROM invoices i JOIN candidates c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id WHERE i.id = $1', [newId]);
+  res.status(201).json(invoiceResult.rows[0]);
 });
 
 // PUT /api/invoices/:id — Update status etc.
 router.put('/:id', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   const id = parseInt(req.params.id);
-  const invoice = await req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+  const invoiceResult = await req.db.query('SELECT * FROM invoices WHERE id = $1', [id]);
+  const invoice = invoiceResult.rows[0];
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
   const { status, due_date, notes } = req.body;
-  await req.db.prepare(`
+  await req.db.query(`
     UPDATE invoices SET
-      status = COALESCE(?, status),
-      due_date = COALESCE(?, due_date),
-      notes = COALESCE(?, notes),
+      status = COALESCE($1, status),
+      due_date = COALESCE($2, due_date),
+      notes = COALESCE($3, notes),
       updated_at = NOW()
-    WHERE id = ?
-  `).run(status || null, due_date || null, notes !== undefined ? notes : null, id);
+    WHERE id = $4
+  `, [status || null, due_date || null, notes !== undefined ? notes : null, id]);
 
-  const updated = await req.db.prepare('SELECT i.*, c.name as candidate_name, cl.name as client_name FROM invoices i JOIN candidates c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id WHERE i.id = ?').get(id);
-  res.json(updated);
+  const updatedResult = await req.db.query('SELECT i.*, c.name as candidate_name, cl.name as client_name FROM invoices i JOIN candidates c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id WHERE i.id = $1', [id]);
+  res.json(updatedResult.rows[0]);
 });
 
 // DELETE /api/invoices/:id — Admin only (draft only)
 router.delete('/:id', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
-  const invoice = await req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  const invoiceResult = await req.db.query('SELECT * FROM invoices WHERE id = $1', [req.params.id]);
+  const invoice = invoiceResult.rows[0];
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
   if (invoice.status !== 'draft') return res.status(400).json({ error: 'Only draft invoices can be deleted' });
 
-  await req.db.prepare('DELETE FROM invoices WHERE id = ?').run(req.params.id);
+  await req.db.query('DELETE FROM invoices WHERE id = $1', [req.params.id]);
   res.json({ message: 'Invoice deleted' });
 });
 
 // GET /api/invoices/summary/stats — Admin dashboard stats
 router.get('/summary/stats', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
-  const totalRevenue = await req.db.prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM invoices WHERE status = 'paid'").get();
-  const pendingRevenue = await req.db.prepare("SELECT COALESCE(SUM(total_amount), 0) as total FROM invoices WHERE status IN ('sent', 'draft')").get();
-  const overdueCount = await req.db.prepare("SELECT COUNT(*) as count FROM invoices WHERE status = 'overdue'").get();
-  const byStatus = await req.db.prepare("SELECT status, COUNT(*) as count, COALESCE(SUM(total_amount), 0) as total FROM invoices GROUP BY status").all();
-  const recentInvoices = await req.db.prepare(`
+  const totalRevenueResult = await req.db.query("SELECT COALESCE(SUM(total_amount), 0) as total FROM invoices WHERE status = 'paid'");
+  const pendingRevenueResult = await req.db.query("SELECT COALESCE(SUM(total_amount), 0) as total FROM invoices WHERE status IN ('sent', 'draft')");
+  const overdueCountResult = await req.db.query("SELECT COUNT(*) as count FROM invoices WHERE status = 'overdue'");
+  const byStatusResult = await req.db.query("SELECT status, COUNT(*) as count, COALESCE(SUM(total_amount), 0) as total FROM invoices GROUP BY status");
+  const recentInvoicesResult = await req.db.query(`
     SELECT i.*, c.name as candidate_name, cl.name as client_name
     FROM invoices i JOIN candidates c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id
     ORDER BY i.created_at DESC LIMIT 5
-  `).all();
+  `);
 
-  res.json({ totalRevenue: totalRevenue.total, pendingRevenue: pendingRevenue.total, overdueCount: overdueCount.count, byStatus, recentInvoices });
+  res.json({
+    totalRevenue: totalRevenueResult.rows[0].total,
+    pendingRevenue: pendingRevenueResult.rows[0].total,
+    overdueCount: overdueCountResult.rows[0].count,
+    byStatus: byStatusResult.rows,
+    recentInvoices: recentInvoicesResult.rows
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -439,12 +470,15 @@ router.get('/summary/stats', authenticate, requireAdmin, injectTenantDb, async (
 
 // GET /api/invoices/:id/payments
 router.get('/:id/payments', authenticate, injectTenantDb, async (req, res) => {
-  const invoice = await req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  const invoiceResult = await req.db.query('SELECT * FROM invoices WHERE id = $1', [req.params.id]);
+  const invoice = invoiceResult.rows[0];
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-  const payments = await req.db.prepare(
-    'SELECT p.*, u.name as recorded_by_name FROM invoice_payments p LEFT JOIN users u ON p.recorded_by = u.id WHERE p.invoice_id = ? ORDER BY p.payment_date DESC'
-  ).all(req.params.id);
+  const paymentsResult = await req.db.query(
+    'SELECT p.*, u.name as recorded_by_name FROM invoice_payments p LEFT JOIN users u ON p.recorded_by = u.id WHERE p.invoice_id = $1 ORDER BY p.payment_date DESC',
+    [req.params.id]
+  );
+  const payments = paymentsResult.rows;
 
   const totalPaid  = payments.reduce((s, p) => s + p.amount, 0);
   const balance    = invoice.total_amount - totalPaid;
@@ -454,24 +488,29 @@ router.get('/:id/payments', authenticate, injectTenantDb, async (req, res) => {
 
 // POST /api/invoices/:id/payments — Admin only
 router.post('/:id/payments', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
-  const invoice = await req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  const invoiceResult = await req.db.query('SELECT * FROM invoices WHERE id = $1', [req.params.id]);
+  const invoice = invoiceResult.rows[0];
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
   const { amount, payment_date, payment_method, reference_number, notes } = req.body;
   if (!amount || amount <= 0) return res.status(400).json({ error: 'amount must be positive' });
   if (!payment_date)          return res.status(400).json({ error: 'payment_date is required' });
 
-  const r = await req.db.prepare(`
+  const r = await req.db.query(`
     INSERT INTO invoice_payments (invoice_id, amount, payment_date, payment_method, reference_number, notes, recorded_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(invoice.id, parseFloat(amount), payment_date, payment_method || 'bank_transfer',
-         reference_number || null, notes || null, req.user.id);
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING id
+  `, [invoice.id, parseFloat(amount), payment_date, payment_method || 'bank_transfer',
+      reference_number || null, notes || null, req.user.id]);
+
+  const newPaymentId = r.rows[0].id;
 
   // Recompute total paid and auto-update invoice status
-  const paidRow = await req.db.prepare(
-    'SELECT COALESCE(SUM(amount), 0) AS total FROM invoice_payments WHERE invoice_id = ?'
-  ).get(invoice.id);
-  const totalPaid = paidRow.total;
+  const paidRowResult = await req.db.query(
+    'SELECT COALESCE(SUM(amount), 0) AS total FROM invoice_payments WHERE invoice_id = $1',
+    [invoice.id]
+  );
+  const totalPaid = paidRowResult.rows[0].total;
 
   let newStatus = invoice.status;
   if (totalPaid >= invoice.total_amount) {
@@ -479,17 +518,17 @@ router.post('/:id/payments', authenticate, requireAdmin, injectTenantDb, async (
   } else if (totalPaid > 0 && invoice.status === 'sent') {
     newStatus = 'sent'; // partially paid — keep as sent
   }
-  await req.db.prepare('UPDATE invoices SET status = ?, updated_at = NOW() WHERE id = ?')
-    .run(newStatus, invoice.id);
+  await req.db.query('UPDATE invoices SET status = $1, updated_at = NOW() WHERE id = $2',
+    [newStatus, invoice.id]);
 
-  const payment = await req.db.prepare('SELECT * FROM invoice_payments WHERE id = ?').get(r.lastInsertRowid);
-  res.status(201).json({ payment, totalPaid, newStatus });
+  const paymentResult = await req.db.query('SELECT * FROM invoice_payments WHERE id = $1', [newPaymentId]);
+  res.status(201).json({ payment: paymentResult.rows[0], totalPaid, newStatus });
 });
 
 // DELETE /api/invoices/:invoiceId/payments/:paymentId — Admin only
 router.delete('/:invoiceId/payments/:paymentId', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
-  await req.db.prepare('DELETE FROM invoice_payments WHERE id = ? AND invoice_id = ?')
-    .run(req.params.paymentId, req.params.invoiceId);
+  await req.db.query('DELETE FROM invoice_payments WHERE id = $1 AND invoice_id = $2',
+    [req.params.paymentId, req.params.invoiceId]);
   res.json({ message: 'Payment record removed' });
 });
 

@@ -13,11 +13,18 @@ const { authenticate, requireAdmin, injectTenantDb } = require('../middleware/au
 const router = express.Router();
 router.use(authenticate, requireAdmin, injectTenantDb);
 
-// ── Shared date-filter builder ────────────────────────────────────────────────
+// ── Shared date-filter builder (PostgreSQL positional params) ─────────────────
+// Appends to the params array in-place and returns the SQL fragment.
 function buildDateFilter(prefix, from, to, params) {
   let filter = '';
-  if (from) { filter += ` AND ${prefix}.date >= ?`; params.push(from); }
-  if (to)   { filter += ` AND ${prefix}.date <= ?`; params.push(to); }
+  if (from) {
+    params.push(from);
+    filter += ` AND ${prefix}.date >= $${params.length}`;
+  }
+  if (to) {
+    params.push(to);
+    filter += ` AND ${prefix}.date <= $${params.length}`;
+  }
   return filter;
 }
 
@@ -40,28 +47,28 @@ async function payrollPaymentView(req, res, from, to) {
     const p = [];
     const dateFilter = buildDateFilter('te', from, to, p);
 
-    const hoursRows = await req.db.prepare(`
+    const hoursResult = await req.db.query(`
       SELECT
-        c.id                                              AS candidate_id,
-        c.name                                            AS candidate_name,
-        c.hourly_rate,
-        COUNT(te.id)::int                                 AS entry_count,
-        COALESCE(SUM(te.hours), 0)::float                AS total_hours,
-        COALESCE(SUM(te.hours * c.hourly_rate), 0)::float AS expected_pay
+        c.id                                               AS candidate_id,
+        c.name                                             AS candidate_name,
+        c.hourly_rate::float                               AS hourly_rate,
+        COUNT(te.id)::int                                  AS entry_count,
+        COALESCE(SUM(te.hours), 0)::float                  AS total_hours,
+        COALESCE(SUM(te.hours * c.hourly_rate), 0)::float  AS expected_pay
       FROM candidates c
       LEFT JOIN time_entries te
         ON te.candidate_id = c.id AND te.status = 'approved' ${dateFilter}
-      GROUP BY c.id
+      GROUP BY c.id, c.name, c.hourly_rate
       ORDER BY c.name
-    `).all(...p);
+    `, p);
 
     // Payments — filtered by payment_date in period
     const pp = [];
     let payDateFilter = '';
-    if (from) { payDateFilter += ' AND ip.payment_date >= ?'; pp.push(from); }
-    if (to)   { payDateFilter += ' AND ip.payment_date <= ?'; pp.push(to); }
+    if (from) { pp.push(from); payDateFilter += ` AND ip.payment_date >= $${pp.length}`; }
+    if (to)   { pp.push(to);   payDateFilter += ` AND ip.payment_date <= $${pp.length}`; }
 
-    const payRows = await req.db.prepare(`
+    const payResult = await req.db.query(`
       SELECT
         i.candidate_id,
         COALESCE(SUM(ip.amount), 0)::float AS total_paid
@@ -69,19 +76,29 @@ async function payrollPaymentView(req, res, from, to) {
       JOIN invoices i ON ip.invoice_id = i.id
       WHERE 1=1 ${payDateFilter}
       GROUP BY i.candidate_id
-    `).all(...pp);
+    `, pp);
 
-    const paidMap = Object.fromEntries(payRows.map(r => [r.candidate_id, parseFloat(r.total_paid) || 0]));
+    const paidMap = Object.fromEntries(
+      payResult.rows.map(r => [r.candidate_id, parseFloat(r.total_paid) || 0])
+    );
 
-    const rows = hoursRows.map(r => {
+    const rows = hoursResult.rows.map(r => {
       const expected_pay = parseFloat(r.expected_pay) || 0;
-      const total_paid   = paidMap[r.candidate_id] || 0;
+      const total_paid   = paidMap[r.candidate_id]   || 0;
       const variance     = total_paid - expected_pay;
       const status = Math.abs(variance) < 0.01 ? 'reconciled'
                    : variance > 0               ? 'overpaid'
                    : expected_pay === 0         ? 'no_hours'
                    :                              'underpaid';
-      return { ...r, expected_pay, total_paid, variance, status };
+      return {
+        ...r,
+        hourly_rate:  parseFloat(r.hourly_rate)  || 0,
+        total_hours:  parseFloat(r.total_hours)  || 0,
+        expected_pay,
+        total_paid,
+        variance,
+        status,
+      };
     });
 
     const summary = {
@@ -108,117 +125,118 @@ async function payrollPaymentView(req, res, from, to) {
 // ────────────────────────────────────────────────────────────────────────────
 async function timesheetDiscrepancyView(req, res, from, to) {
   try {
-  const p = [];
-  const dateFilter = buildDateFilter('te', from, to, p);
+    const p = [];
+    // Date filter goes in the LEFT JOIN ON clause so candidates with no entries
+    // still appear (a WHERE clause would eliminate them).
+    const dateFilter = buildDateFilter('te', from, to, p);
 
-  // Per-candidate breakdown of hours at each approval stage
-  const rows = await req.db.prepare(`
-    SELECT
-      c.id                 AS candidate_id,
-      c.name               AS candidate_name,
-      c.hourly_rate,
+    const result = await req.db.query(`
+      SELECT
+        c.id                 AS candidate_id,
+        c.name               AS candidate_name,
+        c.hourly_rate::float AS hourly_rate,
 
-      -- All submitted entries (pending + approved + rejected)
-      COUNT(CASE WHEN te.id IS NOT NULL THEN 1 END)                     AS submitted_entries,
-      COALESCE(SUM(te.hours), 0)                                        AS submitted_hours,
+        -- All submitted entries (pending + approved + rejected)
+        COUNT(te.id)::int                                                                AS submitted_entries,
+        COALESCE(SUM(te.hours), 0)::float                                               AS submitted_hours,
 
-      -- Admin-approved entries
-      COUNT(CASE WHEN te.status = 'approved' THEN 1 END)                AS admin_approved_entries,
-      COALESCE(SUM(CASE WHEN te.status = 'approved' THEN te.hours END), 0)
-                                                                        AS admin_approved_hours,
+        -- Admin-approved entries
+        COUNT(te.id) FILTER (WHERE te.status = 'approved')::int                         AS admin_approved_entries,
+        COALESCE(SUM(te.hours) FILTER (WHERE te.status = 'approved'), 0)::float         AS admin_approved_hours,
 
-      -- Admin-approved AND client-approved
-      COUNT(CASE WHEN te.status = 'approved'
-                 AND te.client_approval_status = 'approved' THEN 1 END) AS client_approved_entries,
-      COALESCE(SUM(CASE WHEN te.status = 'approved'
-                        AND te.client_approval_status = 'approved'
-                        THEN te.hours END), 0)                          AS client_approved_hours,
+        -- Admin-approved AND client-approved
+        COUNT(te.id) FILTER (
+          WHERE te.status = 'approved' AND te.client_approval_status = 'approved'
+        )::int                                                                           AS client_approved_entries,
+        COALESCE(SUM(te.hours) FILTER (
+          WHERE te.status = 'approved' AND te.client_approval_status = 'approved'
+        ), 0)::float                                                                     AS client_approved_hours,
 
-      -- Admin-approved but pending client review
-      COUNT(CASE WHEN te.status = 'approved'
-                 AND (te.client_approval_status IS NULL
-                      OR te.client_approval_status = 'pending') THEN 1 END)
-                                                                        AS pending_client_entries,
-      COALESCE(SUM(CASE WHEN te.status = 'approved'
-                        AND (te.client_approval_status IS NULL
-                             OR te.client_approval_status = 'pending')
-                        THEN te.hours END), 0)                          AS pending_client_hours,
+        -- Admin-approved but pending client review
+        COUNT(te.id) FILTER (
+          WHERE te.status = 'approved'
+            AND (te.client_approval_status IS NULL OR te.client_approval_status = 'pending')
+        )::int                                                                           AS pending_client_entries,
+        COALESCE(SUM(te.hours) FILTER (
+          WHERE te.status = 'approved'
+            AND (te.client_approval_status IS NULL OR te.client_approval_status = 'pending')
+        ), 0)::float                                                                     AS pending_client_hours,
 
-      -- Admin-approved but client-rejected
-      COUNT(CASE WHEN te.status = 'approved'
-                 AND te.client_approval_status = 'rejected' THEN 1 END) AS client_rejected_entries,
-      COALESCE(SUM(CASE WHEN te.status = 'approved'
-                        AND te.client_approval_status = 'rejected'
-                        THEN te.hours END), 0)                          AS client_rejected_hours,
+        -- Admin-approved but client-rejected
+        COUNT(te.id) FILTER (
+          WHERE te.status = 'approved' AND te.client_approval_status = 'rejected'
+        )::int                                                                           AS client_rejected_entries,
+        COALESCE(SUM(te.hours) FILTER (
+          WHERE te.status = 'approved' AND te.client_approval_status = 'rejected'
+        ), 0)::float                                                                     AS client_rejected_hours,
 
-      -- Admin-pending (not yet reviewed by admin)
-      COUNT(CASE WHEN te.status = 'pending' THEN 1 END)                 AS admin_pending_entries,
+        -- Admin-pending (not yet reviewed by admin)
+        COUNT(te.id) FILTER (WHERE te.status = 'pending')::int                          AS admin_pending_entries,
 
-      -- Admin-rejected
-      COUNT(CASE WHEN te.status = 'rejected' THEN 1 END)                AS admin_rejected_entries
+        -- Admin-rejected
+        COUNT(te.id) FILTER (WHERE te.status = 'rejected')::int                         AS admin_rejected_entries
 
-    FROM candidates c
-    LEFT JOIN time_entries te
-      ON te.candidate_id = c.id ${dateFilter.replace('AND te.date', 'AND te.date')}
-    GROUP BY c.id
-    ORDER BY c.name
-  `).all(...p);
+      FROM candidates c
+      LEFT JOIN time_entries te
+        ON te.candidate_id = c.id ${dateFilter}
+      GROUP BY c.id, c.name, c.hourly_rate
+      ORDER BY c.name
+    `, p);
 
-  const processed = rows.map(r => {
-    // Coerce PostgreSQL numeric strings → JS numbers
-    const admin_approved_hours  = parseFloat(r.admin_approved_hours)  || 0;
-    const client_approved_hours = parseFloat(r.client_approved_hours) || 0;
-    const client_rejected_hours = parseFloat(r.client_rejected_hours) || 0;
-    const pending_client_hours  = parseFloat(r.pending_client_hours)  || 0;
-    const submitted_hours       = parseFloat(r.submitted_hours)       || 0;
-    const hourly_rate           = parseFloat(r.hourly_rate)           || 0;
+    const processed = result.rows.map(r => {
+      const hourly_rate           = parseFloat(r.hourly_rate)           || 0;
+      const admin_approved_hours  = parseFloat(r.admin_approved_hours)  || 0;
+      const client_approved_hours = parseFloat(r.client_approved_hours) || 0;
+      const client_rejected_hours = parseFloat(r.client_rejected_hours) || 0;
+      const pending_client_hours  = parseFloat(r.pending_client_hours)  || 0;
+      const submitted_hours       = parseFloat(r.submitted_hours)       || 0;
 
-    const discrepancy_hours  = admin_approved_hours - client_approved_hours;
-    const invoiceable_hours  = client_approved_hours;
-    const invoiceable_amount = invoiceable_hours  * hourly_rate;
-    const at_risk_amount     = client_rejected_hours * hourly_rate;
-    const pending_amount     = pending_client_hours  * hourly_rate;
+      const discrepancy_hours  = admin_approved_hours - client_approved_hours;
+      const invoiceable_hours  = client_approved_hours;
+      const invoiceable_amount = invoiceable_hours  * hourly_rate;
+      const at_risk_amount     = client_rejected_hours * hourly_rate;
+      const pending_amount     = pending_client_hours  * hourly_rate;
 
-    const publish_status =
-      admin_approved_hours === 0  ? 'no_hours'
-      : pending_client_hours > 0  ? 'pending_client'
-      : client_rejected_hours > 0 && pending_client_hours === 0 ? 'has_rejections'
-      : discrepancy_hours <= 0.001 ? 'ready'
-      :                              'discrepancy';
+      const publish_status =
+        admin_approved_hours === 0                                      ? 'no_hours'
+        : pending_client_hours > 0                                      ? 'pending_client'
+        : client_rejected_hours > 0 && pending_client_hours === 0      ? 'has_rejections'
+        : discrepancy_hours <= 0.001                                    ? 'ready'
+        :                                                                 'discrepancy';
 
-    return {
-      ...r,
-      submitted_hours,
-      admin_approved_hours,
-      client_approved_hours,
-      client_rejected_hours,
-      pending_client_hours,
-      hourly_rate,
-      discrepancy_hours,
-      invoiceable_hours,
-      invoiceable_amount,
-      at_risk_amount,
-      pending_amount,
-      publish_status,
+      return {
+        ...r,
+        hourly_rate,
+        submitted_hours,
+        admin_approved_hours,
+        client_approved_hours,
+        client_rejected_hours,
+        pending_client_hours,
+        discrepancy_hours,
+        invoiceable_hours,
+        invoiceable_amount,
+        at_risk_amount,
+        pending_amount,
+        publish_status,
+      };
+    });
+
+    const summary = {
+      total_candidates:        processed.length,
+      total_submitted_hours:   processed.reduce((s, r) => s + r.submitted_hours,       0),
+      total_admin_approved:    processed.reduce((s, r) => s + r.admin_approved_hours,  0),
+      total_client_approved:   processed.reduce((s, r) => s + r.client_approved_hours, 0),
+      total_pending_client:    processed.reduce((s, r) => s + r.pending_client_hours,  0),
+      total_rejected_client:   processed.reduce((s, r) => s + r.client_rejected_hours, 0),
+      total_discrepancy_hours: processed.reduce((s, r) => s + r.discrepancy_hours,     0),
+      total_invoiceable:       processed.reduce((s, r) => s + r.invoiceable_amount,    0),
+      ready:                   processed.filter(r => r.publish_status === 'ready').length,
+      pending_client:          processed.filter(r => r.publish_status === 'pending_client').length,
+      has_rejections:          processed.filter(r => r.publish_status === 'has_rejections').length,
+      no_hours:                processed.filter(r => r.publish_status === 'no_hours').length,
     };
-  });
 
-  const summary = {
-    total_candidates:        processed.length,
-    total_submitted_hours:   processed.reduce((s, r) => s + r.submitted_hours,       0),
-    total_admin_approved:    processed.reduce((s, r) => s + r.admin_approved_hours,  0),
-    total_client_approved:   processed.reduce((s, r) => s + r.client_approved_hours, 0),
-    total_pending_client:    processed.reduce((s, r) => s + r.pending_client_hours,  0),
-    total_rejected_client:   processed.reduce((s, r) => s + r.client_rejected_hours, 0),
-    total_discrepancy_hours: processed.reduce((s, r) => s + r.discrepancy_hours,     0),
-    total_invoiceable:       processed.reduce((s, r) => s + r.invoiceable_amount,    0),
-    ready:                   processed.filter(r => r.publish_status === 'ready').length,
-    pending_client:          processed.filter(r => r.publish_status === 'pending_client').length,
-    has_rejections:          processed.filter(r => r.publish_status === 'has_rejections').length,
-    no_hours:                processed.filter(r => r.publish_status === 'no_hours').length,
-  };
-
-  res.json({ view: 'timesheet', rows: processed, summary, period: { from: from || null, to: to || null } });
+    res.json({ view: 'timesheet', rows: processed, summary, period: { from: from || null, to: to || null } });
   } catch (err) {
     console.error('[payroll/timesheetDiscrepancyView]', err.message);
     res.status(500).json({ error: err.message });
@@ -231,27 +249,36 @@ router.get('/timesheet-detail/:candidateId', async (req, res) => {
   try {
     const { candidateId } = req.params;
     const { from, to } = req.query;
+
+    const candidateResult = await req.db.query(
+      'SELECT id, name, hourly_rate::float AS hourly_rate FROM candidates WHERE id = $1',
+      [candidateId]
+    );
+    const candidate = candidateResult.rows[0];
+    if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
+
     const p = [candidateId];
     const dateFilter = buildDateFilter('te', from, to, p);
 
-    const candidate = await req.db.prepare('SELECT id, name, hourly_rate FROM candidates WHERE id = ?').get(candidateId);
-    if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
-
-    const entries = await req.db.prepare(`
+    const entriesResult = await req.db.query(`
       SELECT
-        te.id, te.date, te.hours, te.description, te.project,
-        te.status AS admin_status,
+        te.id,
+        te.date,
+        te.hours::float               AS hours,
+        te.description,
+        te.project,
+        te.status                     AS admin_status,
         te.client_approval_status,
         te.client_approval_note,
         te.client_approved_at,
         (te.hours * c.hourly_rate)::float AS amount
       FROM time_entries te
       JOIN candidates c ON c.id = te.candidate_id
-      WHERE te.candidate_id = ? ${dateFilter}
+      WHERE te.candidate_id = $1 ${dateFilter}
       ORDER BY te.date DESC
-    `).all(...p);
+    `, p);
 
-    res.json({ candidate, entries });
+    res.json({ candidate, entries: entriesResult.rows });
   } catch (err) {
     console.error('[payroll/timesheet-detail]', err.message);
     res.status(500).json({ error: err.message });

@@ -19,10 +19,11 @@ router.use(authenticate, requireAdmin, injectTenantDb);
 
 // ── GET settings ─────────────────────────────────────────────────────────────
 router.get('/settings', async (req, res) => {
-  const s = await req.db.prepare('SELECT * FROM email_settings WHERE id = 1').get();
+  const result = await req.db.query('SELECT * FROM email_settings WHERE id = 1');
+  const s = result.rows[0];
   if (!s) return res.json({ id: 1, provider: 'gmail', imap_host: '', imap_port: 993,
     imap_user: '', imap_folder: 'INBOX', search_subject: 'payment', poll_interval: 30,
-    enabled: 0, last_polled_at: null, last_uid: 0 });
+    enabled: false, last_polled_at: null, last_uid: 0 });
 
   // Never expose raw password
   res.json({ ...s, imap_password: s.imap_password ? '••••••••' : '' });
@@ -33,7 +34,8 @@ router.post('/settings', async (req, res) => {
   const { provider, imap_host, imap_port, imap_user, imap_password,
           imap_folder, search_subject, poll_interval, enabled } = req.body;
 
-  const existing = await req.db.prepare('SELECT imap_password FROM email_settings WHERE id = 1').get();
+  const existingResult = await req.db.query('SELECT imap_password FROM email_settings WHERE id = 1');
+  const existing = existingResult.rows[0];
   const rawPass = imap_password && !imap_password.includes('•')
     ? imap_password                          // new plaintext password from form
     : (existing ? decrypt(existing.imap_password) : null); // keep existing (decrypted)
@@ -43,12 +45,24 @@ router.post('/settings', async (req, res) => {
   const hosts = { gmail: 'imap.gmail.com', outlook: 'outlook.office365.com', imap: imap_host };
   const resolvedHost = imap_host || hosts[provider] || null;
 
-  await req.db.prepare(`
-    INSERT OR REPLACE INTO email_settings
+  // PostgreSQL: use INSERT ... ON CONFLICT ... DO UPDATE
+  await req.db.query(`
+    INSERT INTO email_settings
       (id, provider, imap_host, imap_port, imap_user, imap_password,
        imap_folder, search_subject, poll_interval, enabled, updated_at)
-    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-  `).run(
+    VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      provider = $1,
+      imap_host = $2,
+      imap_port = $3,
+      imap_user = $4,
+      imap_password = $5,
+      imap_folder = $6,
+      search_subject = $7,
+      poll_interval = $8,
+      enabled = $9,
+      updated_at = NOW()
+  `, [
     provider || 'gmail',
     resolvedHost,
     parseInt(imap_port) || 993,
@@ -57,10 +71,11 @@ router.post('/settings', async (req, res) => {
     imap_folder || 'INBOX',
     search_subject || 'payment',
     parseInt(poll_interval) || 30,
-    enabled ? 1 : 0
-  );
+    enabled ? true : false
+  ]);
 
-  const updated = await req.db.prepare('SELECT * FROM email_settings WHERE id = 1').get();
+  const updatedResult = await req.db.query('SELECT * FROM email_settings WHERE id = 1');
+  const updated = updatedResult.rows[0];
   res.json({ ...updated, imap_password: pass ? '••••••••' : '' });
 });
 
@@ -73,7 +88,8 @@ function settingsWithDecryptedPass(s) {
 // ── POST test connection ───────────────────────────────────────────────────────
 router.post('/test', async (req, res) => {
   try {
-    const s = settingsWithDecryptedPass(await req.db.prepare('SELECT * FROM email_settings WHERE id = 1').get());
+    const settingsResult = await req.db.query('SELECT * FROM email_settings WHERE id = 1');
+    const s = settingsWithDecryptedPass(settingsResult.rows[0]);
     if (!s?.imap_user || !s?.imap_password) {
       return res.status(400).json({ ok: false, message: 'Please save email credentials first.' });
     }
@@ -87,7 +103,8 @@ router.post('/test', async (req, res) => {
 // ── POST poll (manual trigger) ────────────────────────────────────────────────
 router.post('/poll', async (req, res) => {
   try {
-    const s = settingsWithDecryptedPass(await req.db.prepare('SELECT * FROM email_settings WHERE id = 1').get());
+    const settingsResult = await req.db.query('SELECT * FROM email_settings WHERE id = 1');
+    const s = settingsWithDecryptedPass(settingsResult.rows[0]);
     if (!s?.imap_user || !s?.imap_password) {
       return res.status(400).json({ error: 'Email credentials not configured.' });
     }
@@ -118,10 +135,12 @@ router.get('/imports', async (req, res) => {
     WHERE 1=1
   `;
   const params = [];
-  if (status) { sql += ' AND epi.status = ?'; params.push(status); }
+  let paramIndex = 1;
+  if (status) { sql += ` AND epi.status = $${paramIndex}`; params.push(status); paramIndex++; }
   sql += ' ORDER BY epi.created_at DESC';
 
-  const rows = await req.db.prepare(sql).all(...params);
+  const result = await req.db.query(sql, params);
+  const rows = result.rows;
   res.json(rows.map(r => ({
     ...r,
     parsed_employee_names: tryParse(r.parsed_employee_names, []),
@@ -131,7 +150,7 @@ router.get('/imports', async (req, res) => {
 
 // ── GET single import ─────────────────────────────────────────────────────────
 router.get('/imports/:id', async (req, res) => {
-  const row = await req.db.prepare(`
+  const result = await req.db.query(`
     SELECT
       epi.*,
       i.invoice_number,
@@ -147,9 +166,10 @@ router.get('/imports/:id', async (req, res) => {
     LEFT JOIN invoices   i  ON epi.matched_invoice_id = i.id
     LEFT JOIN candidates c  ON i.candidate_id = c.id
     LEFT JOIN clients    cl ON i.client_id = cl.id
-    WHERE epi.id = ?
-  `).get(req.params.id);
+    WHERE epi.id = $1
+  `, [req.params.id]);
 
+  const row = result.rows[0];
   if (!row) return res.status(404).json({ error: 'Import not found' });
 
   res.json({
@@ -161,7 +181,8 @@ router.get('/imports/:id', async (req, res) => {
 
 // ── POST confirm ──────────────────────────────────────────────────────────────
 router.post('/imports/:id/confirm', async (req, res) => {
-  const imp = await req.db.prepare('SELECT * FROM email_payment_imports WHERE id = ?').get(req.params.id);
+  const impResult = await req.db.query('SELECT * FROM email_payment_imports WHERE id = $1', [req.params.id]);
+  const imp = impResult.rows[0];
   if (!imp) return res.status(404).json({ error: 'Import not found' });
   if (imp.status !== 'pending') return res.status(400).json({ error: `Already ${imp.status}` });
 
@@ -178,65 +199,82 @@ router.post('/imports/:id/confirm', async (req, res) => {
   if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ error: 'Valid payment amount required.' });
   if (!payment_date) return res.status(400).json({ error: 'Payment date required.' });
 
-  await req.db.transaction(async () => {
+  const client = await req.db.connect();
+  try {
+    await client.query('BEGIN');
+
     // 1. Record the invoice payment
-    await req.db.prepare(`
+    await client.query(`
       INSERT INTO invoice_payments
         (invoice_id, amount, payment_date, payment_method, reference_number, notes, recorded_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(invoice_id, parseFloat(amount), payment_date, payment_method,
-           reference_number || null,
-           notes || `Auto-imported from email: ${imp.email_subject}`,
-           req.user.id);
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [invoice_id, parseFloat(amount), payment_date, payment_method,
+        reference_number || null,
+        notes || `Auto-imported from email: ${imp.email_subject}`,
+        req.user.id]);
 
     // 2. Check if invoice is now fully paid
-    const invoice = await req.db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice_id);
-    const paidRow = await req.db.prepare(
-      'SELECT COALESCE(SUM(amount),0) AS total FROM invoice_payments WHERE invoice_id = ?'
-    ).get(invoice_id);
-    const totalPaid = paidRow.total;
+    const invoiceResult = await client.query('SELECT * FROM invoices WHERE id = $1', [invoice_id]);
+    const invoice = invoiceResult.rows[0];
+
+    const paidRowResult = await client.query(
+      'SELECT COALESCE(SUM(amount),0) AS total FROM invoice_payments WHERE invoice_id = $1',
+      [invoice_id]
+    );
+    const totalPaid = paidRowResult.rows[0].total;
 
     if (totalPaid >= invoice.total_amount - 0.01) {
-      await req.db.prepare("UPDATE invoices SET status = 'paid', updated_at = NOW() WHERE id = ?").run(invoice_id);
+      await client.query("UPDATE invoices SET status = $1, updated_at = NOW() WHERE id = $2", ['paid', invoice_id]);
     }
 
     // 3. Mark import confirmed
-    await req.db.prepare(`
+    await client.query(`
       UPDATE email_payment_imports
-      SET status = 'confirmed', matched_invoice_id = ?, confirmed_by = ?, confirmed_at = NOW()
-      WHERE id = ?
-    `).run(invoice_id, req.user.id, imp.id);
-  });
+      SET status = $1, matched_invoice_id = $2, confirmed_by = $3, confirmed_at = NOW()
+      WHERE id = $4
+    `, ['confirmed', invoice_id, req.user.id, imp.id]);
 
-  const updated = await req.db.prepare('SELECT * FROM email_payment_imports WHERE id = ?').get(imp.id);
-  const invoice = await req.db.prepare(`
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  const updatedResult = await req.db.query('SELECT * FROM email_payment_imports WHERE id = $1', [imp.id]);
+  const updated = updatedResult.rows[0];
+
+  const invoiceResult = await req.db.query(`
     SELECT i.*, c.name AS candidate_name, cl.name AS client_name
     FROM invoices i JOIN candidates c ON i.candidate_id = c.id
     LEFT JOIN clients cl ON i.client_id = cl.id
-    WHERE i.id = ?
-  `).get(invoice_id);
+    WHERE i.id = $1
+  `, [invoice_id]);
+  const invoiceData = invoiceResult.rows[0];
 
-  res.json({ import: updated, invoice });
+  res.json({ import: updated, invoice: invoiceData });
 });
 
 // ── POST reject ────────────────────────────────────────────────────────────────
 router.post('/imports/:id/reject', async (req, res) => {
-  const imp = await req.db.prepare('SELECT * FROM email_payment_imports WHERE id = ?').get(req.params.id);
+  const impResult = await req.db.query('SELECT * FROM email_payment_imports WHERE id = $1', [req.params.id]);
+  const imp = impResult.rows[0];
   if (!imp) return res.status(404).json({ error: 'Import not found' });
   if (imp.status !== 'pending') return res.status(400).json({ error: `Already ${imp.status}` });
 
-  await req.db.prepare(`
+  await req.db.query(`
     UPDATE email_payment_imports
-    SET status = 'rejected', confirmed_by = ?, confirmed_at = NOW()
-    WHERE id = ?
-  `).run(req.user.id, imp.id);
+    SET status = $1, confirmed_by = $2, confirmed_at = NOW()
+    WHERE id = $3
+  `, ['rejected', req.user.id, imp.id]);
 
   res.json({ success: true });
 });
 
 // ── DELETE single import (admin cleanup) ──────────────────────────────────────
 router.delete('/imports/:id', async (req, res) => {
-  await req.db.prepare('DELETE FROM email_payment_imports WHERE id = ?').run(req.params.id);
+  await req.db.query('DELETE FROM email_payment_imports WHERE id = $1', [req.params.id]);
   res.json({ success: true });
 });
 

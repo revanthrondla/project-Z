@@ -8,32 +8,35 @@ const router = express.Router();
 router.get('/', authenticate, injectTenantDb, async (req, res) => {
   try {
     if (req.user.role === 'admin') {
-      const clients = await req.db.prepare(`
+      const result = await req.db.query(`
         SELECT c.*, COUNT(ca.id) as candidate_count
         FROM clients c
         LEFT JOIN candidates ca ON ca.client_id = c.id AND ca.status = 'active'
         GROUP BY c.id
         ORDER BY c.name
-      `).all();
-      return res.json(clients);
+      `);
+      return res.json(result.rows);
     }
 
     if (req.user.role === 'client') {
-      const client = await req.db.prepare(`
+      const result = await req.db.query(`
         SELECT c.*, COUNT(ca.id) as candidate_count
         FROM clients c
         LEFT JOIN candidates ca ON ca.client_id = c.id AND ca.status = 'active'
-        WHERE c.id = ?
+        WHERE c.id = $1
         GROUP BY c.id
-      `).get(req.user.clientId);
+      `, [req.user.clientId]);
+      const client = result.rows[0];
       return res.json(client ? [client] : []);
     }
 
     // Candidate: only their assigned client
     if (req.user.role === 'candidate') {
-      const cand = await req.db.prepare('SELECT client_id FROM candidates WHERE id = ?').get(req.user.candidateId);
+      const candResult = await req.db.query('SELECT client_id FROM candidates WHERE id = $1', [req.user.candidateId]);
+      const cand = candResult.rows[0];
       if (!cand || !cand.client_id) return res.json([]);
-      const client = await req.db.prepare('SELECT id, name, contact_name, contact_email FROM clients WHERE id = ?').get(cand.client_id);
+      const clientResult = await req.db.query('SELECT id, name, contact_name, contact_email FROM clients WHERE id = $1', [cand.client_id]);
+      const client = clientResult.rows[0];
       return res.json(client ? [client] : []);
     }
 
@@ -54,11 +57,13 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     if (req.user.role === 'candidate') {
-      const cand = await req.db.prepare('SELECT client_id FROM candidates WHERE id = ?').get(req.user.candidateId);
+      const candResult = await req.db.query('SELECT client_id FROM candidates WHERE id = $1', [req.user.candidateId]);
+      const cand = candResult.rows[0];
       if (!cand || cand.client_id !== id) return res.status(403).json({ error: 'Access denied' });
     }
 
-    const client = await req.db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
+    const result = await req.db.query('SELECT * FROM clients WHERE id = $1', [id]);
+    const client = result.rows[0];
     if (!client) return res.status(404).json({ error: 'Client not found' });
     res.json(client);
   } catch (err) {
@@ -72,11 +77,14 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
     const { name, contact_name, contact_email, address, billing_currency } = req.body;
     if (!name) return res.status(400).json({ error: 'Client name is required' });
 
-    const result = await req.db.prepare(
-      'INSERT INTO clients (name, contact_name, contact_email, address, billing_currency) VALUES (?, ?, ?, ?, ?)'
-    ).run(name, contact_name || null, contact_email || null, address || null, billing_currency || 'USD');
+    const result = await req.db.query(
+      'INSERT INTO clients (name, contact_name, contact_email, address, billing_currency) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [name, contact_name || null, contact_email || null, address || null, billing_currency || 'USD']
+    );
 
-    const newClient = await req.db.prepare('SELECT * FROM clients WHERE id = ?').get(result.lastInsertRowid);
+    const newId = result.rows[0].id;
+    const newClientResult = await req.db.query('SELECT * FROM clients WHERE id = $1', [newId]);
+    const newClient = newClientResult.rows[0];
     res.status(201).json(newClient);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -87,22 +95,24 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
 router.put('/:id', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   try {
     const { name, contact_name, contact_email, address, billing_currency } = req.body;
-    const client = await req.db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id);
+    const clientResult = await req.db.query('SELECT * FROM clients WHERE id = $1', [req.params.id]);
+    const client = clientResult.rows[0];
     if (!client) return res.status(404).json({ error: 'Client not found' });
 
-    await req.db.prepare(`
-      UPDATE clients SET name = ?, contact_name = ?, contact_email = ?, address = ?, billing_currency = ?
-      WHERE id = ?
-    `).run(
+    await req.db.query(`
+      UPDATE clients SET name = $1, contact_name = $2, contact_email = $3, address = $4, billing_currency = $5
+      WHERE id = $6
+    `, [
       name || client.name,
       contact_name !== undefined ? contact_name : client.contact_name,
       contact_email !== undefined ? contact_email : client.contact_email,
       address !== undefined ? address : client.address,
       billing_currency || client.billing_currency,
       req.params.id
-    );
+    ]);
 
-    res.json(await req.db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id));
+    const updatedResult = await req.db.query('SELECT * FROM clients WHERE id = $1', [req.params.id]);
+    res.json(updatedResult.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -111,9 +121,10 @@ router.put('/:id', authenticate, requireAdmin, injectTenantDb, async (req, res) 
 // DELETE /api/clients/:id — Admin only
 router.delete('/:id', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   try {
-    const client = await req.db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id);
+    const clientResult = await req.db.query('SELECT * FROM clients WHERE id = $1', [req.params.id]);
+    const client = clientResult.rows[0];
     if (!client) return res.status(404).json({ error: 'Client not found' });
-    await req.db.prepare('DELETE FROM clients WHERE id = ?').run(req.params.id);
+    await req.db.query('DELETE FROM clients WHERE id = $1', [req.params.id]);
     res.json({ message: 'Client deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
