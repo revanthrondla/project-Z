@@ -47,6 +47,16 @@ router.post('/login', async (req, res) => {
       const valid = bcrypt.compareSync(password, superAdmin.password_hash);
       if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
+      // ── MFA check for super-admin ──────────────────────────────────────────
+      if (superAdmin.mfa_enabled && superAdmin.mfa_secret) {
+        const mfaToken = jwt.sign(
+          { userId: superAdmin.id, email: superAdmin.email, name: superAdmin.name, role: 'super_admin', type: 'mfa_pending' },
+          JWT_SECRET,
+          { expiresIn: '2m' }
+        );
+        return res.json({ mfaRequired: true, mfaToken });
+      }
+
       const token = jwt.sign(
         { id: superAdmin.id, email: superAdmin.email, name: superAdmin.name, role: 'super_admin' },
         JWT_SECRET,
@@ -87,6 +97,30 @@ router.post('/login', async (req, res) => {
 
       const valid = bcrypt.compareSync(password, user.password_hash);
       if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+
+      // ── MFA check for tenant user ────────────────────────────────────────────
+      if (user.mfa_enabled && user.mfa_secret) {
+        let candidateId = null;
+        if (user.role === 'candidate') {
+          const candResult = await tenantDb.query('SELECT id FROM candidates WHERE user_id = $1', [user.id]);
+          if (candResult.rows[0]) candidateId = candResult.rows[0].id;
+        }
+        let clientId = null;
+        if (user.role === 'client') {
+          const clientRecResult = await tenantDb.query('SELECT id FROM clients WHERE user_id = $1', [user.id]);
+          if (clientRecResult.rows[0]) clientId = clientRecResult.rows[0].id;
+        }
+        const mfaToken = jwt.sign(
+          {
+            userId: user.id, email: user.email, name: user.name, role: user.role,
+            candidateId, clientId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+            mustChangePw: !!(user.must_change_password), type: 'mfa_pending',
+          },
+          JWT_SECRET,
+          { expiresIn: '2m' }
+        );
+        return res.json({ mfaRequired: true, mfaToken });
+      }
 
       let candidateId = null;
       if (user.role === 'candidate') {

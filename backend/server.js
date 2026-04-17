@@ -10,6 +10,8 @@ const cookieParser = require('cookie-parser');
 const path         = require('path');
 
 const authRoutes             = require('./routes/auth');
+const mfaRoutes              = require('./routes/mfa');
+const ssoRoutes              = require('./routes/sso');
 const candidateRoutes        = require('./routes/candidates');
 const clientRoutes           = require('./routes/clients');
 const timeEntryRoutes        = require('./routes/timeEntries');
@@ -130,6 +132,8 @@ app.use('/api', (req, res, next) => {
 app.use('/api/public/demo-requests', demoRequestRoutes);
 
 app.use('/api/auth',              authRoutes);
+app.use('/api/auth/mfa',          mfaRoutes);
+app.use('/api/auth/sso',          ssoRoutes);
 app.use('/api/super-admin',       superAdminRoutes);
 app.use('/api/candidates',        candidateRoutes);
 app.use('/api/clients',           clientRoutes);

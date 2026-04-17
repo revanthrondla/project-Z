@@ -32,6 +32,9 @@ const TENANT_DDL = `
     password_hash        TEXT NOT NULL,
     role                 TEXT NOT NULL CHECK(role IN ('admin','candidate','client')),
     must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_enabled          BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_secret           TEXT,
+    mfa_backup_codes     JSONB DEFAULT '[]',
     created_at           TIMESTAMPTZ DEFAULT NOW(),
     updated_at           TIMESTAMPTZ DEFAULT NOW()
   );
@@ -789,6 +792,12 @@ async function createTenantSchema(slug) {
     await client.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
     await client.query(`SET search_path TO "${schema}"`);
     await client.query(TENANT_DDL);
+
+    // ── Column migrations (idempotent) ─────────────────────────────────────────
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret TEXT`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_backup_codes JSONB DEFAULT '[]'`);
+
     console.log(`✅ Schema ready: ${schema}`);
   } finally {
     client.release();

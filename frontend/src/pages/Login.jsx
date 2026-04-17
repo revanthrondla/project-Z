@@ -1,18 +1,65 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../api';
 import FlowLogo from '../components/FlowLogo';
 
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, verifyMfa } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   const [form, setForm] = useState({ email: '', password: '', companyCode: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // MFA state
+  const [mfaState, setMfaState] = useState(null); // { mfaToken, companySlug }
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [useBackupCode, setUseBackupCode] = useState(false);
+
+  // SSO state
+  const [ssoConfig, setSsoConfig] = useState(null);
+  const ssoCheckTimeoutRef = useRef(null);
+
   const set = field => e => setForm(f => ({ ...f, [field]: e.target.value }));
+
+  // Check for SSO error in URL
+  useEffect(() => {
+    const ssoError = searchParams.get('sso_error');
+    if (ssoError) {
+      setError(decodeURIComponent(ssoError));
+    }
+  }, [searchParams]);
+
+  // Debounced SSO config check
+  useEffect(() => {
+    if (ssoCheckTimeoutRef.current) {
+      clearTimeout(ssoCheckTimeoutRef.current);
+    }
+
+    const companySlug = form.companyCode.trim().toLowerCase();
+    if (!companySlug) {
+      setSsoConfig(null);
+      return;
+    }
+
+    ssoCheckTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get(`/api/auth/sso/config?tenant=${companySlug}`);
+        setSsoConfig(res.data);
+      } catch {
+        setSsoConfig(null);
+      }
+    }, 400);
+
+    return () => {
+      if (ssoCheckTimeoutRef.current) clearTimeout(ssoCheckTimeoutRef.current);
+    };
+  }, [form.companyCode]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -20,13 +67,48 @@ export default function Login() {
     setLoading(true);
     try {
       const companySlug = form.companyCode.trim() || undefined;
-      const user = await login(form.email, form.password, companySlug);
+      const result = await login(form.email, form.password, companySlug);
+
+      // Check if MFA is required
+      if (result.mfaRequired) {
+        setMfaState({ mfaToken: result.mfaToken, companySlug: result.companySlug });
+        setMfaCode('');
+        setUseBackupCode(false);
+        return;
+      }
+
+      // Normal login path
+      const user = result.user;
       navigate(user.role === 'super_admin' ? '/super-admin/dashboard' : '/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed. Please check your details.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMfaSubmit = async (e) => {
+    e.preventDefault();
+    if (!mfaState) return;
+
+    setError('');
+    setMfaLoading(true);
+    try {
+      const user = await verifyMfa(mfaState.mfaToken, mfaCode);
+      navigate(user.role === 'super_admin' ? '/super-admin/dashboard' : '/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Invalid code. Please try again.');
+      setMfaCode('');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleBackToLogin = () => {
+    setMfaState(null);
+    setMfaCode('');
+    setUseBackupCode(false);
+    setError('');
   };
 
   return (
@@ -89,23 +171,45 @@ export default function Login() {
 
         <div className="w-full max-w-[420px]">
 
-          {/* Back to home */}
+          {/* Back to home or back to login */}
           <div className="mb-6">
-            <a
-              href="/flow-homepage.html"
-              className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-emerald-600 transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to home
-            </a>
+            {mfaState ? (
+              <button
+                type="button"
+                onClick={handleBackToLogin}
+                className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-emerald-600 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to login
+              </button>
+            ) : (
+              <a
+                href="/flow-homepage.html"
+                className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-emerald-600 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to home
+              </a>
+            )}
           </div>
 
           {/* Heading */}
           <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
-            <p className="text-gray-500 text-sm mt-1">Sign in to your Flow account</p>
+            {mfaState ? (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900">Two-Factor Authentication</h2>
+                <p className="text-gray-500 text-sm mt-1">Enter the 6-digit code from your authenticator app</p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
+                <p className="text-gray-500 text-sm mt-1">Sign in to your Flow account</p>
+              </>
+            )}
           </div>
 
           {/* Error */}
@@ -118,92 +222,171 @@ export default function Login() {
             </div>
           )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            {/* Organisation code */}
-            <div>
-              <label className="label" htmlFor="companyCode">
-                Organisation code
-                <span className="text-gray-400 font-normal ml-1">(optional)</span>
-              </label>
-              <input
-                id="companyCode"
-                type="text"
-                className="input font-mono"
-                placeholder="e.g. flow-demo"
-                value={form.companyCode}
-                onChange={set('companyCode')}
-                autoComplete="organization"
-                autoFocus
-              />
-            </div>
-
-            {/* Email */}
-            <div>
-              <label className="label" htmlFor="email">Email address</label>
-              <input
-                id="email"
-                type="email"
-                className="input"
-                placeholder="you@company.com"
-                value={form.email}
-                onChange={set('email')}
-                autoComplete="email"
-                required
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <label className="label" htmlFor="password">Password</label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  className="input pr-10"
-                  placeholder="••••••••"
-                  value={form.password}
-                  onChange={set('password')}
-                  autoComplete="current-password"
-                  required
-                />
+          {/* MFA Form */}
+          {mfaState ? (
+            <form onSubmit={handleMfaSubmit} className="space-y-6" noValidate>
+              {/* MFA Code Input */}
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex gap-1.5 justify-center">
+                  {!useBackupCode ? (
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      pattern="\d{6}"
+                      maxLength="6"
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="000000"
+                      className="text-center text-4xl font-mono tracking-widest border-2 border-gray-300 rounded-xl w-40 py-4 focus:border-emerald-500 focus:outline-none"
+                      autoFocus
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="XXXXXXXX"
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value.toUpperCase())}
+                      maxLength="8"
+                      className="input font-mono text-center tracking-widest"
+                      autoFocus
+                    />
+                  )}
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowPassword(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => {
+                    setUseBackupCode(!useBackupCode);
+                    setMfaCode('');
+                  }}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 underline"
                 >
-                  {showPassword ? (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 4.411m0 0L21 21" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  )}
+                  {useBackupCode ? 'Use authenticator code' : 'Use backup code'}
                 </button>
               </div>
-            </div>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full py-3 text-base mt-2"
-            >
-              {loading ? (
-                <>
-                  <svg className="animate-spin -ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={mfaLoading || (useBackupCode ? mfaCode.length !== 8 : mfaCode.length !== 6)}
+                className="btn-primary w-full py-3 text-base"
+              >
+                {mfaLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    Verifying…
+                  </>
+                ) : 'Verify'}
+              </button>
+            </form>
+          ) : (
+            /* Login Form */
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              {/* Organisation code */}
+              <div>
+                <label className="label" htmlFor="companyCode">
+                  Organisation code
+                  <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                </label>
+                <input
+                  id="companyCode"
+                  type="text"
+                  className="input font-mono"
+                  placeholder="e.g. flow-demo"
+                  value={form.companyCode}
+                  onChange={set('companyCode')}
+                  autoComplete="organization"
+                  autoFocus
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="label" htmlFor="email">Email address</label>
+                <input
+                  id="email"
+                  type="email"
+                  className="input"
+                  placeholder="you@company.com"
+                  value={form.email}
+                  onChange={set('email')}
+                  autoComplete="email"
+                  required
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="label" htmlFor="password">Password</label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    className="input pr-10"
+                    placeholder="••••••••"
+                    value={form.password}
+                    onChange={set('password')}
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 4.411m0 0L21 21" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* SSO Button */}
+              {ssoConfig?.ssoEnabled && ssoConfig?.googleConfigured && form.companyCode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const companySlug = form.companyCode.trim().toLowerCase();
+                    window.location.href = `/api/auth/sso/google?tenant=${companySlug}`;
+                  }}
+                  className="w-full flex items-center justify-center gap-2.5 py-3 px-4 border border-gray-300 rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <text x="12" y="16" fontSize="20" textAnchor="middle" fill="currentColor" fontWeight="bold">G</text>
                   </svg>
-                  Signing in…
-                </>
-              ) : 'Sign in'}
-            </button>
-          </form>
+                  Sign in with Google
+                </button>
+              )}
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary w-full py-3 text-base mt-2"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    Signing in…
+                  </>
+                ) : 'Sign in'}
+              </button>
+            </form>
+          )}
 
         </div>
       </div>

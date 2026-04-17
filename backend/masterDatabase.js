@@ -18,6 +18,9 @@ const MASTER_DDL = `
     name          TEXT NOT NULL,
     email         TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    mfa_enabled   BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_secret    TEXT,
+    mfa_backup_codes JSONB DEFAULT '[]',
     created_at    TIMESTAMPTZ DEFAULT NOW()
   );
 
@@ -34,6 +37,10 @@ const MASTER_DDL = `
     max_candidates INTEGER DEFAULT 100,
     max_clients    INTEGER DEFAULT 50,
     admin_email    TEXT,
+    sso_enabled    BOOLEAN NOT NULL DEFAULT FALSE,
+    sso_provider   TEXT DEFAULT 'google',
+    sso_domain     TEXT,
+    mfa_required   BOOLEAN NOT NULL DEFAULT FALSE,
     created_at     TIMESTAMPTZ DEFAULT NOW(),
     updated_at     TIMESTAMPTZ DEFAULT NOW()
   );
@@ -129,6 +136,17 @@ async function initMaster() {
     await client.query('CREATE SCHEMA IF NOT EXISTS master');
     await client.query('SET search_path TO master');
     await client.query(MASTER_DDL);
+
+    // ── Column migrations (idempotent — safe to run on every start) ────────────
+    // MFA columns on super_admins
+    await client.query(`ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS mfa_secret TEXT`);
+    await client.query(`ALTER TABLE super_admins ADD COLUMN IF NOT EXISTS mfa_backup_codes JSONB DEFAULT '[]'`);
+    // SSO + MFA enforcement on tenants
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sso_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sso_provider TEXT NOT NULL DEFAULT 'google'`);
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sso_domain TEXT`);
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS mfa_required BOOLEAN NOT NULL DEFAULT FALSE`);
 
     // Seed platform_ai_config default row
     await client.query(`

@@ -366,11 +366,423 @@ function AITab() {
   );
 }
 
+// ── Tab: Security ─────────────────────────────────────────────────────────────
+
+function SecurityTab() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // MFA setup state
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaStep, setMfaStep] = useState(null); // null | 'qr' | 'verify' | 'backup'
+  const [qrCode, setQrCode] = useState('');
+  const [secret, setSecret] = useState('');
+  const [verifyCode, setVerifyCode] = useState('');
+  const [backupCodes, setBackupCodes] = useState([]);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [disableMfaCode, setDisableMfaCode] = useState('');
+  const [showDisableModal, setShowDisableModal] = useState(false);
+
+  // Organization settings
+  const [orgConfig, setOrgConfig] = useState(null);
+  const [requireMfa, setRequireMfa] = useState(false);
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [ssoDomain, setSsoDomain] = useState('');
+  const [googleConfigured, setGoogleConfigured] = useState(false);
+  const [orgLoading, setOrgLoading] = useState(true);
+  const [orgSaving, setOrgSaving] = useState(false);
+
+  // Load personal MFA status
+  useEffect(() => {
+    api.get('/api/auth/mfa/status')
+      .then(r => {
+        setMfaEnabled(r.data.enabled);
+      })
+      .catch(() => setError('Failed to load MFA status.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Load organization config
+  useEffect(() => {
+    api.get('/api/auth/sso/admin-config')
+      .then(r => {
+        setOrgConfig(r.data);
+        setRequireMfa(r.data.mfaRequired);
+        setSsoEnabled(r.data.ssoEnabled);
+        setSsoDomain(r.data.ssoDomain || '');
+        setGoogleConfigured(r.data.googleConfigured);
+      })
+      .catch(() => setError('Failed to load organization config.'))
+      .finally(() => setOrgLoading(false));
+  }, []);
+
+  // Start MFA setup
+  const startMfaSetup = async () => {
+    setMfaLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/api/auth/mfa/setup');
+      setQrCode(res.data.qrCode);
+      setSecret(res.data.secret);
+      setMfaStep('qr');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to start MFA setup.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  // Confirm MFA
+  const confirmMfa = async () => {
+    setMfaLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/api/auth/mfa/confirm', {
+        code: verifyCode.replace(/\s/g, ''),
+      });
+      setBackupCodes(res.data.backupCodes);
+      setMfaStep('backup');
+      setMfaEnabled(true);
+      setVerifyCode('');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Invalid code. Please try again.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  // Finish MFA setup
+  const finishMfaSetup = () => {
+    setSuccess('MFA enabled successfully!');
+    setTimeout(() => setSuccess(''), 4000);
+    setMfaStep(null);
+    setQrCode('');
+    setSecret('');
+    setVerifyCode('');
+    setBackupCodes([]);
+  };
+
+  // Disable MFA
+  const disableMfa = async () => {
+    setMfaLoading(true);
+    setError('');
+    try {
+      await api.delete('/api/auth/mfa/disable', {
+        data: { code: disableMfaCode.replace(/\s/g, '') },
+      });
+      setMfaEnabled(false);
+      setShowDisableModal(false);
+      setDisableMfaCode('');
+      setSuccess('MFA disabled successfully.');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to disable MFA.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  // Update organization config
+  const updateOrgConfig = async (updates) => {
+    setOrgSaving(true);
+    setError('');
+    try {
+      await api.put('/api/auth/sso/admin-config', updates);
+      setSuccess('Security settings saved.');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to save settings.');
+    } finally {
+      setOrgSaving(false);
+    }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    setSuccess('Copied to clipboard!');
+    setTimeout(() => setSuccess(''), 2000);
+  };
+
+  if (loading || orgLoading) {
+    return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"/></div>;
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <Banner type="error" message={error} onClose={() => setError('')} />
+      <Banner type="success" message={success} />
+
+      {/* Personal MFA Section */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h2 className="text-base font-semibold text-gray-800 mb-4">Personal MFA</h2>
+
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-sm text-gray-600">Two-Factor Authentication Status</p>
+            <div className="mt-2">
+              {mfaEnabled ? (
+                <span className="inline-block px-3 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">
+                  ✅ Enabled
+                </span>
+              ) : (
+                <span className="inline-block px-3 py-1 bg-gray-100 text-gray-800 text-xs font-semibold rounded-full">
+                  ⭕ Disabled
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {!mfaStep ? (
+          <div className="flex gap-3">
+            {mfaEnabled ? (
+              <button
+                onClick={() => setShowDisableModal(true)}
+                className="btn-secondary text-sm py-2"
+              >
+                Disable MFA
+              </button>
+            ) : (
+              <button
+                onClick={startMfaSetup}
+                disabled={mfaLoading}
+                className="btn-primary text-sm py-2"
+              >
+                {mfaLoading ? 'Setting up…' : 'Enable MFA'}
+              </button>
+            )}
+          </div>
+        ) : mfaStep === 'qr' ? (
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-lg flex flex-col items-center gap-4">
+              <img src={qrCode} alt="MFA QR Code" className="w-48 h-48" />
+              <div className="w-full">
+                <p className="text-xs text-gray-600 mb-2">Manual Entry Code:</p>
+                <div className="flex items-center gap-2 bg-white p-3 rounded border border-gray-200">
+                  <code className="flex-1 font-mono text-sm text-gray-800 break-all">{secret}</code>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(secret)}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setMfaStep('verify')}
+              className="btn-primary w-full text-sm py-2"
+            >
+              I've scanned it
+            </button>
+          </div>
+        ) : mfaStep === 'verify' ? (
+          <div className="space-y-4">
+            <div>
+              <label className="label">Enter 6-digit verification code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="\d{6}"
+                maxLength="6"
+                value={verifyCode}
+                onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="000000"
+                className="text-center text-2xl font-mono tracking-widest border-2 border-gray-300 rounded-xl w-full py-3 focus:border-emerald-500 focus:outline-none"
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={confirmMfa}
+              disabled={mfaLoading || verifyCode.length !== 6}
+              className="btn-primary w-full text-sm py-2"
+            >
+              {mfaLoading ? 'Verifying…' : 'Verify Code'}
+            </button>
+          </div>
+        ) : mfaStep === 'backup' ? (
+          <div className="space-y-4">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-sm font-semibold text-yellow-900 mb-3">
+                Save your backup codes
+              </p>
+              <p className="text-xs text-yellow-800 mb-3">
+                Keep these codes in a safe place. You can use them if you lose access to your authenticator app.
+              </p>
+              <div className="grid grid-cols-2 gap-2 bg-white p-3 rounded border border-yellow-200">
+                {backupCodes.map((code, i) => (
+                  <code key={i} className="font-mono text-sm text-gray-700 break-all">{code}</code>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => copyToClipboard(backupCodes.join('\n'))}
+              className="btn-secondary text-sm py-2 w-full mb-3"
+            >
+              Copy All Codes
+            </button>
+            <button
+              onClick={finishMfaSetup}
+              className="btn-primary w-full text-sm py-2"
+            >
+              Done
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Disable MFA Modal */}
+      {showDisableModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Disable MFA?</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Enter your 6-digit code to disable two-factor authentication.
+            </p>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="\d{6}"
+              maxLength="6"
+              value={disableMfaCode}
+              onChange={(e) => setDisableMfaCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="000000"
+              className="text-center text-2xl font-mono tracking-widest border-2 border-gray-300 rounded-xl w-full py-3 mb-4 focus:border-emerald-500 focus:outline-none"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDisableModal(false);
+                  setDisableMfaCode('');
+                }}
+                className="flex-1 btn-secondary text-sm py-2"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={disableMfa}
+                disabled={mfaLoading || disableMfaCode.length !== 6}
+                className="flex-1 btn-primary text-sm py-2 bg-red-600 hover:bg-red-700"
+              >
+                {mfaLoading ? 'Disabling…' : 'Disable'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Organization Security Section */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h2 className="text-base font-semibold text-gray-800 mb-4">Organisation Security</h2>
+
+        {!googleConfigured && (
+          <div className="mb-4 flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
+            <span className="text-sm shrink-0">ℹ️</span>
+            <div>
+              Google SSO requires <code className="bg-blue-100 px-1 rounded">GOOGLE_CLIENT_ID</code> to be configured on the server.
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {/* Require MFA Toggle */}
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-gray-900">Require MFA for all users</p>
+              <p className="text-xs text-gray-500 mt-0.5">All users must enable two-factor authentication</p>
+            </div>
+            <button
+              onClick={() => {
+                setRequireMfa(!requireMfa);
+                updateOrgConfig({ mfaRequired: !requireMfa });
+              }}
+              disabled={orgSaving}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                requireMfa
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {requireMfa ? 'On' : 'Off'}
+            </button>
+          </div>
+
+          {/* SSO Toggle */}
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-gray-900">Enable Google SSO</p>
+              <p className="text-xs text-gray-500 mt-0.5">Allow users to sign in with Google</p>
+            </div>
+            <button
+              onClick={() => {
+                setSsoEnabled(!ssoEnabled);
+                updateOrgConfig({ ssoEnabled: !ssoEnabled });
+              }}
+              disabled={orgSaving}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                ssoEnabled
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {ssoEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+
+          {/* Allowed Email Domain */}
+          {ssoEnabled && (
+            <div>
+              <label className="label">Allowed email domain (optional)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={ssoDomain}
+                  onChange={(e) => setSsoDomain(e.target.value)}
+                  placeholder="e.g. acme.com"
+                  className="input flex-1"
+                />
+                <button
+                  onClick={() => updateOrgConfig({ ssoDomain })}
+                  disabled={orgSaving}
+                  className="btn-secondary px-4 py-2"
+                >
+                  Save
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Leave blank to allow any email domain</p>
+            </div>
+          )}
+
+          {/* SSO Login URL */}
+          <div>
+            <label className="label text-gray-600">SSO Login URL</label>
+            <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
+              <code className="flex-1 font-mono text-sm text-gray-700 break-all">
+                {typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://app.example.com/login'}
+              </code>
+              <button
+                onClick={() => copyToClipboard(`${window.location.origin}/login`)}
+                className="text-xs text-gray-500 hover:text-gray-700"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Root Settings page with tabs ──────────────────────────────────────────────
 
 const TABS = [
-  { key: 'general', label: '⚙️ General',      component: GeneralTab },
-  { key: 'ai',      label: '🤖 AI Assistant', component: AITab      },
+  { key: 'general',   label: '⚙️ General',      component: GeneralTab    },
+  { key: 'ai',        label: '🤖 AI Assistant', component: AITab         },
+  { key: 'security',  label: '🔒 Security',     component: SecurityTab   },
 ];
 
 export default function Settings() {

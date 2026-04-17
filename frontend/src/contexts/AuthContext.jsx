@@ -36,15 +36,51 @@ export function AuthProvider({ children }) {
    *
    * The server sets an httpOnly cookie; we no longer store the token in the
    * browser — only the user profile for display purposes.
+   *
+   * Returns:
+   *  - If MFA required: { mfaRequired: true, mfaToken, companySlug? }
+   *  - Otherwise: { user } (same as before)
    */
   const login = async (email, password, companySlug) => {
     const payload = { email, password };
     if (companySlug) payload.companySlug = companySlug.trim().toLowerCase();
 
     const res = await api.post('/api/auth/login', payload);
+
+    // Check if MFA is required
+    if (res.data.mfaRequired) {
+      return {
+        mfaRequired: true,
+        mfaToken: res.data.mfaToken,
+        companySlug: companySlug,
+      };
+    }
+
+    // Normal login path
     const { user } = res.data;
 
     // Cache user profile (contains no secrets — only id, name, role, etc.)
+    sessionStorage.setItem('flow_user', JSON.stringify(user));
+    setUser(user);
+    return { user };
+  };
+
+  /**
+   * verifyMfa(mfaToken, code)
+   *  - mfaToken: token from login response
+   *  - code: 6-digit code or 8-char backup code from authenticator app
+   *
+   * Calls POST /api/auth/mfa/verify, sets user on success
+   */
+  const verifyMfa = async (mfaToken, code) => {
+    const res = await api.post('/api/auth/mfa/verify', {
+      mfaToken,
+      code: code.replace(/\s/g, ''), // Remove any whitespace
+    });
+
+    const { user } = res.data;
+
+    // Cache user profile
     sessionStorage.setItem('flow_user', JSON.stringify(user));
     setUser(user);
     return user;
@@ -86,6 +122,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user,
       login,
+      verifyMfa,
       logout,
       refreshUser,
       loading,

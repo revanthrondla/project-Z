@@ -181,6 +181,7 @@ const ClientTimesheetApproval = lazy(() => import('./pages/client/TimesheetAppro
 const SuperAdminDashboard        = lazy(() => import('./pages/superadmin/Dashboard'));
 const SuperAdminTenants          = lazy(() => import('./pages/superadmin/Tenants'));
 const SuperAdminSupportDashboard = lazy(() => import('./pages/superadmin/SupportDashboard'));
+const SuperAdminSecurity         = lazy(() => import('./pages/superadmin/Security'));
 const PlatformAIConfig           = lazy(() => import('./pages/superadmin/AIConfig'));
 
 // Support
@@ -292,6 +293,7 @@ function AppRoutes() {
         <Route path="dashboard" element={<Lazy><SuperAdminDashboard /></Lazy>} />
         <Route path="tenants"   element={<Lazy><SuperAdminTenants /></Lazy>} />
         <Route path="support"   element={<Lazy><SuperAdminSupportDashboard /></Lazy>} />
+        <Route path="security"  element={<Lazy><SuperAdminSecurity /></Lazy>} />
         <Route path="ai-config" element={<Lazy><PlatformAIConfig /></Lazy>} />
       </Route>
 
