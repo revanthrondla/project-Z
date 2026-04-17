@@ -35,6 +35,7 @@ const TENANT_DDL = `
     mfa_enabled          BOOLEAN NOT NULL DEFAULT FALSE,
     mfa_secret           TEXT,
     mfa_backup_codes     JSONB DEFAULT '[]',
+    mfa_method           TEXT DEFAULT 'totp' CHECK(mfa_method IN ('totp','email_otp')),
     created_at           TIMESTAMPTZ DEFAULT NOW(),
     updated_at           TIMESTAMPTZ DEFAULT NOW()
   );
@@ -779,6 +780,18 @@ const TENANT_DDL = `
   CREATE INDEX IF NOT EXISTS idx_ai_conv_user            ON ai_conversations(user_id);
   CREATE INDEX IF NOT EXISTS idx_ag_employees_number     ON ag_employees(employee_number);
   CREATE INDEX IF NOT EXISTS idx_ag_scanned_at           ON ag_scanned_products(scanned_at DESC);
+
+  -- ── MFA email OTP codes (short-lived, per user) ─────────────────────────────
+  CREATE TABLE IF NOT EXISTS mfa_otp_codes (
+    id         BIGSERIAL PRIMARY KEY,
+    user_id    BIGINT NOT NULL,
+    code_hash  TEXT NOT NULL,
+    purpose    TEXT NOT NULL DEFAULT 'login',
+    expires_at TIMESTAMPTZ NOT NULL,
+    used       BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_mfa_otp_user ON mfa_otp_codes(user_id, expires_at);
 `;
 
 /**
@@ -797,6 +810,20 @@ async function createTenantSchema(slug) {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret TEXT`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_backup_codes JSONB DEFAULT '[]'`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_method TEXT DEFAULT 'totp'`);
+    // mfa_otp_codes table for email OTP (CREATE TABLE IF NOT EXISTS handles existing schemas)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS mfa_otp_codes (
+        id         BIGSERIAL PRIMARY KEY,
+        user_id    BIGINT NOT NULL,
+        code_hash  TEXT NOT NULL,
+        purpose    TEXT NOT NULL DEFAULT 'login',
+        expires_at TIMESTAMPTZ NOT NULL,
+        used       BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_mfa_otp_user ON mfa_otp_codes(user_id, expires_at)`);
 
     console.log(`✅ Schema ready: ${schema}`);
   } finally {

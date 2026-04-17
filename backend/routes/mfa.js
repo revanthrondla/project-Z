@@ -7,6 +7,7 @@ const QRCode = require('qrcode');
 const { authenticate, JWT_SECRET, injectTenantDb } = require('../middleware/auth');
 const { masterDb } = require('../masterDatabase');
 const { getTenantDb } = require('../database');
+const { sendMfaOtpEmail } = require('../services/emailService');
 
 const router = express.Router();
 
@@ -224,7 +225,7 @@ router.get('/status', authenticate, injectTenantDb, async (req, res) => {
 
     const db = req.db;
     const userResult = await db.query(
-      'SELECT mfa_enabled, mfa_backup_codes FROM users WHERE id = $1',
+      'SELECT mfa_enabled, mfa_method, mfa_backup_codes FROM users WHERE id = $1',
       [userId]
     );
     const user = userResult.rows[0];
@@ -233,6 +234,7 @@ router.get('/status', authenticate, injectTenantDb, async (req, res) => {
     const backupCodes = user.mfa_backup_codes || [];
     res.json({
       mfaEnabled: !!user.mfa_enabled,
+      mfaMethod:  user.mfa_method || 'totp',
       backupCodesCount: backupCodes.length,
     });
   } catch (err) {
@@ -455,6 +457,107 @@ router.delete('/disable', authenticate, injectTenantDb, async (req, res) => {
     res.json({ message: 'MFA disabled' });
   } catch (err) {
     console.error('[MFA /disable] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /email-otp/send (unauthenticated — uses mfaToken) ───────────────────
+// Called when the login response has mfaMethod:'email_otp'.
+// Can also be called with an authenticated session to re-send the code.
+router.post('/email-otp/send', async (req, res) => {
+  const { mfaToken } = req.body;
+  if (!mfaToken) return res.status(400).json({ error: 'mfaToken required' });
+
+  let decoded;
+  try {
+    decoded = jwt.verify(mfaToken, JWT_SECRET, { algorithms: ['HS256'] });
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired challenge token' });
+  }
+  if (decoded.type !== 'mfa_pending') return res.status(401).json({ error: 'Invalid token type' });
+
+  const { userId, tenantSlug, email, name, role } = decoded;
+
+  try {
+    // Generate a 6-digit OTP
+    const plainCode = String(Math.floor(100000 + Math.random() * 900000));
+    const codeHash  = await bcrypt.hash(plainCode, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    if (role === 'super_admin') {
+      // Super-admins don't use email OTP; only TOTP is supported for them
+      return res.status(400).json({ error: 'Email OTP is not supported for super-admin accounts' });
+    }
+
+    const { wrapper: tenantDb, release } = await getTenantDb(tenantSlug);
+    try {
+      // Invalidate existing unused codes for this user
+      await tenantDb.query(
+        `UPDATE mfa_otp_codes SET used = TRUE WHERE user_id = $1 AND used = FALSE AND purpose = 'login'`,
+        [userId]
+      );
+      // Insert new code
+      await tenantDb.query(
+        `INSERT INTO mfa_otp_codes (user_id, code_hash, purpose, expires_at) VALUES ($1, $2, 'login', $3)`,
+        [userId, codeHash, expiresAt]
+      );
+    } finally {
+      release();
+    }
+
+    // Send the email
+    await sendMfaOtpEmail({ to: email, name, code: plainCode });
+
+    res.json({ message: 'Verification code sent', maskedEmail: email.replace(/(.{2})(.*)(@.*)/, '$1***$3') });
+  } catch (err) {
+    console.error('[MFA /email-otp/send]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /email-otp/verify (unauthenticated — uses mfaToken + code) ──────────
+router.post('/email-otp/verify', async (req, res) => {
+  const { mfaToken, code } = req.body;
+  if (!mfaToken || !code) return res.status(400).json({ error: 'mfaToken and code required' });
+
+  let decoded;
+  try {
+    decoded = jwt.verify(mfaToken, JWT_SECRET, { algorithms: ['HS256'] });
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired challenge token' });
+  }
+  if (decoded.type !== 'mfa_pending') return res.status(401).json({ error: 'Invalid token type' });
+
+  const { userId, tenantSlug, email, name, role, candidateId, clientId, tenantName, mustChangePw } = decoded;
+
+  try {
+    const { wrapper: tenantDb, release } = await getTenantDb(tenantSlug);
+    let valid = false;
+    try {
+      const result = await tenantDb.query(
+        `SELECT id, code_hash FROM mfa_otp_codes
+         WHERE user_id = $1 AND used = FALSE AND purpose = 'login' AND expires_at > NOW()
+         ORDER BY created_at DESC LIMIT 1`,
+        [userId]
+      );
+      const row = result.rows[0];
+      if (row && await bcrypt.compare(code.trim(), row.code_hash)) {
+        valid = true;
+        await tenantDb.query(`UPDATE mfa_otp_codes SET used = TRUE WHERE id = $1`, [row.id]);
+      }
+    } finally {
+      release();
+    }
+
+    if (!valid) return res.status(401).json({ error: 'Invalid or expired code' });
+
+    // Issue full session JWT
+    const payload = { id: userId, email, name, role, candidateId, clientId, tenantSlug, tenantName, mustChangePw };
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '8h' });
+    res.cookie(COOKIE_NAME, token, cookieOptions());
+    res.json({ token, user: payload });
+  } catch (err) {
+    console.error('[MFA /email-otp/verify]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

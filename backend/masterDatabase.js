@@ -40,7 +40,10 @@ const MASTER_DDL = `
     sso_enabled    BOOLEAN NOT NULL DEFAULT FALSE,
     sso_provider   TEXT DEFAULT 'google',
     sso_domain     TEXT,
-    mfa_required   BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_required   BOOLEAN NOT NULL DEFAULT FALSE,  -- legacy, superseded by mfa_policy
+    mfa_policy     TEXT NOT NULL DEFAULT 'off'
+                   CHECK(mfa_policy IN ('off','optional','required','admin_required')),
+    mfa_methods    JSONB NOT NULL DEFAULT '["totp"]',
     created_at     TIMESTAMPTZ DEFAULT NOW(),
     updated_at     TIMESTAMPTZ DEFAULT NOW()
   );
@@ -147,6 +150,8 @@ async function initMaster() {
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sso_provider TEXT NOT NULL DEFAULT 'google'`);
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sso_domain TEXT`);
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS mfa_required BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS mfa_policy TEXT NOT NULL DEFAULT 'off'`);
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS mfa_methods JSONB NOT NULL DEFAULT '["totp"]'`);
 
     // Seed platform_ai_config default row
     await client.query(`

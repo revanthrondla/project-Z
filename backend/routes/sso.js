@@ -112,20 +112,19 @@ router.get('/admin-config', authenticate, injectTenantDb, requireAdmin, async (r
     }
 
     const tenantResult = await masterDb.query(
-      'SELECT sso_enabled, sso_provider, sso_domain, mfa_required FROM tenants WHERE slug = $1',
+      'SELECT sso_enabled, sso_provider, sso_domain, mfa_policy, mfa_methods FROM tenants WHERE slug = $1',
       [tenantSlug]
     );
 
-    const tenantRecord = tenantResult.rows[0];
-    if (!tenantRecord) {
-      return res.status(404).json({ error: 'Tenant not found' });
-    }
+    const t = tenantResult.rows[0];
+    if (!t) return res.status(404).json({ error: 'Tenant not found' });
 
     res.json({
-      ssoEnabled: !!tenantRecord.sso_enabled,
-      ssoProvider: tenantRecord.sso_provider || 'google',
-      ssoDomain: tenantRecord.sso_domain || null,
-      mfaRequired: !!tenantRecord.mfa_required,
+      ssoEnabled:       !!t.sso_enabled,
+      ssoProvider:      t.sso_provider || 'google',
+      ssoDomain:        t.sso_domain   || '',
+      mfaPolicy:        t.mfa_policy   || 'off',
+      mfaMethods:       t.mfa_methods  || ['totp'],
       googleConfigured: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
     });
   } catch (err) {
@@ -140,31 +139,42 @@ router.get('/admin-config', authenticate, injectTenantDb, requireAdmin, async (r
 // ──────────────────────────────────────────────────────────────────────────────
 router.put('/admin-config', authenticate, injectTenantDb, requireAdmin, async (req, res) => {
   try {
-    const { ssoEnabled, ssoProvider, ssoDomain, mfaRequired } = req.body;
+    const { ssoEnabled, ssoProvider, ssoDomain, mfaPolicy, mfaMethods } = req.body;
     const tenantSlug = req.user.tenantSlug;
+    if (!tenantSlug) return res.status(403).json({ error: 'Only tenant admins can access this' });
 
-    if (!tenantSlug) {
-      return res.status(403).json({ error: 'Only tenant admins can access this' });
+    const VALID_POLICIES = ['off', 'optional', 'required', 'admin_required'];
+    const VALID_PROVIDERS = ['google', 'microsoft'];
+    if (mfaPolicy && !VALID_POLICIES.includes(mfaPolicy)) {
+      return res.status(400).json({ error: `Invalid mfaPolicy. Allowed: ${VALID_POLICIES.join(', ')}` });
+    }
+    if (ssoProvider && !VALID_PROVIDERS.includes(ssoProvider)) {
+      return res.status(400).json({ error: `Invalid ssoProvider. Allowed: ${VALID_PROVIDERS.join(', ')}` });
+    }
+    if (mfaMethods && (!Array.isArray(mfaMethods) || mfaMethods.some(m => !['totp','email_otp'].includes(m)))) {
+      return res.status(400).json({ error: 'Invalid mfaMethods. Allowed values: totp, email_otp' });
     }
 
-    // Update master DB tenants table
     await masterDb.query(
       `UPDATE tenants SET
-        sso_enabled = COALESCE($1, sso_enabled),
+        sso_enabled  = COALESCE($1, sso_enabled),
         sso_provider = COALESCE($2, sso_provider),
-        sso_domain = COALESCE($3, sso_domain),
-        mfa_required = COALESCE($4, mfa_required)
-       WHERE slug = $5`,
+        sso_domain   = $3,
+        mfa_policy   = COALESCE($4, mfa_policy),
+        mfa_methods  = COALESCE($5, mfa_methods),
+        updated_at   = NOW()
+       WHERE slug = $6`,
       [
-        ssoEnabled !== undefined ? ssoEnabled : null,
+        ssoEnabled  !== undefined ? !!ssoEnabled       : null,
         ssoProvider || null,
-        ssoDomain || null,
-        mfaRequired !== undefined ? mfaRequired : null,
+        ssoDomain !== undefined ? (ssoDomain?.toLowerCase().trim() || null) : undefined,
+        mfaPolicy   || null,
+        mfaMethods  ? JSON.stringify(mfaMethods) : null,
         tenantSlug,
       ]
     );
 
-    res.json({ message: 'SSO config updated' });
+    res.json({ message: 'Security configuration updated' });
   } catch (err) {
     console.error('[SSO PUT /admin-config] Error:', err.message);
     res.status(500).json({ error: err.message });

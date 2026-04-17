@@ -4,9 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
 import FlowLogo from '../components/FlowLogo';
 
+const REDIRECT = (role) => role === 'super_admin' ? '/super-admin/dashboard' : '/dashboard';
+
 
 export default function Login() {
-  const { login, verifyMfa } = useAuth();
+  const { login, verifyMfa, verifyEmailOtp } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -16,10 +18,13 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
 
   // MFA state
-  const [mfaState, setMfaState] = useState(null); // { mfaToken, companySlug }
+  const [mfaState, setMfaState] = useState(null); // { mfaToken, mfaMethod, companySlug }
   const [mfaCode, setMfaCode] = useState('');
   const [mfaLoading, setMfaLoading] = useState(false);
   const [useBackupCode, setUseBackupCode] = useState(false);
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(0);
+  const [mfaSetupRequired, setMfaSetupRequired] = useState(false);
 
   // SSO state
   const [ssoConfig, setSsoConfig] = useState(null);
@@ -61,6 +66,23 @@ export default function Login() {
     };
   }, [form.companyCode]);
 
+  // Resend countdown timer
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const t = setTimeout(() => setResendCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCountdown]);
+
+  const sendEmailOtp = async (mfaToken) => {
+    try {
+      await api.post('/api/auth/mfa/email-otp/send', { mfaToken });
+      setEmailOtpSent(true);
+      setResendCountdown(60);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to send verification code.');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -69,17 +91,27 @@ export default function Login() {
       const companySlug = form.companyCode.trim() || undefined;
       const result = await login(form.email, form.password, companySlug);
 
-      // Check if MFA is required
+      // Org requires MFA but user hasn't set it up yet (TOTP-only policy)
+      if (result.mfaSetupRequired) {
+        setMfaSetupRequired(true);
+        return;
+      }
+
+      // Check if MFA challenge is required
       if (result.mfaRequired) {
-        setMfaState({ mfaToken: result.mfaToken, companySlug: result.companySlug });
+        const mfaMethod = result.mfaMethod || 'totp';
+        setMfaState({ mfaToken: result.mfaToken, mfaMethod, companySlug: result.companySlug });
         setMfaCode('');
         setUseBackupCode(false);
+        // Auto-send email OTP if that's the method
+        if (mfaMethod === 'email_otp' || result.autoSend) {
+          await sendEmailOtp(result.mfaToken);
+        }
         return;
       }
 
       // Normal login path
-      const user = result.user;
-      navigate(user.role === 'super_admin' ? '/super-admin/dashboard' : '/dashboard');
+      navigate(REDIRECT(result.user.role));
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed. Please check your details.');
     } finally {
@@ -94,8 +126,10 @@ export default function Login() {
     setError('');
     setMfaLoading(true);
     try {
-      const user = await verifyMfa(mfaState.mfaToken, mfaCode);
-      navigate(user.role === 'super_admin' ? '/super-admin/dashboard' : '/dashboard');
+      const user = mfaState.mfaMethod === 'email_otp'
+        ? await verifyEmailOtp(mfaState.mfaToken, mfaCode)
+        : await verifyMfa(mfaState.mfaToken, mfaCode);
+      navigate(REDIRECT(user.role));
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid code. Please try again.');
       setMfaCode('');
@@ -108,6 +142,9 @@ export default function Login() {
     setMfaState(null);
     setMfaCode('');
     setUseBackupCode(false);
+    setEmailOtpSent(false);
+    setResendCountdown(0);
+    setMfaSetupRequired(false);
     setError('');
   };
 
@@ -173,7 +210,7 @@ export default function Login() {
 
           {/* Back to home or back to login */}
           <div className="mb-6">
-            {mfaState ? (
+            {mfaState || mfaSetupRequired ? (
               <button
                 type="button"
                 onClick={handleBackToLogin}
@@ -199,7 +236,17 @@ export default function Login() {
 
           {/* Heading */}
           <div className="mb-8">
-            {mfaState ? (
+            {mfaSetupRequired ? (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900">MFA Setup Required</h2>
+                <p className="text-gray-500 text-sm mt-1">Your organisation requires two-factor authentication</p>
+              </>
+            ) : mfaState?.mfaMethod === 'email_otp' ? (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900">Check Your Email</h2>
+                <p className="text-gray-500 text-sm mt-1">We sent a 6-digit verification code to your email</p>
+              </>
+            ) : mfaState ? (
               <>
                 <h2 className="text-2xl font-bold text-gray-900">Two-Factor Authentication</h2>
                 <p className="text-gray-500 text-sm mt-1">Enter the 6-digit code from your authenticator app</p>
@@ -222,10 +269,76 @@ export default function Login() {
             </div>
           )}
 
-          {/* MFA Form */}
-          {mfaState ? (
+          {/* MFA Setup Required Screen */}
+          {mfaSetupRequired ? (
+            <div className="space-y-5">
+              <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <span className="text-amber-500 text-lg shrink-0">🔐</span>
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">MFA enrollment required</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Your organisation requires you to set up an authenticator app before you can sign in.
+                    Sign in and go to <strong>Settings → Security</strong> to complete MFA setup.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleBackToLogin}
+                className="btn-primary w-full py-3 text-base"
+              >
+                Back to sign in
+              </button>
+            </div>
+          ) : mfaState?.mfaMethod === 'email_otp' ? (
+            /* Email OTP Form */
+            <form onSubmit={handleMfaSubmit} className="space-y-5" noValidate>
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center text-3xl">
+                  📧
+                </div>
+                {emailOtpSent && (
+                  <p className="text-xs text-gray-500 text-center">
+                    A 6-digit code was sent to your email. It expires in 10 minutes.
+                  </p>
+                )}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="\d{6}"
+                  maxLength="6"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="000000"
+                  className="text-center text-4xl font-mono tracking-widest border-2 border-gray-300 rounded-xl w-44 py-4 focus:border-emerald-500 focus:outline-none"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  disabled={resendCountdown > 0}
+                  onClick={() => sendEmailOtp(mfaState.mfaToken)}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                  {resendCountdown > 0 ? `Resend code in ${resendCountdown}s` : "Didn't get it? Resend"}
+                </button>
+              </div>
+              <button
+                type="submit"
+                disabled={mfaLoading || mfaCode.length !== 6}
+                className="btn-primary w-full py-3 text-base"
+              >
+                {mfaLoading ? (
+                  <><svg className="animate-spin -ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>Verifying…</>
+                ) : 'Verify Code'}
+              </button>
+            </form>
+          ) : mfaState ? (
+            /* TOTP / Backup Code Form */
             <form onSubmit={handleMfaSubmit} className="space-y-6" noValidate>
-              {/* MFA Code Input */}
               <div className="flex flex-col items-center gap-4">
                 <div className="flex gap-1.5 justify-center">
                   {!useBackupCode ? (
@@ -255,30 +368,22 @@ export default function Login() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setUseBackupCode(!useBackupCode);
-                    setMfaCode('');
-                  }}
+                  onClick={() => { setUseBackupCode(!useBackupCode); setMfaCode(''); }}
                   className="text-sm text-emerald-600 hover:text-emerald-700 underline"
                 >
                   {useBackupCode ? 'Use authenticator code' : 'Use backup code'}
                 </button>
               </div>
-
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={mfaLoading || (useBackupCode ? mfaCode.length !== 8 : mfaCode.length !== 6)}
                 className="btn-primary w-full py-3 text-base"
               >
                 {mfaLoading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                    </svg>
-                    Verifying…
-                  </>
+                  <><svg className="animate-spin -ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>Verifying…</>
                 ) : 'Verify'}
               </button>
             </form>

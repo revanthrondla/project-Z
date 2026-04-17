@@ -47,12 +47,19 @@ export function AuthProvider({ children }) {
 
     const res = await api.post('/api/auth/login', payload);
 
-    // Check if MFA is required
+    // Check if MFA setup is required before they can proceed
+    if (res.data.mfaSetupRequired) {
+      return { mfaSetupRequired: true, setupToken: res.data.setupToken };
+    }
+
+    // Check if MFA challenge is required
     if (res.data.mfaRequired) {
       return {
         mfaRequired: true,
         mfaToken: res.data.mfaToken,
-        companySlug: companySlug,
+        mfaMethod: res.data.mfaMethod || 'totp',
+        autoSend: res.data.autoSend || false,
+        companySlug,
       };
     }
 
@@ -70,7 +77,7 @@ export function AuthProvider({ children }) {
    *  - mfaToken: token from login response
    *  - code: 6-digit code or 8-char backup code from authenticator app
    *
-   * Calls POST /api/auth/mfa/verify, sets user on success
+   * Calls POST /api/auth/mfa/verify (TOTP / backup code), sets user on success
    */
   const verifyMfa = async (mfaToken, code) => {
     const res = await api.post('/api/auth/mfa/verify', {
@@ -84,6 +91,40 @@ export function AuthProvider({ children }) {
     sessionStorage.setItem('flow_user', JSON.stringify(user));
     setUser(user);
     return user;
+  };
+
+  /**
+   * verifyEmailOtp(mfaToken, code)
+   *  - mfaToken: token from login response
+   *  - code: 6-digit email OTP
+   *
+   * Calls POST /api/auth/mfa/email-otp/verify, sets user on success
+   */
+  const verifyEmailOtp = async (mfaToken, code) => {
+    const res = await api.post('/api/auth/mfa/email-otp/verify', {
+      mfaToken,
+      code: code.trim(),
+    });
+
+    const { user } = res.data;
+    sessionStorage.setItem('flow_user', JSON.stringify(user));
+    setUser(user);
+    return user;
+  };
+
+  /**
+   * Pass-through full login result for cases like mfaSetupRequired / email_otp autoSend
+   */
+  const loginRaw = async (email, password, companySlug) => {
+    const payload = { email, password };
+    if (companySlug) payload.companySlug = companySlug.trim().toLowerCase();
+    const res = await api.post('/api/auth/login', payload);
+    // If it's a full session (not MFA), cache the user
+    if (res.data.user && !res.data.mfaRequired && !res.data.mfaSetupRequired) {
+      sessionStorage.setItem('flow_user', JSON.stringify(res.data.user));
+      setUser(res.data.user);
+    }
+    return res.data; // return the raw response for the Login component to handle
   };
 
   const logout = async () => {
@@ -122,7 +163,9 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user,
       login,
+      loginRaw,
       verifyMfa,
+      verifyEmailOtp,
       logout,
       refreshUser,
       loading,

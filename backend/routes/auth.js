@@ -98,30 +98,7 @@ router.post('/login', async (req, res) => {
       const valid = bcrypt.compareSync(password, user.password_hash);
       if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-      // ── MFA check for tenant user ────────────────────────────────────────────
-      if (user.mfa_enabled && user.mfa_secret) {
-        let candidateId = null;
-        if (user.role === 'candidate') {
-          const candResult = await tenantDb.query('SELECT id FROM candidates WHERE user_id = $1', [user.id]);
-          if (candResult.rows[0]) candidateId = candResult.rows[0].id;
-        }
-        let clientId = null;
-        if (user.role === 'client') {
-          const clientRecResult = await tenantDb.query('SELECT id FROM clients WHERE user_id = $1', [user.id]);
-          if (clientRecResult.rows[0]) clientId = clientRecResult.rows[0].id;
-        }
-        const mfaToken = jwt.sign(
-          {
-            userId: user.id, email: user.email, name: user.name, role: user.role,
-            candidateId, clientId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
-            mustChangePw: !!(user.must_change_password), type: 'mfa_pending',
-          },
-          JWT_SECRET,
-          { expiresIn: '2m' }
-        );
-        return res.json({ mfaRequired: true, mfaToken });
-      }
-
+      // ── Resolve linked IDs (needed for MFA token and session token) ────────────
       let candidateId = null;
       if (user.role === 'candidate') {
         const candResult = await tenantDb.query('SELECT id FROM candidates WHERE user_id = $1', [user.id]);
@@ -137,6 +114,49 @@ router.post('/login', async (req, res) => {
       }
 
       const mustChangePw = !!(user.must_change_password);
+
+      // ── Tenant MFA policy enforcement ────────────────────────────────────────
+      const mfaPolicy  = tenant.mfa_policy  || 'off';
+      const mfaMethods = tenant.mfa_methods || ['totp'];
+
+      // Determine if this user is subject to the policy
+      const policyApplies =
+        mfaPolicy === 'required' ||
+        (mfaPolicy === 'admin_required' && user.role === 'admin');
+
+      if (policyApplies && !user.mfa_enabled) {
+        // User must set up MFA before they can log in
+        // If email_otp is an allowed method, we can auto-send one — no setup required
+        if (mfaMethods.includes('email_otp')) {
+          const mfaToken = jwt.sign(
+            { userId: user.id, email: user.email, name: user.name, role: user.role,
+              candidateId, clientId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+              mustChangePw, type: 'mfa_pending' },
+            JWT_SECRET, { expiresIn: '2m' }
+          );
+          return res.json({ mfaRequired: true, mfaToken, mfaMethod: 'email_otp', autoSend: true });
+        }
+        // TOTP only — user must enroll first
+        const setupToken = jwt.sign(
+          { userId: user.id, email: user.email, name: user.name, role: user.role,
+            candidateId, clientId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+            mustChangePw, type: 'mfa_setup_required' },
+          JWT_SECRET, { expiresIn: '15m' }
+        );
+        return res.json({ mfaSetupRequired: true, setupToken });
+      }
+
+      // ── User has MFA enabled — issue challenge ───────────────────────────────
+      if (user.mfa_enabled) {
+        const method = user.mfa_method || 'totp';
+        const mfaToken = jwt.sign(
+          { userId: user.id, email: user.email, name: user.name, role: user.role,
+            candidateId, clientId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+            mustChangePw, type: 'mfa_pending' },
+          JWT_SECRET, { expiresIn: '2m' }
+        );
+        return res.json({ mfaRequired: true, mfaToken, mfaMethod: method });
+      }
 
       const token = jwt.sign(
         {

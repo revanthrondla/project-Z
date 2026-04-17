@@ -386,7 +386,8 @@ function SecurityTab() {
 
   // Organization settings
   const [orgConfig, setOrgConfig] = useState(null);
-  const [requireMfa, setRequireMfa] = useState(false);
+  const [mfaPolicy, setMfaPolicy] = useState('off');
+  const [mfaMethods, setMfaMethods] = useState(['totp']);
   const [ssoEnabled, setSsoEnabled] = useState(false);
   const [ssoDomain, setSsoDomain] = useState('');
   const [googleConfigured, setGoogleConfigured] = useState(false);
@@ -408,7 +409,8 @@ function SecurityTab() {
     api.get('/api/auth/sso/admin-config')
       .then(r => {
         setOrgConfig(r.data);
-        setRequireMfa(r.data.mfaRequired);
+        setMfaPolicy(r.data.mfaPolicy || 'off');
+        setMfaMethods(r.data.mfaMethods || ['totp']);
         setSsoEnabled(r.data.ssoEnabled);
         setSsoDomain(r.data.ssoDomain || '');
         setGoogleConfigured(r.data.googleConfigured);
@@ -484,11 +486,20 @@ function SecurityTab() {
   };
 
   // Update organization config
-  const updateOrgConfig = async (updates) => {
+  const saveOrgConfig = async () => {
+    if (mfaMethods.length === 0) {
+      setError('At least one MFA method must be selected.');
+      return;
+    }
     setOrgSaving(true);
     setError('');
     try {
-      await api.put('/api/auth/sso/admin-config', updates);
+      await api.put('/api/auth/sso/admin-config', {
+        mfaPolicy,
+        mfaMethods,
+        ssoEnabled,
+        ssoDomain: ssoDomain || null,
+      });
       setSuccess('Security settings saved.');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -496,6 +507,12 @@ function SecurityTab() {
     } finally {
       setOrgSaving(false);
     }
+  };
+
+  const toggleMfaMethod = (method) => {
+    setMfaMethods(prev =>
+      prev.includes(method) ? prev.filter(m => m !== method) : [...prev, method]
+    );
   };
 
   const copyToClipboard = (text) => {
@@ -676,10 +693,11 @@ function SecurityTab() {
 
       {/* Organization Security Section */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-base font-semibold text-gray-800 mb-4">Organisation Security</h2>
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Organisation Security</h2>
+        <p className="text-xs text-gray-500 mb-5">Configure authentication policy for all members of your organisation.</p>
 
         {!googleConfigured && (
-          <div className="mb-4 flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
+          <div className="mb-5 flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
             <span className="text-sm shrink-0">ℹ️</span>
             <div>
               Google SSO requires <code className="bg-blue-100 px-1 rounded">GOOGLE_CLIENT_ID</code> to be configured on the server.
@@ -687,89 +705,126 @@ function SecurityTab() {
           </div>
         )}
 
-        <div className="space-y-4">
-          {/* Require MFA Toggle */}
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <div>
-              <p className="text-sm font-medium text-gray-900">Require MFA for all users</p>
-              <p className="text-xs text-gray-500 mt-0.5">All users must enable two-factor authentication</p>
-            </div>
-            <button
-              onClick={() => {
-                setRequireMfa(!requireMfa);
-                updateOrgConfig({ mfaRequired: !requireMfa });
-              }}
-              disabled={orgSaving}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                requireMfa
-                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+        <div className="space-y-5">
+
+          {/* ── MFA Policy ── */}
+          <div>
+            <label className="block text-sm font-medium text-gray-800 mb-1.5">MFA Policy</label>
+            <select
+              value={mfaPolicy}
+              onChange={(e) => setMfaPolicy(e.target.value)}
+              className="input"
             >
-              {requireMfa ? 'On' : 'Off'}
-            </button>
+              <option value="off">Off — MFA is optional for all users</option>
+              <option value="optional">Optional — users can enable MFA themselves</option>
+              <option value="required">Required — all users must use MFA</option>
+              <option value="admin_required">Admins only — only admin accounts require MFA</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {mfaPolicy === 'off' && 'MFA is not enforced. Users may still enable it personally.'}
+              {mfaPolicy === 'optional' && 'Users are encouraged but not required to use MFA.'}
+              {mfaPolicy === 'required' && 'All users must authenticate with MFA on every sign-in.'}
+              {mfaPolicy === 'admin_required' && 'Only users with the Admin role are required to use MFA.'}
+            </p>
           </div>
 
-          {/* SSO Toggle */}
+          {/* ── MFA Methods ── */}
+          {mfaPolicy !== 'off' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-800 mb-2">Allowed MFA Methods</label>
+              <div className="space-y-2">
+                <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 text-emerald-600 rounded border-gray-300 cursor-pointer"
+                    checked={mfaMethods.includes('totp')}
+                    onChange={() => toggleMfaMethod('totp')}
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Authenticator App (TOTP)</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Google Authenticator, Authy, 1Password, etc. Works offline.</p>
+                  </div>
+                </label>
+                <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 text-emerald-600 rounded border-gray-300 cursor-pointer"
+                    checked={mfaMethods.includes('email_otp')}
+                    onChange={() => toggleMfaMethod('email_otp')}
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Email OTP</p>
+                    <p className="text-xs text-gray-500 mt-0.5">A one-time code sent to the user's email. No app required — good for low-friction enforcement.</p>
+                  </div>
+                </label>
+              </div>
+              {mfaMethods.length === 0 && (
+                <p className="text-xs text-red-500 mt-1">At least one method must be selected.</p>
+              )}
+            </div>
+          )}
+
+          {/* ── SSO Toggle ── */}
           <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
             <div>
               <p className="text-sm font-medium text-gray-900">Enable Google SSO</p>
               <p className="text-xs text-gray-500 mt-0.5">Allow users to sign in with Google</p>
             </div>
             <button
-              onClick={() => {
-                setSsoEnabled(!ssoEnabled);
-                updateOrgConfig({ ssoEnabled: !ssoEnabled });
-              }}
-              disabled={orgSaving}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                ssoEnabled
-                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              type="button"
+              onClick={() => setSsoEnabled(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                ssoEnabled ? 'bg-emerald-600' : 'bg-gray-300'
               }`}
             >
-              {ssoEnabled ? 'On' : 'Off'}
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                ssoEnabled ? 'translate-x-6' : 'translate-x-1'
+              }`} />
             </button>
           </div>
 
-          {/* Allowed Email Domain */}
+          {/* ── Allowed Email Domain ── */}
           {ssoEnabled && (
             <div>
               <label className="label">Allowed email domain (optional)</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={ssoDomain}
-                  onChange={(e) => setSsoDomain(e.target.value)}
-                  placeholder="e.g. acme.com"
-                  className="input flex-1"
-                />
-                <button
-                  onClick={() => updateOrgConfig({ ssoDomain })}
-                  disabled={orgSaving}
-                  className="btn-secondary px-4 py-2"
-                >
-                  Save
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Leave blank to allow any email domain</p>
+              <input
+                type="text"
+                value={ssoDomain}
+                onChange={(e) => setSsoDomain(e.target.value)}
+                placeholder="e.g. acme.com"
+                className="input"
+              />
+              <p className="text-xs text-gray-500 mt-1">Restrict SSO logins to a specific email domain. Leave blank to allow any domain.</p>
             </div>
           )}
 
-          {/* SSO Login URL */}
+          {/* ── SSO Login URL ── */}
           <div>
-            <label className="label text-gray-600">SSO Login URL</label>
+            <label className="label text-gray-600">Login URL to share with your team</label>
             <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
               <code className="flex-1 font-mono text-sm text-gray-700 break-all">
                 {typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://app.example.com/login'}
               </code>
               <button
+                type="button"
                 onClick={() => copyToClipboard(`${window.location.origin}/login`)}
-                className="text-xs text-gray-500 hover:text-gray-700"
+                className="text-xs text-gray-500 hover:text-gray-700 shrink-0"
               >
                 Copy
               </button>
             </div>
+          </div>
+
+          {/* ── Save button ── */}
+          <div className="pt-1 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={saveOrgConfig}
+              disabled={orgSaving || mfaMethods.length === 0}
+              className="btn-primary py-2.5 px-6 text-sm"
+            >
+              {orgSaving ? 'Saving…' : 'Save Security Settings'}
+            </button>
           </div>
         </div>
       </div>
