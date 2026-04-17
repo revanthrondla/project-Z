@@ -52,11 +52,11 @@ async function notifyTenantUserByEmail(tenantSlug, email, type, title, message, 
 }
 
 // ── POST /api/platform-support/tickets ───────────────────────────────────────
-// Tenant admin or client submits a platform-level ticket
+// Only tenant admins can raise platform-level support tickets to super-admin
 router.post('/tickets', injectTenantDb, async (req, res) => {
   const { role, email, tenantSlug } = req.user;
-  if (!['admin', 'client', 'candidate'].includes(role)) {
-    return res.status(403).json({ error: 'Only tenant users can submit platform support tickets' });
+  if (role !== 'admin') {
+    return res.status(403).json({ error: 'Only tenant admins can submit platform support tickets' });
   }
   const { subject, description, priority = 'medium' } = req.body;
   if (!subject?.trim() || !description?.trim()) {
@@ -73,12 +73,13 @@ router.post('/tickets', injectTenantDb, async (req, res) => {
 });
 
 // ── GET /api/platform-support/tickets ─────────────────────────────────────────
-// Super-admin: list all tickets (with filters)
+// Super-admin: list tickets raised by tenant admins only (submitter_role = 'admin')
 router.get('/tickets', requireSuperAdmin, async (req, res) => {
   const { status, priority, tenant, page = 1, limit = 50 } = req.query;
   const offset = (Math.max(1, parseInt(page)) - 1) * Math.min(100, parseInt(limit) || 50);
 
-  let where = 'WHERE 1=1';
+  // Always restrict to tickets submitted by tenant admins
+  let where = "WHERE t.submitter_role = 'admin'";
   const params = [];
   if (status)   { where += ' AND t.status = ?';      params.push(status); }
   if (priority) { where += ' AND t.priority = ?';    params.push(priority); }
@@ -207,7 +208,7 @@ router.post('/tickets/:id/messages', injectTenantDb, async (req, res) => {
 });
 
 // ── GET /api/platform-support/stats ─────────────────────────────────────────
-// Super-admin: summary counts
+// Super-admin: summary counts — scoped to tenant-admin-submitted tickets only
 router.get('/stats', requireSuperAdmin, async (req, res) => {
   const stats = await masterDb.prepare(`
     SELECT
@@ -219,6 +220,7 @@ router.get('/stats', requireSuperAdmin, async (req, res) => {
       SUM(CASE WHEN priority = 'urgent' THEN 1 ELSE 0 END) as urgent,
       SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END) as high_priority
     FROM platform_support_tickets
+    WHERE submitter_role = 'admin'
   `).get();
   res.json(stats);
 });

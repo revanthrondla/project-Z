@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Careers — Flow</title>
+  <meta name="description" content="Join the Flow team. We're building the workforce platform that staffing teams love — and we're hiring." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --em50:#ecfdf5;--em100:#d1fae5;--em200:#a7f3d0;--em400:#34d399;
+      --em500:#10b981;--em600:#059669;--em700:#047857;--em800:#065f46;--em900:#064e3b;
+      --g50:#f9fafb;--g100:#f3f4f6;--g200:#e5e7eb;--g300:#d1d5db;--g400:#9ca3af;
+      --g500:#6b7280;--g600:#4b5563;--g700:#374151;--g800:#1f2937;--g900:#111827;
+    }
+    html{scroll-behavior:smooth;}
+    body{font-family:'Inter',system-ui,sans-serif;color:var(--g800);background:#fff;line-height:1.6;-webkit-font-smoothing:antialiased;}
+    a{text-decoration:none;color:inherit;}
+    .container{max-width:1120px;margin:0 auto;padding:0 24px;}
+    .navbar{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--g100);}
+    .navbar-inner{display:flex;align-items:center;justify-content:space-between;height:68px;}
+    .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;color:var(--em600);letter-spacing:-.5px;}
+    .logo-mark{width:36px;height:36px;background:var(--em600);border-radius:10px;display:flex;align-items:center;justify-content:center;}
+    .logo-mark svg{width:20px;height:20px;fill:none;stroke:white;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+    .nav-links{display:flex;align-items:center;gap:32px;font-size:14px;font-weight:500;color:var(--g600);}
+    .nav-links a:hover,.nav-links a.active{color:var(--em600);}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:12px;transition:all .18s ease;white-space:nowrap;}
+    .btn-primary{background:var(--em600);color:#fff;padding:10px 22px;font-size:14px;}
+    .btn-primary:hover{background:var(--em700);transform:translateY(-1px);}
+    .btn-outline{background:transparent;color:var(--em600);border:2px solid var(--em600);padding:8px 20px;font-size:14px;}
+    .btn-outline:hover{background:var(--em50);}
+    .page-hero{background:linear-gradient(135deg,var(--em800),var(--em600) 60%,#34d399);padding:80px 0 90px;position:relative;overflow:hidden;}
+    .page-hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");}
+    .page-hero .breadcrumb{font-size:13px;color:rgba(255,255,255,.6);margin-bottom:16px;}
+    .page-hero .breadcrumb a{color:rgba(255,255,255,.7);}
+    .page-hero h1{font-size:clamp(34px,5vw,56px);font-weight:800;color:#fff;letter-spacing:-1.5px;line-height:1.1;margin-bottom:18px;}
+    .page-hero p{font-size:18px;color:rgba(255,255,255,.82);max-width:560px;line-height:1.7;}
+    .section{padding:80px 0;}
+    .section-label{display:inline-block;background:var(--em50);color:var(--em700);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 12px;border-radius:100px;margin-bottom:14px;border:1px solid var(--em200);}
+    .section-title{font-size:clamp(26px,4vw,38px);font-weight:800;color:var(--g900);letter-spacing:-1px;line-height:1.15;margin-bottom:14px;}
+    .section-sub{font-size:17px;color:var(--g500);max-width:540px;line-height:1.7;}
+    .fade-in{opacity:0;transform:translateY(20px);transition:opacity .5s ease,transform .5s ease;}
+    .fade-in.visible{opacity:1;transform:translateY(0);}
+    /* Benefits */
+    .benefits-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:48px;}
+    .benefit-card{background:var(--g50);border:1px solid var(--g100);border-radius:20px;padding:28px;transition:all .2s;}
+    .benefit-card:hover{border-color:var(--em200);box-shadow:0 4px 16px rgba(0,0,0,.06);}
+    .benefit-icon{font-size:28px;margin-bottom:14px;}
+    .benefit-card h3{font-size:15px;font-weight:700;color:var(--g900);margin-bottom:6px;}
+    .benefit-card p{font-size:13px;color:var(--g500);line-height:1.7;}
+    /* Jobs */
+    .jobs-list{display:flex;flex-direction:column;gap:16px;margin-top:48px;}
+    .job-card{background:#fff;border:1.5px solid var(--g200);border-radius:16px;padding:28px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px;transition:all .2s;cursor:pointer;}
+    .job-card:hover{border-color:var(--em400);box-shadow:0 4px 20px rgba(0,0,0,.08);}
+    .job-info{flex:1;}
+    .job-title{font-size:17px;font-weight:700;color:var(--g900);margin-bottom:6px;}
+    .job-tags{display:flex;gap:8px;flex-wrap:wrap;}
+    .job-tag{font-size:12px;font-weight:600;padding:3px 10px;border-radius:100px;background:var(--em50);color:var(--em700);border:1px solid var(--em200);}
+    .job-tag.remote{background:#ede9fe;color:#5b21b6;border-color:#ddd6fe;}
+    .job-tag.fulltime{background:#dbeafe;color:#1d4ed8;border-color:#bfdbfe;}
+    .job-dept{font-size:13px;color:var(--g400);margin-bottom:8px;}
+    .apply-btn{flex-shrink:0;background:var(--em600);color:#fff;padding:10px 22px;font-size:14px;font-weight:600;border-radius:10px;border:none;cursor:pointer;transition:all .18s;}
+    .apply-btn:hover{background:var(--em700);transform:translateY(-1px);}
+    /* Values strip */
+    .values-strip{background:var(--em900);padding:72px 0;}
+    .values-strip .section-title{color:#fff;}
+    .values-strip .section-sub{color:rgba(255,255,255,.6);}
+    .values-cols{display:grid;grid-template-columns:repeat(2,1fr);gap:32px;margin-top:48px;}
+    .value-item{display:flex;gap:16px;align-items:flex-start;}
+    .value-num{width:32px;height:32px;border-radius:8px;background:var(--em600);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;flex-shrink:0;}
+    .value-item h4{font-size:15px;font-weight:700;color:#fff;margin-bottom:4px;}
+    .value-item p{font-size:13px;color:rgba(255,255,255,.55);line-height:1.6;}
+    /* CTA */
+    .cta-section{background:linear-gradient(135deg,var(--em700),var(--em500));padding:72px 0;text-align:center;}
+    .cta-section h2{font-size:clamp(26px,3.5vw,38px);font-weight:800;color:#fff;letter-spacing:-1px;margin-bottom:12px;}
+    .cta-section p{font-size:16px;color:rgba(255,255,255,.8);margin-bottom:28px;}
+    .btn-white{background:#fff;color:var(--em700);padding:13px 32px;font-size:15px;font-weight:700;border-radius:12px;display:inline-flex;align-items:center;gap:8px;transition:all .18s;border:none;cursor:pointer;}
+    .btn-white:hover{background:var(--em50);transform:translateY(-1px);}
+    .footer{background:var(--g900);padding:60px 0 32px;}
+    .footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:48px;margin-bottom:48px;}
+    .footer-brand .logo{color:var(--em400);margin-bottom:14px;}
+    .footer-brand p{font-size:13px;color:var(--g400);line-height:1.7;max-width:260px;}
+    .footer-col h5{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--g400);margin-bottom:16px;}
+    .footer-col ul{list-style:none;display:flex;flex-direction:column;gap:10px;}
+    .footer-col ul a{font-size:14px;color:var(--g500);transition:color .15s;}
+    .footer-col ul a:hover{color:var(--em400);}
+    .footer-bottom{border-top:1px solid rgba(255,255,255,.07);padding-top:24px;display:flex;justify-content:space-between;align-items:center;gap:12px;}
+    .footer-bottom p{font-size:13px;color:var(--g600);}
+    @media(max-width:900px){.benefits-grid{grid-template-columns:1fr 1fr;}.values-cols{grid-template-columns:1fr;}.footer-grid{grid-template-columns:1fr 1fr;}}
+    @media(max-width:600px){.nav-links,.nav-actions{display:none;}.benefits-grid{grid-template-columns:1fr;}.job-card{flex-direction:column;align-items:flex-start;}.footer-grid{grid-template-columns:1fr;gap:28px;}}
+  </style>
+</head>
+<body>
+<header class="navbar">
+  <div class="container navbar-inner">
+    <a href="../flow-homepage.html" class="logo"><div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Flow</a>
+    <nav class="nav-links"><a href="../flow-homepage.html#features">Features</a><a href="../flow-homepage.html#pricing">Pricing</a><a href="about.html">About</a><a href="contact.html">Contact</a></nav>
+    <div style="display:flex;gap:12px;"><a href="/login" class="btn btn-outline">Log in</a><a href="../flow-homepage.html#demo" class="btn btn-primary">Request Demo</a></div>
+  </div>
+</header>
+
+<section class="page-hero">
+  <div class="container" style="position:relative;z-index:1;">
+    <p class="breadcrumb"><a href="../flow-homepage.html">Home</a> / Careers</p>
+    <h1>Join us in building<br>something that matters</h1>
+    <p>We're a small, focused team with a big mission. If you care about elegant software and real customer impact, we'd love to meet you.</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="fade-in">
+      <span class="section-label">Why Flow</span>
+      <h2 class="section-title">A place to do your best work</h2>
+      <p class="section-sub">We're remote-first, async-friendly, and serious about craft. We move fast but we do it thoughtfully.</p>
+    </div>
+    <div class="benefits-grid">
+      <div class="benefit-card fade-in"><div class="benefit-icon">🌍</div><h3>Remote-first</h3><p>Work from anywhere. We have team members across the UK, Europe, and beyond. We coordinate async and meet in person twice a year.</p></div>
+      <div class="benefit-card fade-in"><div class="benefit-icon">💰</div><h3>Competitive pay</h3><p>We pay at the top of market for the roles we hire. Salary reviews every 6 months. Equity for all full-time hires from day one.</p></div>
+      <div class="benefit-card fade-in"><div class="benefit-icon">🧠</div><h3>Learning budget</h3><p>£1,500/year for courses, books, conferences, or anything that makes you better at your craft. No approvals needed.</p></div>
+      <div class="benefit-card fade-in"><div class="benefit-icon">🏖</div><h3>Unlimited holiday</h3><p>Real unlimited holiday — we track utilisation to make sure people actually take it. Minimum 25 days expected.</p></div>
+      <div class="benefit-card fade-in"><div class="benefit-icon">🏥</div><h3>Private health insurance</h3><p>Full private medical, dental, and optical cover for you and your dependants from day one.</p></div>
+      <div class="benefit-card fade-in"><div class="benefit-icon">🖥</div><h3>Best-in-class equipment</h3><p>MacBook Pro, 4K display, and a £500 home office budget to set up your workspace the way you like it.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="values-strip">
+  <div class="container">
+    <div class="fade-in">
+      <span class="section-label" style="background:rgba(255,255,255,.1);color:var(--em200);border-color:rgba(255,255,255,.15);">How we work</span>
+      <h2 class="section-title">Our working principles</h2>
+    </div>
+    <div class="values-cols">
+      <div class="value-item fade-in"><div class="value-num">1</div><div><h4>Write before you speak</h4><p>Ideas, decisions, and context are written down first. Meetings are for discussion, not information sharing.</p></div></div>
+      <div class="value-item fade-in"><div class="value-num">2</div><div><h4>Ship small, ship often</h4><p>We prefer 10 small improvements to one big launch. Fast feedback loops keep quality high and momentum real.</p></div></div>
+      <div class="value-item fade-in"><div class="value-num">3</div><div><h4>Default to transparency</h4><p>Salaries, company metrics, strategy — all shared with the team. No surprises, no politics.</p></div></div>
+      <div class="value-item fade-in"><div class="value-num">4</div><div><h4>Disagree and commit</h4><p>We debate hard before decisions, but once made we move together. Revisit when you have new information.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background:var(--g50);padding:80px 0;">
+  <div class="container">
+    <div class="fade-in">
+      <span class="section-label">Open Roles</span>
+      <h2 class="section-title">We're hiring</h2>
+      <p class="section-sub">4 open positions across engineering, product, and customer success.</p>
+    </div>
+    <div class="jobs-list">
+      <div class="job-card fade-in">
+        <div class="job-info">
+          <p class="job-dept">Engineering</p>
+          <div class="job-title">Senior Full-Stack Engineer</div>
+          <div class="job-tags"><span class="job-tag">React</span><span class="job-tag">Node.js</span><span class="job-tag remote">Remote</span><span class="job-tag fulltime">Full-time</span></div>
+        </div>
+        <button class="apply-btn" onclick="openApplication('Senior Full-Stack Engineer')">Apply now →</button>
+      </div>
+      <div class="job-card fade-in">
+        <div class="job-info">
+          <p class="job-dept">Product</p>
+          <div class="job-title">Product Designer (UI/UX)</div>
+          <div class="job-tags"><span class="job-tag">Figma</span><span class="job-tag">User Research</span><span class="job-tag remote">Remote</span><span class="job-tag fulltime">Full-time</span></div>
+        </div>
+        <button class="apply-btn" onclick="openApplication('Product Designer')">Apply now →</button>
+      </div>
+      <div class="job-card fade-in">
+        <div class="job-info">
+          <p class="job-dept">Customer Success</p>
+          <div class="job-title">Customer Success Manager</div>
+          <div class="job-tags"><span class="job-tag">Onboarding</span><span class="job-tag">SaaS</span><span class="job-tag remote">Remote</span><span class="job-tag fulltime">Full-time</span></div>
+        </div>
+        <button class="apply-btn" onclick="openApplication('Customer Success Manager')">Apply now →</button>
+      </div>
+      <div class="job-card fade-in">
+        <div class="job-info">
+          <p class="job-dept">Engineering</p>
+          <div class="job-title">Backend Engineer (Node.js / PostgreSQL)</div>
+          <div class="job-tags"><span class="job-tag">Node.js</span><span class="job-tag">PostgreSQL</span><span class="job-tag remote">Remote</span><span class="job-tag fulltime">Full-time</span></div>
+        </div>
+        <button class="apply-btn" onclick="openApplication('Backend Engineer')">Apply now →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-section">
+  <div class="container">
+    <h2>Don't see a role that fits?</h2>
+    <p>We're always interested in hearing from exceptional people. Drop us a note and tell us how you'd make Flow better.</p>
+    <a href="mailto:careers@flowapp.io" class="btn-white">Send a speculative application →</a>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand"><a href="../flow-homepage.html" class="logo" style="color:var(--em400);"><div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Flow</a><p>Time tracking, absence management, and invoicing for modern workforce teams.</p></div>
+      <div class="footer-col"><h5>Product</h5><ul><li><a href="../flow-homepage.html#features">Features</a></li><li><a href="../flow-homepage.html#pricing">Pricing</a></li><li><a href="../flow-homepage.html#demo">Request Demo</a></li></ul></div>
+      <div class="footer-col"><h5>Company</h5><ul><li><a href="about.html">About</a></li><li><a href="blog.html">Blog</a></li><li><a href="careers.html">Careers</a></li><li><a href="contact.html">Contact</a></li></ul></div>
+      <div class="footer-col"><h5>Legal</h5><ul><li><a href="privacy-policy.html">Privacy Policy</a></li><li><a href="terms-of-service.html">Terms of Service</a></li><li><a href="cookie-policy.html">Cookie Policy</a></li><li><a href="gdpr.html">GDPR</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><p>© 2025 Flow. All rights reserved.</p><p>Made with ♥ for staffing teams</p></div>
+  </div>
+</footer>
+<script>
+  function openApplication(role){alert('Thank you for your interest in the '+role+' role! Please send your CV and a brief note to careers@flowapp.io.');}
+  const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');obs.unobserve(e.target);}});},{threshold:0.1,rootMargin:'0px 0px -40px 0px'});
+  document.querySelectorAll('.fade-in').forEach(el=>obs.observe(el));
+</script>
+</body>
+</html>

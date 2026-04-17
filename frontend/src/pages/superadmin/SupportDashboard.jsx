@@ -201,7 +201,7 @@ export default function SuperAdminSupportDashboard() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Platform Support</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Manage support requests from all tenants</p>
+        <p className="text-gray-500 text-sm mt-0.5">Support requests raised by tenant admins</p>
       </div>
 
       {/* KPIs */}
@@ -256,7 +256,7 @@ export default function SuperAdminSupportDashboard() {
         <div className="text-center py-16 text-gray-400">
           <p className="text-4xl mb-3">🎫</p>
           <p className="font-medium text-gray-600">No support tickets</p>
-          <p className="text-sm mt-1">Tickets from tenant admins and clients will appear here</p>
+          <p className="text-sm mt-1">Tickets raised by tenant admins will appear here</p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">

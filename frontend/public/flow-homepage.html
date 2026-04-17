@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flow — Time Tracking, Absence & Invoicing for Modern Teams</title>
+  <meta name="description" content="Flow helps staffing agencies and growing teams track time, manage absences, and invoice clients — all in one place. Request a demo today." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --emerald-50:  #ecfdf5;
+      --emerald-100: #d1fae5;
+      --emerald-200: #a7f3d0;
+      --emerald-400: #34d399;
+      --emerald-500: #10b981;
+      --emerald-600: #059669;
+      --emerald-700: #047857;
+      --emerald-800: #065f46;
+      --emerald-900: #064e3b;
+      --gray-50:  #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      --white: #ffffff;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.10);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,.13);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      color: var(--gray-800);
+      background: var(--white);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Utility ── */
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+    a { text-decoration: none; color: inherit; }
+    img { display: block; max-width: 100%; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      border: none; cursor: pointer; font-family: inherit; font-weight: 600;
+      border-radius: var(--radius-md); transition: all .18s ease; white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--emerald-600); color: var(--white); padding: 13px 28px; font-size: 15px;
+    }
+    .btn-primary:hover { background: var(--emerald-700); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(5,150,105,.35); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-outline {
+      background: transparent; color: var(--emerald-600); border: 2px solid var(--emerald-600);
+      padding: 11px 26px; font-size: 15px;
+    }
+    .btn-outline:hover { background: var(--emerald-50); }
+    .btn-ghost {
+      background: rgba(255,255,255,.15); color: var(--white); border: 1px solid rgba(255,255,255,.3);
+      padding: 11px 26px; font-size: 15px; backdrop-filter: blur(8px);
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,.25); }
+    .btn-lg { padding: 16px 36px; font-size: 17px; border-radius: var(--radius-lg); }
+
+    /* ── Navbar ── */
+    .navbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .navbar-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 68px;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 10px; font-weight: 800;
+      font-size: 22px; color: var(--emerald-600); letter-spacing: -.5px;
+    }
+    .logo-mark {
+      width: 36px; height: 36px; background: var(--emerald-600); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .logo-mark svg { width: 20px; height: 20px; fill: none; stroke: white; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .nav-links { display: flex; align-items: center; gap: 32px; font-size: 14px; font-weight: 500; color: var(--gray-600); }
+    .nav-links a:hover { color: var(--emerald-600); }
+    .nav-actions { display: flex; gap: 12px; }
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--gray-700); margin: 4px 0; border-radius: 2px; transition: .2s; }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, var(--emerald-800) 0%, var(--emerald-600) 55%, #34d399 100%);
+      padding: 100px 0 110px;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25);
+      color: white; font-size: 13px; font-weight: 500;
+      padding: 6px 14px; border-radius: 100px; margin-bottom: 28px; backdrop-filter: blur(8px);
+    }
+    .hero-badge .dot { width: 6px; height: 6px; background: var(--emerald-200); border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .hero h1 {
+      font-size: clamp(38px, 6vw, 68px); font-weight: 800; color: white;
+      line-height: 1.08; letter-spacing: -2px; max-width: 720px; margin-bottom: 24px;
+    }
+    .hero h1 em { font-style: normal; color: var(--emerald-200); }
+    .hero p {
+      font-size: 18px; color: rgba(255,255,255,.82); max-width: 520px;
+      margin-bottom: 42px; line-height: 1.7;
+    }
+    .hero-cta { display: flex; gap: 14px; flex-wrap: wrap; }
+    .hero-stats {
+      display: flex; gap: 40px; margin-top: 72px; flex-wrap: wrap;
+    }
+    .hero-stat-num { font-size: 32px; font-weight: 800; color: white; letter-spacing: -1px; }
+    .hero-stat-label { font-size: 13px; color: rgba(255,255,255,.65); margin-top: 2px; font-weight: 500; }
+
+    /* ── Section header ── */
+    .section-label {
+      display: inline-block; background: var(--emerald-50); color: var(--emerald-700);
+      font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      padding: 5px 12px; border-radius: 100px; margin-bottom: 14px;
+      border: 1px solid var(--emerald-200);
+    }
+    .section-title {
+      font-size: clamp(26px, 4vw, 40px); font-weight: 800; color: var(--gray-900);
+      letter-spacing: -1px; line-height: 1.15; margin-bottom: 14px;
+    }
+    .section-sub { font-size: 17px; color: var(--gray-500); max-width: 540px; line-height: 1.7; }
+    .section-header { margin-bottom: 56px; }
+    .section-header.center { text-align: center; }
+    .section-header.center .section-sub { margin: 0 auto; }
+
+    /* ── Features ── */
+    .features { padding: 100px 0; background: var(--white); }
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px;
+    }
+    .feature-card {
+      background: var(--gray-50); border: 1px solid var(--gray-100);
+      border-radius: var(--radius-xl); padding: 36px 32px;
+      transition: all .2s ease; position: relative; overflow: hidden;
+    }
+    .feature-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--emerald-500), var(--emerald-300));
+      opacity: 0; transition: opacity .2s;
+    }
+    .feature-card:hover { border-color: var(--emerald-200); box-shadow: var(--shadow-md); transform: translateY(-3px); }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-icon {
+      width: 52px; height: 52px; background: var(--emerald-100); border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center; margin-bottom: 22px;
+    }
+    .feature-icon svg { width: 26px; height: 26px; stroke: var(--emerald-700); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .feature-card h3 { font-size: 18px; font-weight: 700; color: var(--gray-900); margin-bottom: 10px; }
+    .feature-card p { font-size: 14px; color: var(--gray-500); line-height: 1.7; }
+    .feature-tag {
+      display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--emerald-600); background: var(--emerald-50);
+      border: 1px solid var(--emerald-200); border-radius: 100px; padding: 3px 10px;
+      margin-bottom: 12px;
+    }
+
+    /* ── How it works strip ── */
+    .how-strip { background: var(--emerald-900); padding: 80px 0; }
+    .how-strip .section-title { color: white; }
+    .how-strip .section-sub { color: rgba(255,255,255,.6); }
+    .steps { display: flex; gap: 0; position: relative; margin-top: 56px; }
+    .steps::before {
+      content: ''; position: absolute; top: 26px; left: 5%; right: 5%; height: 2px;
+      background: rgba(255,255,255,.1);
+    }
+    .step { flex: 1; text-align: center; padding: 0 20px; position: relative; }
+    .step-num {
+      width: 52px; height: 52px; border-radius: 50%;
+      background: var(--emerald-600); color: white;
+      font-size: 18px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px; position: relative; z-index: 1;
+      box-shadow: 0 0 0 6px rgba(16,185,129,.2);
+    }
+    .step h4 { font-size: 15px; font-weight: 700; color: white; margin-bottom: 8px; }
+    .step p { font-size: 13px; color: rgba(255,255,255,.55); line-height: 1.6; }
+
+    /* ── Testimonials ── */
+    .testimonials { padding: 100px 0; background: var(--gray-50); }
+    .testimonials-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .testimonial-card {
+      background: white; border: 1px solid var(--gray-100);
+      border-radius: var(--radius-xl); padding: 32px 28px;
+      box-shadow: var(--shadow-sm); transition: box-shadow .2s;
+    }
+    .testimonial-card:hover { box-shadow: var(--shadow-md); }
+    .stars { display: flex; gap: 4px; margin-bottom: 18px; }
+    .stars svg { width: 16px; height: 16px; fill: #f59e0b; }
+    .testimonial-text {
+      font-size: 15px; color: var(--gray-700); line-height: 1.75; margin-bottom: 24px;
+      font-style: italic;
+    }
+    .testimonial-text::before { content: '\201C'; }
+    .testimonial-text::after  { content: '\201D'; }
+    .testimonial-author { display: flex; align-items: center; gap: 12px; }
+    .author-avatar {
+      width: 42px; height: 42px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--emerald-500), var(--emerald-300));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; color: white; flex-shrink: 0;
+    }
+    .author-name { font-size: 14px; font-weight: 700; color: var(--gray-900); }
+    .author-role { font-size: 12px; color: var(--gray-400); margin-top: 1px; }
+
+    /* ── Pricing ── */
+    .pricing { padding: 100px 0; background: white; }
+    .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; align-items: start; }
+    .pricing-card {
+      border: 1.5px solid var(--gray-200); border-radius: var(--radius-xl);
+      padding: 36px 32px; position: relative; transition: all .2s;
+    }
+    .pricing-card:hover { border-color: var(--emerald-300); box-shadow: var(--shadow-md); }
+    .pricing-card.popular {
+      border-color: var(--emerald-500); box-shadow: 0 8px 32px rgba(16,185,129,.18);
+    }
+    .popular-badge {
+      position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+      background: var(--emerald-600); color: white; font-size: 11px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase; padding: 4px 14px; border-radius: 100px;
+      white-space: nowrap;
+    }
+    .plan-name { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--gray-500); margin-bottom: 8px; }
+    .plan-price {
+      font-size: 44px; font-weight: 800; color: var(--gray-900); letter-spacing: -2px; line-height: 1;
+    }
+    .plan-price sup { font-size: 20px; font-weight: 700; vertical-align: top; margin-top: 8px; margin-right: 2px; letter-spacing: 0; }
+    .plan-price sub { font-size: 14px; font-weight: 500; color: var(--gray-400); vertical-align: baseline; letter-spacing: 0; }
+    .plan-desc { font-size: 14px; color: var(--gray-500); margin: 10px 0 28px; line-height: 1.6; }
+    .plan-divider { height: 1px; background: var(--gray-100); margin: 24px 0; }
+    .plan-features { list-style: none; display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
+    .plan-features li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--gray-600); }
+    .plan-features li .check {
+      width: 18px; height: 18px; border-radius: 50%; background: var(--emerald-100);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+    }
+    .plan-features li .check svg { width: 10px; height: 10px; stroke: var(--emerald-600); stroke-width: 2.5; fill: none; }
+    .plan-features li.muted { color: var(--gray-400); }
+    .plan-features li.muted .check { background: var(--gray-100); }
+    .plan-features li.muted .check svg { stroke: var(--gray-300); }
+    .plan-cta { width: 100%; }
+
+    /* ── Demo CTA Banner ── */
+    .cta-banner {
+      background: linear-gradient(135deg, var(--emerald-700) 0%, var(--emerald-500) 100%);
+      padding: 80px 0; text-align: center; position: relative; overflow: hidden;
+    }
+    .cta-banner::before {
+      content: ''; position: absolute; width: 500px; height: 500px;
+      background: rgba(255,255,255,.05); border-radius: 50%;
+      top: -200px; right: -100px;
+    }
+    .cta-banner::after {
+      content: ''; position: absolute; width: 300px; height: 300px;
+      background: rgba(255,255,255,.05); border-radius: 50%;
+      bottom: -150px; left: -80px;
+    }
+    .cta-banner h2 { font-size: clamp(28px, 4vw, 44px); font-weight: 800; color: white; letter-spacing: -1px; margin-bottom: 16px; }
+    .cta-banner p { font-size: 17px; color: rgba(255,255,255,.8); margin-bottom: 36px; }
+    .demo-form {
+      display: flex; gap: 12px; max-width: 460px; margin: 0 auto; flex-wrap: wrap; justify-content: center;
+    }
+    .demo-form input {
+      flex: 1; min-width: 220px; padding: 13px 18px; border-radius: var(--radius-md);
+      border: none; font-family: inherit; font-size: 15px; outline: none;
+      background: rgba(255,255,255,.95);
+      color: var(--gray-800);
+    }
+    .demo-form input::placeholder { color: var(--gray-400); }
+    .demo-form input:focus { box-shadow: 0 0 0 3px rgba(255,255,255,.4); }
+    .form-note { font-size: 12px; color: rgba(255,255,255,.55); margin-top: 12px; }
+
+    /* ── Footer ── */
+    .footer { background: var(--gray-900); padding: 60px 0 32px; }
+    .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; margin-bottom: 48px; }
+    .footer-brand .logo { color: var(--emerald-400); margin-bottom: 14px; }
+    .footer-brand p { font-size: 13px; color: var(--gray-400); line-height: 1.7; max-width: 260px; }
+    .footer-col h5 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--gray-400); margin-bottom: 16px; }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .footer-col ul a { font-size: 14px; color: var(--gray-500); transition: color .15s; }
+    .footer-col ul a:hover { color: var(--emerald-400); }
+    .footer-bottom { border-top: 1px solid rgba(255,255,255,.07); padding-top: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: gap; gap: 12px; }
+    .footer-bottom p { font-size: 13px; color: var(--gray-600); }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .features-grid { grid-template-columns: 1fr 1fr; }
+      .pricing-grid { grid-template-columns: 1fr; max-width: 420px; margin: 0 auto; }
+      .testimonials-grid { grid-template-columns: 1fr 1fr; }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
+      .steps { flex-direction: column; gap: 32px; }
+      .steps::before { display: none; }
+    }
+    @media (max-width: 600px) {
+      .nav-links, .nav-actions { display: none; }
+      .hamburger { display: block; }
+      .features-grid { grid-template-columns: 1fr; }
+      .testimonials-grid { grid-template-columns: 1fr; }
+      .footer-grid { grid-template-columns: 1fr; gap: 32px; }
+      .hero { padding: 72px 0 80px; }
+      .hero-stats { gap: 28px; }
+    }
+
+    /* ── Mobile nav drawer ── */
+    .mobile-nav {
+      display: none; position: fixed; inset: 0; z-index: 200;
+    }
+    .mobile-nav.open { display: block; }
+    .mobile-nav-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.5); }
+    .mobile-nav-drawer {
+      position: absolute; top: 0; right: 0; bottom: 0; width: 280px;
+      background: white; padding: 24px; display: flex; flex-direction: column; gap: 8px;
+      box-shadow: var(--shadow-lg);
+    }
+    .mobile-nav-close {
+      align-self: flex-end; background: none; border: none; font-size: 24px;
+      cursor: pointer; color: var(--gray-500); margin-bottom: 16px;
+    }
+    .mobile-nav-drawer a {
+      display: block; padding: 12px 16px; border-radius: var(--radius-sm);
+      font-size: 15px; font-weight: 500; color: var(--gray-700);
+      transition: background .15s;
+    }
+    .mobile-nav-drawer a:hover { background: var(--emerald-50); color: var(--emerald-700); }
+    .mobile-nav-drawer .btn { width: 100%; margin-top: 8px; justify-content: center; }
+
+    /* ── Scroll animation ── */
+    .fade-in { opacity: 0; transform: translateY(24px); transition: opacity .5s ease, transform .5s ease; }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+<!-- ── Navbar ── -->
+<header class="navbar" role="banner">
+  <div class="container navbar-inner">
+    <a href="#" class="logo" aria-label="Flow home">
+      <div class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      Flow
+    </a>
+    <nav class="nav-links" aria-label="Main navigation">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#testimonials">Customers</a>
+    </nav>
+    <div class="nav-actions">
+      <a href="/login" class="btn btn-outline" style="padding:9px 20px;font-size:14px;">Log in</a>
+      <a href="#demo" class="btn btn-primary" style="padding:9px 20px;font-size:14px;">Request Demo</a>
+    </div>
+    <button class="hamburger" aria-label="Open menu" onclick="document.getElementById('mobileNav').classList.add('open')">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<!-- ── Mobile Nav ── -->
+<div class="mobile-nav" id="mobileNav">
+  <div class="mobile-nav-overlay" onclick="document.getElementById('mobileNav').classList.remove('open')"></div>
+  <div class="mobile-nav-drawer">
+    <button class="mobile-nav-close" onclick="document.getElementById('mobileNav').classList.remove('open')" aria-label="Close menu">×</button>
+    <a href="#features" onclick="document.getElementById('mobileNav').classList.remove('open')">Features</a>
+    <a href="#how-it-works" onclick="document.getElementById('mobileNav').classList.remove('open')">How it works</a>
+    <a href="#pricing" onclick="document.getElementById('mobileNav').classList.remove('open')">Pricing</a>
+    <a href="#testimonials" onclick="document.getElementById('mobileNav').classList.remove('open')">Customers</a>
+    <a href="/login" class="btn btn-outline" style="margin-top:8px;text-align:center;">Log in</a>
+    <a href="#demo" class="btn btn-primary" onclick="document.getElementById('mobileNav').classList.remove('open')">Request Demo</a>
+  </div>
+</div>
+
+<!-- ── Hero ── -->
+<section class="hero" aria-labelledby="hero-heading">
+  <div class="container">
+    <div class="hero-badge">
+      <span class="dot" aria-hidden="true"></span>
+      Now live — real-time invoice generation
+    </div>
+    <h1 id="hero-heading">
+      Time tracking &amp; invoicing that<br>
+      <em>actually flows</em>
+    </h1>
+    <p>Flow brings time tracking, absence management, and client invoicing into a single, beautifully simple workspace — purpose-built for staffing agencies and modern teams.</p>
+    <div class="hero-cta">
+      <a href="#demo" class="btn btn-primary btn-lg">Request a Free Demo</a>
+      <a href="#features" class="btn btn-ghost btn-lg">See the features</a>
+    </div>
+    <div class="hero-stats" role="list" aria-label="Key statistics">
+      <div role="listitem">
+        <div class="hero-stat-num">3 min</div>
+        <div class="hero-stat-label">Average timesheet submission</div>
+      </div>
+      <div role="listitem">
+        <div class="hero-stat-num">98%</div>
+        <div class="hero-stat-label">Invoice accuracy rate</div>
+      </div>
+      <div role="listitem">
+        <div class="hero-stat-num">500+</div>
+        <div class="hero-stat-label">Teams using Flow</div>
+      </div>
+      <div role="listitem">
+        <div class="hero-stat-num">4.9★</div>
+        <div class="hero-stat-label">Average customer rating</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Features ── -->
+<section class="features" id="features" aria-labelledby="features-heading">
+  <div class="container">
+    <header class="section-header fade-in">
+      <span class="section-label">Features</span>
+      <h2 class="section-title" id="features-heading">Everything your team needs<br>in one place</h2>
+      <p class="section-sub">From candidate onboarding to final invoice — Flow handles the entire workflow so your team can focus on what matters.</p>
+    </header>
+    <div class="features-grid">
+
+      <div class="feature-card fade-in">
+        <span class="feature-tag">Time Tracking</span>
+        <div class="feature-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <h3>Smart Timesheets</h3>
+        <p>Candidates and employees log hours in seconds. Managers approve with one click. Automatic overtime detection and weekly summaries included.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <span class="feature-tag">Absence Management</span>
+        <div class="feature-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <h3>Absence & Leave Tracking</h3>
+        <p>Manage holiday, sick leave, and other absences with configurable allowances and approval workflows. Integrated directly into timesheet calculations.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <span class="feature-tag">Invoicing</span>
+        <div class="feature-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <h3>Automated Invoicing</h3>
+        <p>Set billing rates per candidate or client. Flow auto-generates accurate invoices from approved timesheets — ready to send with a single click.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <span class="feature-tag">Multi-tenant</span>
+        <div class="feature-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </div>
+        <h3>Multi-Company Support</h3>
+        <p>Run multiple client organisations from one account. Each tenant has its own isolated data, branding, and user management — fully segregated.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <span class="feature-tag">Analytics</span>
+        <div class="feature-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <h3>Reports & Analytics</h3>
+        <p>Real-time dashboards for hours worked, costs, invoices raised, and absence trends. Export to PDF, Excel, or share directly with stakeholders.</p>
+      </div>
+
+      <div class="feature-card fade-in">
+        <span class="feature-tag">Compliance</span>
+        <div class="feature-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3>Audit Trail & Compliance</h3>
+        <p>Every timesheet change, approval, and invoice is logged with a full audit trail. GDPR-compliant by design with data segregation per tenant.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── How it works ── -->
+<section class="how-strip" id="how-it-works" aria-labelledby="how-heading">
+  <div class="container">
+    <header class="section-header center fade-in">
+      <span class="section-label" style="background:rgba(255,255,255,.1);color:var(--emerald-200);border-color:rgba(255,255,255,.15);">How it works</span>
+      <h2 class="section-title" id="how-heading">Up and running in minutes</h2>
+      <p class="section-sub" style="margin:0 auto;color:rgba(255,255,255,.6);">No lengthy onboarding. Flow is designed so you're invoicing clients before the end of your first day.</p>
+    </header>
+    <div class="steps">
+      <div class="step fade-in">
+        <div class="step-num">1</div>
+        <h4>Set up your workspace</h4>
+        <p>Create your organisation, add your team, and configure billing rates in under five minutes.</p>
+      </div>
+      <div class="step fade-in">
+        <div class="step-num">2</div>
+        <h4>Team logs time</h4>
+        <p>Candidates and employees submit timesheets weekly. Managers receive notifications and approve with one click.</p>
+      </div>
+      <div class="step fade-in">
+        <div class="step-num">3</div>
+        <h4>Absences sync automatically</h4>
+        <p>Approved leave is deducted from timesheets automatically, keeping hours and payroll accurate.</p>
+      </div>
+      <div class="step fade-in">
+        <div class="step-num">4</div>
+        <h4>Invoice your clients</h4>
+        <p>Flow generates itemised invoices from approved timesheets. Review, customise, and send — or let it run automatically.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Testimonials ── -->
+<section class="testimonials" id="testimonials" aria-labelledby="testimonials-heading">
+  <div class="container">
+    <header class="section-header center fade-in">
+      <span class="section-label">Customer Stories</span>
+      <h2 class="section-title" id="testimonials-heading">Loved by teams like yours</h2>
+      <p class="section-sub">Staffing agencies and service businesses trust Flow to run their back-office with confidence.</p>
+    </header>
+    <div class="testimonials-grid">
+
+      <div class="testimonial-card fade-in">
+        <div class="stars" aria-label="5 out of 5 stars">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <p class="testimonial-text">We used to spend hours every week collating timesheets in Excel. With Flow, our invoices go out same-day with zero manual work. It's transformed our back-office.</p>
+        <div class="testimonial-author">
+          <div class="author-avatar" aria-hidden="true">SR</div>
+          <div>
+            <div class="author-name">Sarah Reynolds</div>
+            <div class="author-role">Operations Director, Apex Staffing Group</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial-card fade-in">
+        <div class="stars" aria-label="5 out of 5 stars">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <p class="testimonial-text">The absence management module alone saved us from so many payroll disputes. Everything syncs in real time and our candidates love how easy the mobile timesheet is.</p>
+        <div class="testimonial-author">
+          <div class="author-avatar" aria-hidden="true">MC</div>
+          <div>
+            <div class="author-name">Marcus Chen</div>
+            <div class="author-role">CEO, BrightForce Recruitment</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial-card fade-in">
+        <div class="stars" aria-label="5 out of 5 stars">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <p class="testimonial-text">We manage 12 client accounts and Flow keeps everything completely separate. The multi-tenant setup was seamless and their support team was incredible during onboarding.</p>
+        <div class="testimonial-author">
+          <div class="author-avatar" aria-hidden="true">PO</div>
+          <div>
+            <div class="author-name">Priya Okonkwo</div>
+            <div class="author-role">Managing Partner, Nexus Talent Solutions</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial-card fade-in">
+        <div class="stars" aria-label="5 out of 5 stars">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <p class="testimonial-text">Our finance team used to dread month-end. Now invoicing is completely automated and our average time-to-invoice dropped from 5 days to under 2 hours. Remarkable product.</p>
+        <div class="testimonial-author">
+          <div class="author-avatar" aria-hidden="true">JH</div>
+          <div>
+            <div class="author-name">James Harrington</div>
+            <div class="author-role">Finance Manager, CoreSkills Ltd</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial-card fade-in">
+        <div class="stars" aria-label="5 out of 5 stars">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <p class="testimonial-text">The reporting features are genuinely impressive. I can see hours worked, costs, and outstanding invoices at a glance. It feels like it was built specifically for agencies like ours.</p>
+        <div class="testimonial-author">
+          <div class="author-avatar" aria-hidden="true">AL</div>
+          <div>
+            <div class="author-name">Aisha Lawson</div>
+            <div class="author-role">Director, PeakPerform Staffing</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial-card fade-in">
+        <div class="stars" aria-label="4 out of 5 stars">
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <p class="testimonial-text">Switching from our old system took one afternoon. The data import was smooth and our team was fully up to speed within a day. The clean UI makes training new starters effortless.</p>
+        <div class="testimonial-author">
+          <div class="author-avatar" aria-hidden="true">TM</div>
+          <div>
+            <div class="author-name">Tom Mitchell</div>
+            <div class="author-role">Head of Operations, Elevate Workforce</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Pricing ── -->
+<section class="pricing" id="pricing" aria-labelledby="pricing-heading">
+  <div class="container">
+    <header class="section-header center fade-in">
+      <span class="section-label">Pricing</span>
+      <h2 class="section-title" id="pricing-heading">Simple, transparent pricing</h2>
+      <p class="section-sub">No hidden fees. No per-seat surprises. Pick the plan that fits your team — scale up any time.</p>
+    </header>
+    <div class="pricing-grid">
+
+      <!-- Starter -->
+      <div class="pricing-card fade-in">
+        <div class="plan-name">Starter</div>
+        <div class="plan-price"><sup>£</sup>49<sub>/mo</sub></div>
+        <p class="plan-desc">Perfect for small agencies getting started with digital time tracking.</p>
+        <div class="plan-divider"></div>
+        <ul class="plan-features">
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Up to 25 active candidates</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Time tracking &amp; approvals</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Basic absence management</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Manual invoice generation</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Email support</li>
+          <li class="muted"><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Multi-tenant workspaces</li>
+          <li class="muted"><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Advanced analytics</li>
+        </ul>
+        <a href="#demo" class="btn btn-outline plan-cta">Get started</a>
+      </div>
+
+      <!-- Growth (popular) -->
+      <div class="pricing-card popular fade-in">
+        <div class="popular-badge">Most popular</div>
+        <div class="plan-name">Growth</div>
+        <div class="plan-price"><sup>£</sup>129<sub>/mo</sub></div>
+        <p class="plan-desc">For growing staffing agencies managing multiple clients and candidates.</p>
+        <div class="plan-divider"></div>
+        <ul class="plan-features">
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Up to 150 active candidates</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Time tracking &amp; approvals</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Full absence management</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Automated invoice generation</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Up to 5 tenant workspaces</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Advanced analytics &amp; exports</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Priority email &amp; chat support</li>
+        </ul>
+        <a href="#demo" class="btn btn-primary plan-cta">Request a demo</a>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="pricing-card fade-in">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-price" style="font-size:32px;letter-spacing:-1px;padding-top:6px;">Custom</div>
+        <p class="plan-desc">Tailored for large agencies, RPOs, and enterprise workforce management.</p>
+        <div class="plan-divider"></div>
+        <ul class="plan-features">
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited candidates</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Everything in Growth</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited tenant workspaces</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Custom integrations &amp; API</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>SSO / SAML</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Dedicated account manager</li>
+          <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>SLA &amp; uptime guarantee</li>
+        </ul>
+        <a href="#demo" class="btn btn-outline plan-cta">Talk to sales</a>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Demo CTA Banner ── -->
+<section class="cta-banner" id="demo" aria-labelledby="cta-heading">
+  <div class="container" style="position:relative;z-index:1;">
+    <h2 id="cta-heading">Ready to see Flow in action?</h2>
+    <p>Book a personalised 30-minute demo — we'll walk you through everything and set up your workspace on the spot.</p>
+    <form class="demo-form" onsubmit="handleDemoRequest(event)" novalidate>
+      <input type="email" id="demo-email" placeholder="Enter your work email" aria-label="Work email address" required />
+      <button type="submit" class="btn btn-primary" style="white-space:nowrap;">Book a demo →</button>
+    </form>
+    <p class="form-note" id="form-feedback">No credit card required · Setup in minutes · Cancel any time</p>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer class="footer" role="contentinfo">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo">
+          <div class="logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          Flow
+        </div>
+        <p>Time tracking, absence management, and invoicing — all in one platform built for staffing teams.</p>
+      </div>
+      <div class="footer-col">
+        <h5>Product</h5>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#how-it-works">How it works</a></li>
+          <li><a href="#demo">Request Demo</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Company</h5>
+        <ul>
+          <li><a href="/pages/about.html">About</a></li>
+          <li><a href="/pages/blog.html">Blog</a></li>
+          <li><a href="/pages/careers.html">Careers</a></li>
+          <li><a href="/pages/contact.html">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Legal</h5>
+        <ul>
+          <li><a href="/pages/privacy-policy.html">Privacy Policy</a></li>
+          <li><a href="/pages/terms-of-service.html">Terms of Service</a></li>
+          <li><a href="/pages/cookie-policy.html">Cookie Policy</a></li>
+          <li><a href="/pages/gdpr.html">GDPR</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2025 Flow. All rights reserved.</p>
+      <p style="color:var(--gray-600);">Made with ♥ for staffing teams</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ── Demo form handler ──
+  function handleDemoRequest(e) {
+    e.preventDefault();
+    const email = document.getElementById('demo-email').value.trim();
+    const feedback = document.getElementById('form-feedback');
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      feedback.textContent = '⚠️ Please enter a valid work email address.';
+      feedback.style.color = '#fca5a5';
+      return;
+    }
+    feedback.textContent = '✅ Thanks! We\'ll be in touch within 1 business day.';
+    feedback.style.color = 'rgba(255,255,255,.9)';
+    document.getElementById('demo-email').value = '';
+  }
+
+  // ── Scroll-based fade-in animations ──
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        // Stagger cards within the same parent grid
+        const siblings = entry.target.parentElement.querySelectorAll('.fade-in');
+        let delay = 0;
+        siblings.forEach((el, idx) => {
+          if (el === entry.target) delay = idx * 80;
+        });
+        setTimeout(() => {
+          entry.target.classList.add('visible');
+        }, delay);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+  // ── Smooth close for mobile nav links ──
+  document.querySelectorAll('.mobile-nav-drawer a[href^="#"]').forEach(a => {
+    a.addEventListener('click', () => {
+      document.getElementById('mobileNav').classList.remove('open');
+    });
+  });
+</script>
+</body>
+</html>

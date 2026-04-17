@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GDPR &amp; Data Processing — Flow</title>
+  <meta name="description" content="Flow's approach to GDPR compliance — your rights, how we process data, and how to reach our DPO." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root{--em50:#ecfdf5;--em100:#d1fae5;--em200:#a7f3d0;--em400:#34d399;--em500:#10b981;--em600:#059669;--em700:#047857;--em800:#065f46;--em900:#064e3b;--g50:#f9fafb;--g100:#f3f4f6;--g200:#e5e7eb;--g300:#d1d5db;--g400:#9ca3af;--g500:#6b7280;--g600:#4b5563;--g700:#374151;--g800:#1f2937;--g900:#111827;}
+    html{scroll-behavior:smooth;}
+    body{font-family:'Inter',system-ui,sans-serif;color:var(--g800);background:#fff;line-height:1.6;-webkit-font-smoothing:antialiased;}
+    a{text-decoration:none;color:inherit;}
+    .container{max-width:800px;margin:0 auto;padding:0 24px;}
+    .container-wide{max-width:1120px;margin:0 auto;padding:0 24px;}
+    .navbar{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--g100);}
+    .navbar-inner{display:flex;align-items:center;justify-content:space-between;height:68px;}
+    .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;color:var(--em600);letter-spacing:-.5px;}
+    .logo-mark{width:36px;height:36px;background:var(--em600);border-radius:10px;display:flex;align-items:center;justify-content:center;}
+    .logo-mark svg{width:20px;height:20px;fill:none;stroke:white;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+    .nav-links{display:flex;align-items:center;gap:32px;font-size:14px;font-weight:500;color:var(--g600);}
+    .nav-links a:hover{color:var(--em600);}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:12px;transition:all .18s ease;white-space:nowrap;}
+    .btn-primary{background:var(--em600);color:#fff;padding:10px 22px;font-size:14px;}
+    .btn-primary:hover{background:var(--em700);}
+    .btn-outline{background:transparent;color:var(--em600);border:2px solid var(--em600);padding:8px 20px;font-size:14px;}
+    .btn-outline:hover{background:var(--em50);}
+    .page-hero{background:linear-gradient(135deg,var(--em800),var(--em600) 60%,#34d399);padding:64px 0 72px;position:relative;overflow:hidden;}
+    .page-hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");}
+    .page-hero .breadcrumb{font-size:13px;color:rgba(255,255,255,.6);margin-bottom:12px;}
+    .page-hero .breadcrumb a{color:rgba(255,255,255,.7);}
+    .page-hero h1{font-size:clamp(28px,4vw,44px);font-weight:800;color:#fff;letter-spacing:-1px;line-height:1.15;margin-bottom:12px;}
+    .page-hero .meta{font-size:14px;color:rgba(255,255,255,.65);}
+    /* Legal content */
+    .legal-body{padding:64px 0 80px;}
+    .legal-toc{background:var(--em50);border:1px solid var(--em100);border-radius:16px;padding:24px 28px;margin-bottom:48px;}
+    .legal-toc h3{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--em700);margin-bottom:12px;}
+    .legal-toc ol{padding-left:20px;display:flex;flex-direction:column;gap:6px;}
+    .legal-toc ol li a{font-size:14px;color:var(--em600);}
+    .legal-toc ol li a:hover{color:var(--em800);text-decoration:underline;}
+    .legal-section{margin-bottom:48px;}
+    .legal-section h2{font-size:20px;font-weight:800;color:var(--g900);letter-spacing:-.3px;margin-bottom:16px;padding-top:8px;border-top:2px solid var(--em100);padding-top:20px;}
+    .legal-section h3{font-size:16px;font-weight:700;color:var(--g800);margin:20px 0 10px;}
+    .legal-section p{font-size:15px;color:var(--g600);line-height:1.8;margin-bottom:12px;}
+    .legal-section ul,.legal-section ol{padding-left:24px;margin:8px 0 16px;display:flex;flex-direction:column;gap:6px;}
+    .legal-section li{font-size:15px;color:var(--g600);line-height:1.7;}
+    .legal-section a{color:var(--em600);}
+    .legal-section a:hover{text-decoration:underline;}
+    .highlight-box{background:var(--em50);border:1px solid var(--em200);border-radius:12px;padding:20px 24px;margin:16px 0;}
+    .highlight-box p{color:var(--em800);font-weight:500;margin-bottom:0;}
+    .footer{background:var(--g900);padding:60px 0 32px;}
+    .footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:48px;margin-bottom:48px;}
+    .footer-brand .logo{color:var(--em400);margin-bottom:14px;}
+    .footer-brand p{font-size:13px;color:var(--g400);line-height:1.7;max-width:260px;}
+    .footer-col h5{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--g400);margin-bottom:16px;}
+    .footer-col ul{list-style:none;display:flex;flex-direction:column;gap:10px;}
+    .footer-col ul a{font-size:14px;color:var(--g500);transition:color .15s;}
+    .footer-col ul a:hover{color:var(--em400);}
+    .footer-bottom{border-top:1px solid rgba(255,255,255,.07);padding-top:24px;display:flex;justify-content:space-between;align-items:center;gap:12px;}
+    .footer-bottom p{font-size:13px;color:var(--g600);}
+    @media(max-width:900px){.footer-grid{grid-template-columns:1fr 1fr;}}
+    @media(max-width:600px){.nav-links,.nav-actions{display:none;}.footer-grid{grid-template-columns:1fr;gap:28px;}}
+  </style>
+</head>
+<body>
+<header class="navbar">
+  <div class="container-wide navbar-inner">
+    <a href="../flow-homepage.html" class="logo"><div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Flow</a>
+    <nav class="nav-links"><a href="../flow-homepage.html#features">Features</a><a href="../flow-homepage.html#pricing">Pricing</a><a href="about.html">About</a><a href="contact.html">Contact</a></nav>
+    <div style="display:flex;gap:12px;"><a href="/login" class="btn btn-outline">Log in</a><a href="../flow-homepage.html#demo" class="btn btn-primary">Request Demo</a></div>
+  </div>
+</header>
+<section class="page-hero">
+  <div class="container">
+    <p class="breadcrumb"><a href="../flow-homepage.html">Home</a> / GDPR</p>
+    <h1>GDPR &amp; Data<br>Protection</h1>
+    <p class="meta">Last updated: 1 April 2025 &nbsp;·&nbsp; UK GDPR &amp; Data Protection Act 2018</p>
+  </div>
+</section>
+<div class="legal-body">
+  <div class="container">
+    <div class="highlight-box"><p>Flow is designed to be GDPR-compliant by default. This page explains your rights as a data subject, how we fulfil our obligations as a data controller and processor, and how to contact our Data Protection Officer.</p></div>
+    <div class="legal-toc">
+      <h3>Contents</h3>
+      <ol>
+        <li><a href="#g1">Our roles under GDPR</a></li>
+        <li><a href="#g2">Your rights as a data subject</a></li>
+        <li><a href="#g3">Data Processing Agreement</a></li>
+        <li><a href="#g4">Data transfers</a></li>
+        <li><a href="#g5">Data security measures</a></li>
+        <li><a href="#g6">Breach notification</a></li>
+        <li><a href="#g7">Sub-processors</a></li>
+        <li><a href="#g8">Data Protection Officer</a></li>
+        <li><a href="#g9">Exercising your rights</a></li>
+      </ol>
+    </div>
+    <div class="legal-section" id="g1">
+      <h2>1. Our roles under GDPR</h2>
+      <h3>Data controller</h3>
+      <p>When we collect and use data about you directly — such as your name, email address, and usage data for our own business purposes — we act as the <strong>data controller</strong>. This includes account management, billing, marketing communications (where consented), and product analytics.</p>
+      <h3>Data processor</h3>
+      <p>When your organisation uses Flow to manage timesheets, absences, payroll records, or invoices relating to your employees and candidates, your organisation is the <strong>data controller</strong> and we act as the <strong>data processor</strong>. We process that data strictly on your instructions and under the terms of our Data Processing Agreement (DPA).</p>
+    </div>
+    <div class="legal-section" id="g2">
+      <h2>2. Your rights as a data subject</h2>
+      <p>Under the UK GDPR, you have the following rights in relation to your personal data:</p>
+      <ul>
+        <li><strong>Right of access (Article 15):</strong> Request a copy of the personal data we hold about you.</li>
+        <li><strong>Right to rectification (Article 16):</strong> Ask us to correct inaccurate or incomplete data.</li>
+        <li><strong>Right to erasure (Article 17):</strong> Ask us to delete your data where there is no legitimate reason to retain it (subject to legal obligations).</li>
+        <li><strong>Right to restriction of processing (Article 18):</strong> Ask us to restrict how we use your data in certain circumstances.</li>
+        <li><strong>Right to data portability (Article 20):</strong> Receive a copy of your data in a structured, commonly used, machine-readable format.</li>
+        <li><strong>Right to object (Article 21):</strong> Object to processing based on our legitimate interests.</li>
+        <li><strong>Rights related to automated decision-making (Article 22):</strong> Flow does not make solely automated decisions that produce legal or similarly significant effects.</li>
+      </ul>
+      <p>We will respond to all valid requests within <strong>30 days</strong>. Complex requests may take up to 3 months — we will notify you if this is the case.</p>
+    </div>
+    <div class="legal-section" id="g3">
+      <h2>3. Data Processing Agreement</h2>
+      <p>If your organisation uses Flow to process personal data on behalf of your employees, candidates, or clients, you should sign our Data Processing Agreement (DPA). The DPA sets out the subject matter, nature, purpose, and duration of processing, as well as both parties' obligations under GDPR Article 28.</p>
+      <p>To request a copy of our standard DPA, email <a href="mailto:dpo@flowapp.io">dpo@flowapp.io</a>. Enterprise customers can request bespoke DPA terms through their account manager.</p>
+    </div>
+    <div class="legal-section" id="g4">
+      <h2>4. Data transfers</h2>
+      <p>Your data is stored in the United Kingdom. We do not transfer personal data outside the UK except where:</p>
+      <ul>
+        <li>The destination country has been subject to a UK adequacy decision</li>
+        <li>We have put appropriate safeguards in place (e.g. UK IDTA or equivalent measures)</li>
+      </ul>
+      <p>Our sub-processors are either UK or EEA-based, or covered by UK adequacy decisions or ICO-approved transfer mechanisms.</p>
+    </div>
+    <div class="legal-section" id="g5">
+      <h2>5. Data security measures</h2>
+      <p>We implement technical and organisational security measures including:</p>
+      <ul>
+        <li>Encryption at rest using AES-256 and in transit using TLS 1.3</li>
+        <li>Separate databases per tenant (no commingled data)</li>
+        <li>Role-based access control with least-privilege principles</li>
+        <li>Multi-factor authentication options for all accounts</li>
+        <li>Regular penetration testing by independent third parties</li>
+        <li>Staff data protection training and confidentiality agreements</li>
+        <li>Secure software development lifecycle (SSDLC) practices</li>
+        <li>Automated vulnerability scanning and dependency monitoring</li>
+      </ul>
+    </div>
+    <div class="legal-section" id="g6">
+      <h2>6. Breach notification</h2>
+      <p>In the event of a personal data breach that is likely to result in a risk to the rights and freedoms of individuals, we will:</p>
+      <ul>
+        <li>Notify the ICO within 72 hours of becoming aware, where required</li>
+        <li>Notify affected data controllers (customer organisations) without undue delay</li>
+        <li>Notify affected individuals where the breach is likely to result in a high risk to their rights and freedoms</li>
+      </ul>
+      <p>To report a suspected security incident: <a href="mailto:security@flowapp.io">security@flowapp.io</a></p>
+    </div>
+    <div class="legal-section" id="g7">
+      <h2>7. Sub-processors</h2>
+      <p>We engage the following categories of sub-processors to help deliver the Service. All are bound by GDPR-compliant data processing terms:</p>
+      <ul>
+        <li><strong>Cloud infrastructure:</strong> servers and databases (UK/EEA)</li>
+        <li><strong>Email delivery:</strong> transactional email service (UK adequacy or IDTA)</li>
+        <li><strong>Payment processing:</strong> PCI-DSS compliant payment processor</li>
+        <li><strong>Error monitoring:</strong> anonymised error tracking service</li>
+      </ul>
+      <p>We will notify you of any intended changes to our sub-processor list at least 30 days in advance, giving you the opportunity to object.</p>
+    </div>
+    <div class="legal-section" id="g8">
+      <h2>8. Data Protection Officer</h2>
+      <p>Our Data Protection Officer is responsible for overseeing our data protection strategy and ensuring compliance with UK GDPR.</p>
+      <ul>
+        <li>Email: <a href="mailto:dpo@flowapp.io">dpo@flowapp.io</a></li>
+        <li>Post: DPO, Flow Software Ltd, 42 Digital Quarter, London, EC1A 1BB</li>
+      </ul>
+    </div>
+    <div class="legal-section" id="g9">
+      <h2>9. Exercising your rights</h2>
+      <p>To exercise any data subject right, please email <a href="mailto:dpo@flowapp.io">dpo@flowapp.io</a> with:</p>
+      <ul>
+        <li>Your full name and email address associated with your Flow account</li>
+        <li>The specific right you wish to exercise</li>
+        <li>Any relevant detail to help us locate your data</li>
+      </ul>
+      <p>We will acknowledge your request within 5 working days and respond fully within 30 days. If you are unsatisfied with our response, you have the right to complain to the Information Commissioner's Office (ICO): <a href="https://ico.org.uk/make-a-complaint" target="_blank" rel="noopener">ico.org.uk/make-a-complaint</a>, or call 0303 123 1113.</p>
+    </div>
+  </div>
+</div>
+<footer class="footer">
+  <div class="container-wide">
+    <div class="footer-grid">
+      <div class="footer-brand"><a href="../flow-homepage.html" class="logo" style="color:var(--em400);"><div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Flow</a><p>Time tracking, absence management, and invoicing for modern workforce teams.</p></div>
+      <div class="footer-col"><h5>Product</h5><ul><li><a href="../flow-homepage.html#features">Features</a></li><li><a href="../flow-homepage.html#pricing">Pricing</a></li><li><a href="../flow-homepage.html#demo">Request Demo</a></li></ul></div>
+      <div class="footer-col"><h5>Company</h5><ul><li><a href="about.html">About</a></li><li><a href="blog.html">Blog</a></li><li><a href="careers.html">Careers</a></li><li><a href="contact.html">Contact</a></li></ul></div>
+      <div class="footer-col"><h5>Legal</h5><ul><li><a href="privacy-policy.html">Privacy Policy</a></li><li><a href="terms-of-service.html">Terms of Service</a></li><li><a href="cookie-policy.html">Cookie Policy</a></li><li><a href="gdpr.html">GDPR</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><p>© 2025 Flow. All rights reserved.</p><p>Made with ♥ for staffing teams</p></div>
+  </div>
+</footer>
+</body>
+</html>

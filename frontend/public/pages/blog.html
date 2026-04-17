@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blog — Flow</title>
+  <meta name="description" content="Insights, guides, and product updates for staffing agencies and workforce teams." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --em50:#ecfdf5;--em100:#d1fae5;--em200:#a7f3d0;--em400:#34d399;
+      --em500:#10b981;--em600:#059669;--em700:#047857;--em800:#065f46;--em900:#064e3b;
+      --g50:#f9fafb;--g100:#f3f4f6;--g200:#e5e7eb;--g300:#d1d5db;--g400:#9ca3af;
+      --g500:#6b7280;--g600:#4b5563;--g700:#374151;--g800:#1f2937;--g900:#111827;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family:'Inter',system-ui,sans-serif; color:var(--g800); background:#fff; line-height:1.6; -webkit-font-smoothing:antialiased; }
+    a { text-decoration:none; color:inherit; }
+    .container { max-width:1120px; margin:0 auto; padding:0 24px; }
+    .navbar { position:sticky;top:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--g100); }
+    .navbar-inner { display:flex;align-items:center;justify-content:space-between;height:68px; }
+    .logo { display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;color:var(--em600);letter-spacing:-.5px; }
+    .logo-mark { width:36px;height:36px;background:var(--em600);border-radius:10px;display:flex;align-items:center;justify-content:center; }
+    .logo-mark svg { width:20px;height:20px;fill:none;stroke:white;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round; }
+    .nav-links { display:flex;align-items:center;gap:32px;font-size:14px;font-weight:500;color:var(--g600); }
+    .nav-links a:hover,.nav-links a.active { color:var(--em600); }
+    .btn { display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:12px;transition:all .18s ease;white-space:nowrap; }
+    .btn-primary { background:var(--em600);color:#fff;padding:10px 22px;font-size:14px; }
+    .btn-primary:hover { background:var(--em700);transform:translateY(-1px); }
+    .btn-outline { background:transparent;color:var(--em600);border:2px solid var(--em600);padding:8px 20px;font-size:14px; }
+    .btn-outline:hover { background:var(--em50); }
+
+    .page-hero { background:linear-gradient(135deg,var(--em800),var(--em600) 60%,#34d399);padding:80px 0 90px;position:relative;overflow:hidden; }
+    .page-hero::before { content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
+    .page-hero .breadcrumb { font-size:13px;color:rgba(255,255,255,.6);margin-bottom:16px; }
+    .page-hero .breadcrumb a { color:rgba(255,255,255,.7); }
+    .page-hero h1 { font-size:clamp(34px,5vw,56px);font-weight:800;color:#fff;letter-spacing:-1.5px;line-height:1.1;margin-bottom:18px; }
+    .page-hero p { font-size:18px;color:rgba(255,255,255,.82);max-width:540px;line-height:1.7; }
+
+    .section { padding:80px 0; }
+    .fade-in { opacity:0;transform:translateY(20px);transition:opacity .5s ease,transform .5s ease; }
+    .fade-in.visible { opacity:1;transform:translateY(0); }
+
+    /* Filter tabs */
+    .filter-tabs { display:flex;gap:8px;margin-bottom:48px;flex-wrap:wrap; }
+    .filter-tab { padding:8px 18px;border-radius:100px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid var(--g200);background:#fff;color:var(--g600);transition:all .15s; }
+    .filter-tab:hover { border-color:var(--em300);color:var(--em700); }
+    .filter-tab.active { background:var(--em600);color:#fff;border-color:var(--em600); }
+
+    /* Featured post */
+    .featured-post { background:var(--g50);border:1px solid var(--g100);border-radius:24px;padding:48px;display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;margin-bottom:48px;transition:all .2s; }
+    .featured-post:hover { border-color:var(--em200);box-shadow:0 8px 32px rgba(0,0,0,.08); }
+    .post-cat { display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:4px 12px;border-radius:100px;margin-bottom:14px; }
+    .cat-product { background:var(--em100);color:var(--em700); }
+    .cat-guide { background:#dbeafe;color:#1d4ed8; }
+    .cat-industry { background:#fef3c7;color:#92400e; }
+    .cat-news { background:#ede9fe;color:#5b21b6; }
+    .featured-post h2 { font-size:26px;font-weight:800;color:var(--g900);letter-spacing:-.5px;line-height:1.25;margin-bottom:12px; }
+    .featured-post p { font-size:15px;color:var(--g500);line-height:1.7;margin-bottom:20px; }
+    .featured-image { background:linear-gradient(135deg,var(--em600),var(--em400));border-radius:16px;height:220px;display:flex;align-items:center;justify-content:center;font-size:64px; }
+    .post-meta { display:flex;align-items:center;gap:16px;font-size:13px;color:var(--g400); }
+    .post-meta .author { display:flex;align-items:center;gap:8px; }
+    .post-meta .avatar { width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--em500),var(--em300));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff; }
+    .read-link { display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:var(--em600);transition:gap .15s; }
+    .read-link:hover { gap:10px;color:var(--em700); }
+
+    /* Post grid */
+    .posts-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:28px; }
+    .post-card { border:1px solid var(--g100);border-radius:20px;overflow:hidden;transition:all .2s;background:#fff; }
+    .post-card:hover { border-color:var(--em200);box-shadow:0 4px 20px rgba(0,0,0,.08);transform:translateY(-3px); }
+    .post-card-img { height:160px;display:flex;align-items:center;justify-content:center;font-size:48px; }
+    .post-card-body { padding:24px; }
+    .post-card h3 { font-size:16px;font-weight:700;color:var(--g900);line-height:1.35;margin-bottom:8px;letter-spacing:-.2px; }
+    .post-card p { font-size:13px;color:var(--g500);line-height:1.6;margin-bottom:16px; }
+
+    /* Newsletter strip */
+    .newsletter-strip { background:var(--em50);border:1px solid var(--em100);border-radius:24px;padding:48px;text-align:center;margin-top:64px; }
+    .newsletter-strip h3 { font-size:22px;font-weight:800;color:var(--em900);letter-spacing:-.5px;margin-bottom:8px; }
+    .newsletter-strip p { font-size:15px;color:var(--g500);margin-bottom:24px; }
+    .newsletter-form { display:flex;gap:10px;max-width:400px;margin:0 auto;flex-wrap:wrap; }
+    .newsletter-form input { flex:1;min-width:200px;padding:11px 16px;border:1.5px solid var(--em200);border-radius:10px;font-family:inherit;font-size:14px;outline:none;background:#fff; }
+    .newsletter-form input:focus { border-color:var(--em500);box-shadow:0 0 0 3px rgba(16,185,129,.1); }
+
+    /* Footer */
+    .footer { background:var(--g900);padding:60px 0 32px; }
+    .footer-grid { display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:48px;margin-bottom:48px; }
+    .footer-brand .logo { color:var(--em400);margin-bottom:14px; }
+    .footer-brand p { font-size:13px;color:var(--g400);line-height:1.7;max-width:260px; }
+    .footer-col h5 { font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--g400);margin-bottom:16px; }
+    .footer-col ul { list-style:none;display:flex;flex-direction:column;gap:10px; }
+    .footer-col ul a { font-size:14px;color:var(--g500);transition:color .15s; }
+    .footer-col ul a:hover { color:var(--em400); }
+    .footer-bottom { border-top:1px solid rgba(255,255,255,.07);padding-top:24px;display:flex;justify-content:space-between;align-items:center;gap:12px; }
+    .footer-bottom p { font-size:13px;color:var(--g600); }
+
+    @media(max-width:900px) { .featured-post{grid-template-columns:1fr;} .posts-grid{grid-template-columns:1fr 1fr;} .footer-grid{grid-template-columns:1fr 1fr;} }
+    @media(max-width:600px) { .nav-links,.nav-actions{display:none;} .posts-grid{grid-template-columns:1fr;} .footer-grid{grid-template-columns:1fr;gap:28px;} }
+  </style>
+</head>
+<body>
+<header class="navbar">
+  <div class="container navbar-inner">
+    <a href="../flow-homepage.html" class="logo">
+      <div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      Flow
+    </a>
+    <nav class="nav-links">
+      <a href="../flow-homepage.html#features">Features</a>
+      <a href="../flow-homepage.html#pricing">Pricing</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <div style="display:flex;gap:12px;">
+      <a href="/login" class="btn btn-outline">Log in</a>
+      <a href="../flow-homepage.html#demo" class="btn btn-primary">Request Demo</a>
+    </div>
+  </div>
+</header>
+
+<section class="page-hero">
+  <div class="container" style="position:relative;z-index:1;">
+    <p class="breadcrumb"><a href="../flow-homepage.html">Home</a> / Blog</p>
+    <h1>Insights for modern<br>workforce teams</h1>
+    <p>Guides, product updates, and industry thinking from the Flow team.</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+
+    <!-- Filter tabs -->
+    <div class="filter-tabs">
+      <button class="filter-tab active" onclick="filterPosts('all',this)">All</button>
+      <button class="filter-tab" onclick="filterPosts('product',this)">Product</button>
+      <button class="filter-tab" onclick="filterPosts('guide',this)">Guides</button>
+      <button class="filter-tab" onclick="filterPosts('industry',this)">Industry</button>
+      <button class="filter-tab" onclick="filterPosts('news',this)">News</button>
+    </div>
+
+    <!-- Featured post -->
+    <div class="featured-post fade-in" data-cat="product">
+      <div>
+        <span class="post-cat cat-product">Product</span>
+        <h2>Introducing real-time invoice generation — timesheets to invoices in seconds</h2>
+        <p>We've completely rebuilt how Flow generates invoices. Approved timesheets now trigger instant invoice drafts with the correct rate, candidate hours, and client details — no manual steps required.</p>
+        <div class="post-meta" style="margin-bottom:20px;">
+          <div class="author"><div class="avatar">JO</div><span>Jessica O'Brien</span></div>
+          <span>·</span>
+          <span>March 28, 2025</span>
+          <span>·</span>
+          <span>5 min read</span>
+        </div>
+        <a href="#" class="read-link">Read article →</a>
+      </div>
+      <div class="featured-image">⚡</div>
+    </div>
+
+    <!-- Post grid -->
+    <div class="posts-grid" id="postsGrid">
+
+      <div class="post-card fade-in" data-cat="guide">
+        <div class="post-card-img" style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);">📋</div>
+        <div class="post-card-body">
+          <span class="post-cat cat-guide">Guide</span>
+          <h3>The complete guide to timesheet approval workflows for staffing agencies</h3>
+          <p>Everything you need to know about setting up multi-level approval chains, handling disputes, and closing timesheets on time.</p>
+          <div class="post-meta" style="margin-bottom:12px;">
+            <span>Feb 14, 2025</span><span>·</span><span>8 min read</span>
+          </div>
+          <a href="#" class="read-link">Read →</a>
+        </div>
+      </div>
+
+      <div class="post-card fade-in" data-cat="industry">
+        <div class="post-card-img" style="background:linear-gradient(135deg,#fef3c7,#fde68a);">📈</div>
+        <div class="post-card-body">
+          <span class="post-cat cat-industry">Industry</span>
+          <h3>Why 60% of staffing agencies still invoice manually — and what it's costing them</h3>
+          <p>We surveyed 200 staffing agencies about their invoicing process. The results were more surprising — and costly — than we expected.</p>
+          <div class="post-meta" style="margin-bottom:12px;">
+            <span>Jan 31, 2025</span><span>·</span><span>6 min read</span>
+          </div>
+          <a href="#" class="read-link">Read →</a>
+        </div>
+      </div>
+
+      <div class="post-card fade-in" data-cat="product">
+        <div class="post-card-img" style="background:linear-gradient(135deg,var(--em100),var(--em200));">🗂</div>
+        <div class="post-card-body">
+          <span class="post-cat cat-product">Product</span>
+          <h3>Multi-tenant workspaces: how Flow keeps client data completely isolated</h3>
+          <p>A deep dive into how our separate-database-per-tenant architecture works — and why it matters for data security and compliance.</p>
+          <div class="post-meta" style="margin-bottom:12px;">
+            <span>Jan 15, 2025</span><span>·</span><span>7 min read</span>
+          </div>
+          <a href="#" class="read-link">Read →</a>
+        </div>
+      </div>
+
+      <div class="post-card fade-in" data-cat="guide">
+        <div class="post-card-img" style="background:linear-gradient(135deg,#ede9fe,#ddd6fe);">🏖</div>
+        <div class="post-card-body">
+          <span class="post-cat cat-guide">Guide</span>
+          <h3>Setting up absence management: a step-by-step guide for HR teams</h3>
+          <p>Configure holiday allowances, sick leave rules, and approval workflows in Flow — including how to handle part-year entitlements.</p>
+          <div class="post-meta" style="margin-bottom:12px;">
+            <span>Dec 10, 2024</span><span>·</span><span>5 min read</span>
+          </div>
+          <a href="#" class="read-link">Read →</a>
+        </div>
+      </div>
+
+      <div class="post-card fade-in" data-cat="news">
+        <div class="post-card-img" style="background:linear-gradient(135deg,#fce7f3,#fbcfe8);">🎉</div>
+        <div class="post-card-body">
+          <span class="post-cat cat-news">News</span>
+          <h3>Flow reaches 500 customers — thank you for being part of the journey</h3>
+          <p>We're celebrating a major milestone and sharing what we've learned from building alongside our incredible early customers.</p>
+          <div class="post-meta" style="margin-bottom:12px;">
+            <span>Nov 28, 2024</span><span>·</span><span>3 min read</span>
+          </div>
+          <a href="#" class="read-link">Read →</a>
+        </div>
+      </div>
+
+      <div class="post-card fade-in" data-cat="industry">
+        <div class="post-card-img" style="background:linear-gradient(135deg,#e0f2fe,#bae6fd);">🔍</div>
+        <div class="post-card-body">
+          <span class="post-cat cat-industry">Industry</span>
+          <h3>GDPR and staffing: what every agency needs to know about candidate data in 2025</h3>
+          <p>New ICO guidance, updated data retention requirements, and what you need to check in your workforce platform today.</p>
+          <div class="post-meta" style="margin-bottom:12px;">
+            <span>Nov 5, 2024</span><span>·</span><span>9 min read</span>
+          </div>
+          <a href="#" class="read-link">Read →</a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Newsletter -->
+    <div class="newsletter-strip fade-in">
+      <h3>Get the latest from Flow</h3>
+      <p>Product updates, guides, and industry insights — delivered to your inbox monthly. No spam.</p>
+      <form class="newsletter-form" onsubmit="subscribeNewsletter(event)">
+        <input type="email" placeholder="your@email.com" required />
+        <button type="submit" class="btn btn-primary">Subscribe</button>
+      </form>
+    </div>
+
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="../flow-homepage.html" class="logo" style="color:var(--em400);">
+          <div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+          Flow
+        </a>
+        <p>Time tracking, absence management, and invoicing for modern workforce teams.</p>
+      </div>
+      <div class="footer-col"><h5>Product</h5><ul><li><a href="../flow-homepage.html#features">Features</a></li><li><a href="../flow-homepage.html#pricing">Pricing</a></li><li><a href="../flow-homepage.html#demo">Request Demo</a></li></ul></div>
+      <div class="footer-col"><h5>Company</h5><ul><li><a href="about.html">About</a></li><li><a href="blog.html">Blog</a></li><li><a href="careers.html">Careers</a></li><li><a href="contact.html">Contact</a></li></ul></div>
+      <div class="footer-col"><h5>Legal</h5><ul><li><a href="privacy-policy.html">Privacy Policy</a></li><li><a href="terms-of-service.html">Terms of Service</a></li><li><a href="cookie-policy.html">Cookie Policy</a></li><li><a href="gdpr.html">GDPR</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><p>© 2025 Flow. All rights reserved.</p><p>Made with ♥ for staffing teams</p></div>
+  </div>
+</footer>
+
+<script>
+  function filterPosts(cat, btn) {
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.post-card[data-cat],.featured-post[data-cat]').forEach(card => {
+      card.style.display = (cat === 'all' || card.dataset.cat === cat) ? '' : 'none';
+    });
+  }
+  function subscribeNewsletter(e) {
+    e.preventDefault();
+    e.target.innerHTML = '<p style="color:var(--em700);font-weight:600;">✅ You\'re subscribed! Welcome to the Flow community.</p>';
+  }
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if(e.isIntersecting){ e.target.classList.add('visible'); obs.unobserve(e.target); } });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.fade-in').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>

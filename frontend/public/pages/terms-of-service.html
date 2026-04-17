@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terms of Service — Flow</title>
+  <meta name="description" content="Flow Terms of Service — the agreement governing your use of the Flow platform." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root{--em50:#ecfdf5;--em100:#d1fae5;--em200:#a7f3d0;--em400:#34d399;--em500:#10b981;--em600:#059669;--em700:#047857;--em800:#065f46;--em900:#064e3b;--g50:#f9fafb;--g100:#f3f4f6;--g200:#e5e7eb;--g300:#d1d5db;--g400:#9ca3af;--g500:#6b7280;--g600:#4b5563;--g700:#374151;--g800:#1f2937;--g900:#111827;}
+    html{scroll-behavior:smooth;}
+    body{font-family:'Inter',system-ui,sans-serif;color:var(--g800);background:#fff;line-height:1.6;-webkit-font-smoothing:antialiased;}
+    a{text-decoration:none;color:inherit;}
+    .container{max-width:800px;margin:0 auto;padding:0 24px;}
+    .container-wide{max-width:1120px;margin:0 auto;padding:0 24px;}
+    .navbar{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--g100);}
+    .navbar-inner{display:flex;align-items:center;justify-content:space-between;height:68px;}
+    .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;color:var(--em600);letter-spacing:-.5px;}
+    .logo-mark{width:36px;height:36px;background:var(--em600);border-radius:10px;display:flex;align-items:center;justify-content:center;}
+    .logo-mark svg{width:20px;height:20px;fill:none;stroke:white;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+    .nav-links{display:flex;align-items:center;gap:32px;font-size:14px;font-weight:500;color:var(--g600);}
+    .nav-links a:hover{color:var(--em600);}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:12px;transition:all .18s ease;white-space:nowrap;}
+    .btn-primary{background:var(--em600);color:#fff;padding:10px 22px;font-size:14px;}
+    .btn-primary:hover{background:var(--em700);}
+    .btn-outline{background:transparent;color:var(--em600);border:2px solid var(--em600);padding:8px 20px;font-size:14px;}
+    .btn-outline:hover{background:var(--em50);}
+    .page-hero{background:linear-gradient(135deg,var(--em800),var(--em600) 60%,#34d399);padding:64px 0 72px;position:relative;overflow:hidden;}
+    .page-hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");}
+    .page-hero .breadcrumb{font-size:13px;color:rgba(255,255,255,.6);margin-bottom:12px;}
+    .page-hero .breadcrumb a{color:rgba(255,255,255,.7);}
+    .page-hero h1{font-size:clamp(28px,4vw,44px);font-weight:800;color:#fff;letter-spacing:-1px;line-height:1.15;margin-bottom:12px;}
+    .page-hero .meta{font-size:14px;color:rgba(255,255,255,.65);}
+    /* Legal content */
+    .legal-body{padding:64px 0 80px;}
+    .legal-toc{background:var(--em50);border:1px solid var(--em100);border-radius:16px;padding:24px 28px;margin-bottom:48px;}
+    .legal-toc h3{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--em700);margin-bottom:12px;}
+    .legal-toc ol{padding-left:20px;display:flex;flex-direction:column;gap:6px;}
+    .legal-toc ol li a{font-size:14px;color:var(--em600);}
+    .legal-toc ol li a:hover{color:var(--em800);text-decoration:underline;}
+    .legal-section{margin-bottom:48px;}
+    .legal-section h2{font-size:20px;font-weight:800;color:var(--g900);letter-spacing:-.3px;margin-bottom:16px;padding-top:8px;border-top:2px solid var(--em100);padding-top:20px;}
+    .legal-section h3{font-size:16px;font-weight:700;color:var(--g800);margin:20px 0 10px;}
+    .legal-section p{font-size:15px;color:var(--g600);line-height:1.8;margin-bottom:12px;}
+    .legal-section ul,.legal-section ol{padding-left:24px;margin:8px 0 16px;display:flex;flex-direction:column;gap:6px;}
+    .legal-section li{font-size:15px;color:var(--g600);line-height:1.7;}
+    .legal-section a{color:var(--em600);}
+    .legal-section a:hover{text-decoration:underline;}
+    .highlight-box{background:var(--em50);border:1px solid var(--em200);border-radius:12px;padding:20px 24px;margin:16px 0;}
+    .highlight-box p{color:var(--em800);font-weight:500;margin-bottom:0;}
+    .footer{background:var(--g900);padding:60px 0 32px;}
+    .footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:48px;margin-bottom:48px;}
+    .footer-brand .logo{color:var(--em400);margin-bottom:14px;}
+    .footer-brand p{font-size:13px;color:var(--g400);line-height:1.7;max-width:260px;}
+    .footer-col h5{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--g400);margin-bottom:16px;}
+    .footer-col ul{list-style:none;display:flex;flex-direction:column;gap:10px;}
+    .footer-col ul a{font-size:14px;color:var(--g500);transition:color .15s;}
+    .footer-col ul a:hover{color:var(--em400);}
+    .footer-bottom{border-top:1px solid rgba(255,255,255,.07);padding-top:24px;display:flex;justify-content:space-between;align-items:center;gap:12px;}
+    .footer-bottom p{font-size:13px;color:var(--g600);}
+    @media(max-width:900px){.footer-grid{grid-template-columns:1fr 1fr;}}
+    @media(max-width:600px){.nav-links,.nav-actions{display:none;}.footer-grid{grid-template-columns:1fr;gap:28px;}}
+  </style>
+</head>
+<body>
+<header class="navbar">
+  <div class="container-wide navbar-inner">
+    <a href="../flow-homepage.html" class="logo"><div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Flow</a>
+    <nav class="nav-links"><a href="../flow-homepage.html#features">Features</a><a href="../flow-homepage.html#pricing">Pricing</a><a href="about.html">About</a><a href="contact.html">Contact</a></nav>
+    <div style="display:flex;gap:12px;"><a href="/login" class="btn btn-outline">Log in</a><a href="../flow-homepage.html#demo" class="btn btn-primary">Request Demo</a></div>
+  </div>
+</header>
+<section class="page-hero">
+  <div class="container">
+    <p class="breadcrumb"><a href="../flow-homepage.html">Home</a> / Terms of Service</p>
+    <h1>Terms of Service</h1>
+    <p class="meta">Last updated: 1 April 2025 &nbsp;·&nbsp; Effective: 1 April 2025</p>
+  </div>
+</section>
+<div class="legal-body">
+  <div class="container">
+    <div class="highlight-box"><p>Please read these Terms of Service ("<strong>Terms</strong>") carefully before using Flow. By creating an account or using the platform, you agree to be bound by these Terms. If you are using Flow on behalf of an organisation, you confirm you have authority to bind that organisation to these Terms.</p></div>
+    <div class="legal-toc">
+      <h3>Contents</h3>
+      <ol>
+        <li><a href="#t1">The Service</a></li>
+        <li><a href="#t2">Account registration</a></li>
+        <li><a href="#t3">Subscriptions and payment</a></li>
+        <li><a href="#t4">Acceptable use</a></li>
+        <li><a href="#t5">Intellectual property</a></li>
+        <li><a href="#t6">Your data</a></li>
+        <li><a href="#t7">Confidentiality</a></li>
+        <li><a href="#t8">Warranties and disclaimers</a></li>
+        <li><a href="#t9">Limitation of liability</a></li>
+        <li><a href="#t10">Termination</a></li>
+        <li><a href="#t11">Governing law</a></li>
+        <li><a href="#t12">Changes to these Terms</a></li>
+        <li><a href="#t13">Contact</a></li>
+      </ol>
+    </div>
+    <div class="legal-section" id="t1"><h2>1. The Service</h2><p>Flow Software Ltd ("<strong>Flow</strong>", "<strong>we</strong>") provides a cloud-based workforce management platform including time tracking, absence management, and invoicing features ("<strong>Service</strong>"). We grant you a non-exclusive, non-transferable, revocable licence to access and use the Service in accordance with these Terms during your subscription period.</p></div>
+    <div class="legal-section" id="t2"><h2>2. Account registration</h2><p>You must provide accurate, current, and complete information when registering. You are responsible for maintaining the confidentiality of your credentials and for all activity under your account. You must notify us immediately at <a href="mailto:support@flowapp.io">support@flowapp.io</a> if you suspect unauthorised access. You must be at least 18 years old to create an account.</p></div>
+    <div class="legal-section" id="t3"><h2>3. Subscriptions and payment</h2><p>Flow is offered on a subscription basis. Fees are billed monthly or annually in advance. All fees are exclusive of VAT where applicable. We reserve the right to change pricing with 30 days' notice. Failure to pay may result in suspension or termination of your account. We do not offer refunds for partial periods except as required by law.</p></div>
+    <div class="legal-section" id="t4"><h2>4. Acceptable use</h2><p>You agree not to: (a) use the Service for any unlawful purpose; (b) attempt to gain unauthorised access to the Service or its underlying systems; (c) reverse engineer, decompile, or disassemble any part of the Service; (d) use the Service to transmit harmful, defamatory, or infringing content; (e) resell or sublicence the Service without our written consent; or (f) use automated tools to scrape or extract data from the Service.</p></div>
+    <div class="legal-section" id="t5"><h2>5. Intellectual property</h2><p>Flow and its licensors own all intellectual property rights in the Service, including software, designs, and documentation. Nothing in these Terms transfers any IP rights to you. You retain all rights in any data you upload to the Service ("<strong>Customer Data</strong>").</p></div>
+    <div class="legal-section" id="t6"><h2>6. Your data</h2><p>You grant us a limited licence to host, copy, and process Customer Data as necessary to provide the Service. We process personal data in Customer Data as your data processor under our <a href="gdpr.html">Data Processing Agreement</a>. We will not use Customer Data for any purpose other than providing the Service to you.</p></div>
+    <div class="legal-section" id="t7"><h2>7. Confidentiality</h2><p>Each party agrees to keep the other's confidential information secret, to use it only for the purpose of these Terms, and to protect it with at least the same care it uses to protect its own confidential information. This obligation survives termination for 5 years.</p></div>
+    <div class="legal-section" id="t8"><h2>8. Warranties and disclaimers</h2><p>We warrant that the Service will perform materially as described in our documentation. We will use commercially reasonable efforts to maintain 99.9% monthly uptime, excluding scheduled maintenance. Except as expressly stated, the Service is provided "as is" without warranty of any kind.</p></div>
+    <div class="legal-section" id="t9"><h2>9. Limitation of liability</h2><p>To the maximum extent permitted by law, Flow's total liability to you in any 12-month period shall not exceed the fees paid by you in that period. Neither party shall be liable for indirect, consequential, or punitive damages. Nothing in these Terms excludes liability for death, personal injury, or fraud.</p></div>
+    <div class="legal-section" id="t10"><h2>10. Termination</h2><p>Either party may terminate these Terms with 30 days' written notice. We may suspend or terminate immediately for breach of these Terms, non-payment, or if required by law. On termination, your access will cease and we will make your data available for export for 30 days before deletion.</p></div>
+    <div class="legal-section" id="t11"><h2>11. Governing law</h2><p>These Terms are governed by the laws of England and Wales. Any dispute shall be subject to the exclusive jurisdiction of the courts of England and Wales.</p></div>
+    <div class="legal-section" id="t12"><h2>12. Changes to these Terms</h2><p>We may update these Terms. We will provide 30 days' notice of material changes by email. Continued use after that date constitutes acceptance.</p></div>
+    <div class="legal-section" id="t13"><h2>13. Contact</h2><p>Questions about these Terms: <a href="mailto:legal@flowapp.io">legal@flowapp.io</a> or Flow Software Ltd, 42 Digital Quarter, London, EC1A 1BB.</p></div>
+  </div>
+</div>
+<footer class="footer">
+  <div class="container-wide">
+    <div class="footer-grid">
+      <div class="footer-brand"><a href="../flow-homepage.html" class="logo" style="color:var(--em400);"><div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Flow</a><p>Time tracking, absence management, and invoicing for modern workforce teams.</p></div>
+      <div class="footer-col"><h5>Product</h5><ul><li><a href="../flow-homepage.html#features">Features</a></li><li><a href="../flow-homepage.html#pricing">Pricing</a></li><li><a href="../flow-homepage.html#demo">Request Demo</a></li></ul></div>
+      <div class="footer-col"><h5>Company</h5><ul><li><a href="about.html">About</a></li><li><a href="blog.html">Blog</a></li><li><a href="careers.html">Careers</a></li><li><a href="contact.html">Contact</a></li></ul></div>
+      <div class="footer-col"><h5>Legal</h5><ul><li><a href="privacy-policy.html">Privacy Policy</a></li><li><a href="terms-of-service.html">Terms of Service</a></li><li><a href="cookie-policy.html">Cookie Policy</a></li><li><a href="gdpr.html">GDPR</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><p>© 2025 Flow. All rights reserved.</p><p>Made with ♥ for staffing teams</p></div>
+  </div>
+</footer>
+</body>
+</html>

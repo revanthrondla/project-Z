@@ -3,12 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import FlowLogo from '../components/FlowLogo';
 
-const DEMO_ACCOUNTS = [
-  { label: '👑 Admin',      email: 'admin@hireiq.com',  password: 'admin123',      company: 'hireiq', color: 'emerald' },
-  { label: '👤 Alice',      email: 'alice@hireiq.com',  password: 'candidate123',  company: 'hireiq', color: 'teal' },
-  { label: '👤 Bob',        email: 'bob@hireiq.com',    password: 'candidate123',  company: 'hireiq', color: 'teal' },
-  { label: '👤 Carol',      email: 'carol@hireiq.com',  password: 'candidate123',  company: 'hireiq', color: 'teal' },
-];
 
 export default function Login() {
   const { login } = useAuth();
@@ -34,9 +28,6 @@ export default function Login() {
       setLoading(false);
     }
   };
-
-  const fillDemo = ({ email, password, company }) =>
-    setForm({ email, password, companyCode: company });
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
@@ -97,6 +88,19 @@ export default function Login() {
         </div>
 
         <div className="w-full max-w-[420px]">
+
+          {/* Back to home */}
+          <div className="mb-6">
+            <a
+              href="/flow-homepage.html"
+              className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-emerald-600 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to home
+            </a>
+          </div>
 
           {/* Heading */}
           <div className="mb-8">
@@ -201,33 +205,6 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Demo accounts */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-              Quick Demo Access
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {DEMO_ACCOUNTS.map(acc => (
-                <button
-                  key={acc.email}
-                  onClick={() => fillDemo(acc)}
-                  className="text-left p-3 bg-white border border-gray-200 rounded-xl
-                             hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-sm
-                             transition-all duration-150 group"
-                >
-                  <div className="text-xs font-semibold text-gray-700 group-hover:text-emerald-700">
-                    {acc.label}
-                  </div>
-                  <div className="text-[11px] text-gray-400 mt-0.5 truncate">
-                    {acc.email}
-                  </div>
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-gray-400 mt-3 text-center">
-              Click a card to pre-fill credentials, then sign in
-            </p>
-          </div>
         </div>
       </div>
     </div>

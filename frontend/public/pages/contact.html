@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contact — Flow</title>
+  <meta name="description" content="Get in touch with the Flow team. Book a demo, get support, or just say hello." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root{--em50:#ecfdf5;--em100:#d1fae5;--em200:#a7f3d0;--em400:#34d399;--em500:#10b981;--em600:#059669;--em700:#047857;--em800:#065f46;--em900:#064e3b;--g50:#f9fafb;--g100:#f3f4f6;--g200:#e5e7eb;--g300:#d1d5db;--g400:#9ca3af;--g500:#6b7280;--g600:#4b5563;--g700:#374151;--g800:#1f2937;--g900:#111827;}
+    html{scroll-behavior:smooth;}
+    body{font-family:'Inter',system-ui,sans-serif;color:var(--g800);background:#fff;line-height:1.6;-webkit-font-smoothing:antialiased;}
+    a{text-decoration:none;color:inherit;}
+    .container{max-width:1120px;margin:0 auto;padding:0 24px;}
+    .navbar{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--g100);}
+    .navbar-inner{display:flex;align-items:center;justify-content:space-between;height:68px;}
+    .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;color:var(--em600);letter-spacing:-.5px;}
+    .logo-mark{width:36px;height:36px;background:var(--em600);border-radius:10px;display:flex;align-items:center;justify-content:center;}
+    .logo-mark svg{width:20px;height:20px;fill:none;stroke:white;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+    .nav-links{display:flex;align-items:center;gap:32px;font-size:14px;font-weight:500;color:var(--g600);}
+    .nav-links a:hover,.nav-links a.active{color:var(--em600);}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:12px;transition:all .18s ease;white-space:nowrap;}
+    .btn-primary{background:var(--em600);color:#fff;padding:10px 22px;font-size:14px;}
+    .btn-primary:hover{background:var(--em700);transform:translateY(-1px);}
+    .btn-outline{background:transparent;color:var(--em600);border:2px solid var(--em600);padding:8px 20px;font-size:14px;}
+    .btn-outline:hover{background:var(--em50);}
+    .page-hero{background:linear-gradient(135deg,var(--em800),var(--em600) 60%,#34d399);padding:80px 0 90px;position:relative;overflow:hidden;}
+    .page-hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");}
+    .page-hero .breadcrumb{font-size:13px;color:rgba(255,255,255,.6);margin-bottom:16px;}
+    .page-hero .breadcrumb a{color:rgba(255,255,255,.7);}
+    .page-hero h1{font-size:clamp(34px,5vw,56px);font-weight:800;color:#fff;letter-spacing:-1.5px;line-height:1.1;margin-bottom:18px;}
+    .page-hero p{font-size:18px;color:rgba(255,255,255,.82);max-width:540px;line-height:1.7;}
+    .section{padding:80px 0;}
+    .section-label{display:inline-block;background:var(--em50);color:var(--em700);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 12px;border-radius:100px;margin-bottom:14px;border:1px solid var(--em200);}
+    .section-title{font-size:clamp(26px,4vw,38px);font-weight:800;color:var(--g900);letter-spacing:-1px;line-height:1.15;margin-bottom:14px;}
+    .fade-in{opacity:0;transform:translateY(20px);transition:opacity .5s ease,transform .5s ease;}
+    .fade-in.visible{opacity:1;transform:translateY(0);}
+    /* Contact grid */
+    .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start;}
+    /* Form */
+    .contact-form{background:var(--g50);border:1px solid var(--g100);border-radius:24px;padding:40px;}
+    .form-group{margin-bottom:20px;}
+    .form-group label{display:block;font-size:13px;font-weight:600;color:var(--g700);margin-bottom:6px;}
+    .form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 16px;border:1.5px solid var(--g200);border-radius:10px;font-family:inherit;font-size:14px;color:var(--g800);outline:none;background:#fff;transition:border-color .15s,box-shadow .15s;}
+    .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--em500);box-shadow:0 0 0 3px rgba(16,185,129,.1);}
+    .form-group textarea{min-height:120px;resize:vertical;}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+    /* Contact cards */
+    .contact-cards{display:flex;flex-direction:column;gap:20px;}
+    .contact-card{background:#fff;border:1px solid var(--g100);border-radius:16px;padding:24px;display:flex;gap:18px;align-items:flex-start;transition:all .2s;}
+    .contact-card:hover{border-color:var(--em200);box-shadow:0 4px 16px rgba(0,0,0,.06);}
+    .contact-card-icon{width:44px;height:44px;background:var(--em100);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+    .contact-card h3{font-size:15px;font-weight:700;color:var(--g900);margin-bottom:4px;}
+    .contact-card p{font-size:13px;color:var(--g500);line-height:1.6;}
+    .contact-card a{font-size:14px;font-weight:600;color:var(--em600);}
+    .contact-card a:hover{color:var(--em700);}
+    /* Success */
+    .success-msg{display:none;padding:16px;background:var(--em50);border:1px solid var(--em200);border-radius:10px;color:var(--em800);font-size:14px;font-weight:500;margin-top:16px;}
+    .footer{background:var(--g900);padding:60px 0 32px;}
+    .footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:48px;margin-bottom:48px;}
+    .footer-brand .logo{color:var(--em400);margin-bottom:14px;}
+    .footer-brand p{font-size:13px;color:var(--g400);line-height:1.7;max-width:260px;}
+    .footer-col h5{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--g400);margin-bottom:16px;}
+    .footer-col ul{list-style:none;display:flex;flex-direction:column;gap:10px;}
+    .footer-col ul a{font-size:14px;color:var(--g500);transition:color .15s;}
+    .footer-col ul a:hover{color:var(--em400);}
+    .footer-bottom{border-top:1px solid rgba(255,255,255,.07);padding-top:24px;display:flex;justify-content:space-between;align-items:center;gap:12px;}
+    .footer-bottom p{font-size:13px;color:var(--g600);}
+    @media(max-width:900px){.contact-grid{grid-template-columns:1fr;}.footer-grid{grid-template-columns:1fr 1fr;}}
+    @media(max-width:600px){.nav-links,.nav-actions{display:none;}.form-row{grid-template-columns:1fr;}.footer-grid{grid-template-columns:1fr;gap:28px;}}
+  </style>
+</head>
+<body>
+<header class="navbar">
+  <div class="container navbar-inner">
+    <a href="../flow-homepage.html" class="logo"><div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Flow</a>
+    <nav class="nav-links"><a href="../flow-homepage.html#features">Features</a><a href="../flow-homepage.html#pricing">Pricing</a><a href="about.html">About</a><a href="contact.html" class="active">Contact</a></nav>
+    <div style="display:flex;gap:12px;"><a href="/login" class="btn btn-outline">Log in</a><a href="../flow-homepage.html#demo" class="btn btn-primary">Request Demo</a></div>
+  </div>
+</header>
+
+<section class="page-hero">
+  <div class="container" style="position:relative;z-index:1;">
+    <p class="breadcrumb"><a href="../flow-homepage.html">Home</a> / Contact</p>
+    <h1>We'd love to<br>hear from you</h1>
+    <p>Whether you want to book a demo, get support, or just ask a question — we typically respond within a few hours.</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="contact-grid">
+
+      <!-- Form -->
+      <div class="fade-in">
+        <div class="contact-form">
+          <h2 style="font-size:20px;font-weight:800;color:var(--g900);letter-spacing:-.3px;margin-bottom:4px;">Send us a message</h2>
+          <p style="font-size:14px;color:var(--g500);margin-bottom:28px;">We'll get back to you within 1 business day.</p>
+          <form id="contactForm" onsubmit="submitContact(event)" novalidate>
+            <div class="form-row">
+              <div class="form-group"><label for="firstName">First name *</label><input type="text" id="firstName" placeholder="Ravi" required /></div>
+              <div class="form-group"><label for="lastName">Last name *</label><input type="text" id="lastName" placeholder="Kumar" required /></div>
+            </div>
+            <div class="form-group"><label for="email">Work email *</label><input type="email" id="email" placeholder="ravi@company.com" required /></div>
+            <div class="form-group"><label for="company">Company</label><input type="text" id="company" placeholder="Apex Staffing Ltd" /></div>
+            <div class="form-group">
+              <label for="subject">How can we help?</label>
+              <select id="subject">
+                <option value="">Select a topic…</option>
+                <option>Book a demo</option>
+                <option>Pricing enquiry</option>
+                <option>Technical support</option>
+                <option>Partnership</option>
+                <option>Press / media</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="form-group"><label for="message">Message *</label><textarea id="message" placeholder="Tell us a bit more about what you're looking for…" required></textarea></div>
+            <button type="submit" class="btn btn-primary" style="width:100%;padding:13px;font-size:15px;">Send message →</button>
+            <div class="success-msg" id="successMsg">✅ Message sent! We'll be in touch within 1 business day.</div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Contact cards -->
+      <div class="contact-cards fade-in">
+        <div class="contact-card">
+          <div class="contact-card-icon">🗓</div>
+          <div>
+            <h3>Book a demo</h3>
+            <p>See Flow in action with a personalised 30-minute walkthrough. We'll set up your workspace on the spot.</p>
+            <a href="../flow-homepage.html#demo">Schedule a demo →</a>
+          </div>
+        </div>
+        <div class="contact-card">
+          <div class="contact-card-icon">💬</div>
+          <div>
+            <h3>Customer support</h3>
+            <p>Already a Flow customer? Raise a ticket through the app or email us directly — we aim to respond within 4 hours.</p>
+            <a href="mailto:support@flowapp.io">support@flowapp.io</a>
+          </div>
+        </div>
+        <div class="contact-card">
+          <div class="contact-card-icon">💼</div>
+          <div>
+            <h3>Sales enquiries</h3>
+            <p>Questions about pricing, volume discounts, or enterprise plans? Our sales team is happy to help.</p>
+            <a href="mailto:sales@flowapp.io">sales@flowapp.io</a>
+          </div>
+        </div>
+        <div class="contact-card">
+          <div class="contact-card-icon">🤝</div>
+          <div>
+            <h3>Partnerships</h3>
+            <p>Interested in integrating with Flow or becoming a referral partner? We'd love to explore it.</p>
+            <a href="mailto:partners@flowapp.io">partners@flowapp.io</a>
+          </div>
+        </div>
+        <div class="contact-card">
+          <div class="contact-card-icon">📰</div>
+          <div>
+            <h3>Press & media</h3>
+            <p>For press enquiries, interviews, or media kit requests, please reach out to our communications team.</p>
+            <a href="mailto:press@flowapp.io">press@flowapp.io</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand"><a href="../flow-homepage.html" class="logo" style="color:var(--em400);"><div class="logo-mark"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Flow</a><p>Time tracking, absence management, and invoicing for modern workforce teams.</p></div>
+      <div class="footer-col"><h5>Product</h5><ul><li><a href="../flow-homepage.html#features">Features</a></li><li><a href="../flow-homepage.html#pricing">Pricing</a></li><li><a href="../flow-homepage.html#demo">Request Demo</a></li></ul></div>
+      <div class="footer-col"><h5>Company</h5><ul><li><a href="about.html">About</a></li><li><a href="blog.html">Blog</a></li><li><a href="careers.html">Careers</a></li><li><a href="contact.html">Contact</a></li></ul></div>
+      <div class="footer-col"><h5>Legal</h5><ul><li><a href="privacy-policy.html">Privacy Policy</a></li><li><a href="terms-of-service.html">Terms of Service</a></li><li><a href="cookie-policy.html">Cookie Policy</a></li><li><a href="gdpr.html">GDPR</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><p>© 2025 Flow. All rights reserved.</p><p>Made with ♥ for staffing teams</p></div>
+  </div>
+</footer>
+<script>
+  function submitContact(e){
+    e.preventDefault();
+    const f=e.target;
+    if(!f.firstName.value||!f.email.value||!f.message.value){alert('Please fill in all required fields.');return;}
+    f.querySelector('button[type=submit]').textContent='Sending…';
+    setTimeout(()=>{
+      f.style.display='none';
+      document.getElementById('successMsg').style.display='block';
+    },600);
+  }
+  const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');obs.unobserve(e.target);}});},{threshold:0.1,rootMargin:'0px 0px -40px 0px'});
+  document.querySelectorAll('.fade-in').forEach(el=>obs.observe(el));
+</script>
+</body>
+</html>
