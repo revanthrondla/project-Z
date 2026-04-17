@@ -148,7 +148,7 @@ router.get('/template/:type', authenticate, requireAdmin, injectTenantDb, async 
   const { type } = req.params;
   if (!TEMPLATES[type]) return res.status(404).json({ error: 'Unknown template type' });
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename="hireiq_${type}_template.csv"`);
+  res.setHeader('Content-Disposition', `attachment; filename="flow_${type}_template.csv"`);
   res.send(TEMPLATES[type]);
 });
 

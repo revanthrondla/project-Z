@@ -291,7 +291,7 @@ function NewPlatformTicketModal({ onClose, onCreated }) {
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
           <div>
             <h2 className="text-lg font-semibold text-gray-800">Contact Platform Support</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Your ticket will be handled by the HireIQ platform team</p>
+            <p className="text-xs text-gray-500 mt-0.5">Your ticket will be handled by the Flow platform team</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
@@ -357,7 +357,7 @@ function PlatformSupportTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm text-gray-500">Tickets you've raised with the HireIQ platform team</p>
+          <p className="text-sm text-gray-500">Tickets you've raised with the Flow platform team</p>
         </div>
         <button onClick={() => setShowNew(true)} className="btn-primary text-sm px-4 py-2">+ New Ticket</button>
       </div>
@@ -368,7 +368,7 @@ function PlatformSupportTab() {
         <div className="text-center py-16 text-gray-400">
           <p className="text-4xl mb-3">🏢</p>
           <p className="font-medium text-gray-600">No platform support tickets yet</p>
-          <p className="text-sm mt-1">Contact the HireIQ team for billing, technical, or account issues</p>
+          <p className="text-sm mt-1">Contact the Flow team for billing, technical, or account issues</p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
