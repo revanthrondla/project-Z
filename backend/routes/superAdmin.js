@@ -425,4 +425,10 @@ router.put('/ai-config', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Demo Requests (Leads) ──────────────────────────────────────────────────────
+// Mount the shared demo-request router at /demo-requests under the super-admin
+// middleware chain so all endpoints are already auth-gated.
+const demoRequestRouter = require('./demoRequests');
+router.use('/demo-requests', demoRequestRouter);
+
 module.exports = router;

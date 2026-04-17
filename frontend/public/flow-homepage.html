@@ -378,7 +378,7 @@
     </nav>
     <div class="nav-actions">
       <a href="/login" class="btn btn-outline" style="padding:9px 20px;font-size:14px;">Log in</a>
-      <a href="#demo" class="btn btn-primary" style="padding:9px 20px;font-size:14px;">Request Demo</a>
+      <a href="/request-demo.html" class="btn btn-primary" style="padding:9px 20px;font-size:14px;">Request Demo</a>
     </div>
     <button class="hamburger" aria-label="Open menu" onclick="document.getElementById('mobileNav').classList.add('open')">
       <span></span><span></span><span></span>
@@ -396,7 +396,7 @@
     <a href="#pricing" onclick="document.getElementById('mobileNav').classList.remove('open')">Pricing</a>
     <a href="#testimonials" onclick="document.getElementById('mobileNav').classList.remove('open')">Customers</a>
     <a href="/login" class="btn btn-outline" style="margin-top:8px;text-align:center;">Log in</a>
-    <a href="#demo" class="btn btn-primary" onclick="document.getElementById('mobileNav').classList.remove('open')">Request Demo</a>
+    <a href="/request-demo.html" class="btn btn-primary" onclick="document.getElementById('mobileNav').classList.remove('open')">Request Demo</a>
   </div>
 </div>
 
@@ -413,7 +413,7 @@
     </h1>
     <p>Flow brings time tracking, absence management, and client invoicing into a single, beautifully simple workspace — purpose-built for staffing agencies and modern teams.</p>
     <div class="hero-cta">
-      <a href="#demo" class="btn btn-primary btn-lg">Request a Free Demo</a>
+      <a href="/request-demo.html" class="btn btn-primary btn-lg">Request a Free Demo</a>
       <a href="#features" class="btn btn-ghost btn-lg">See the features</a>
     </div>
     <div class="hero-stats" role="list" aria-label="Key statistics">
@@ -685,7 +685,7 @@
           <li class="muted"><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Multi-tenant workspaces</li>
           <li class="muted"><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Advanced analytics</li>
         </ul>
-        <a href="#demo" class="btn btn-outline plan-cta">Get started</a>
+        <a href="/request-demo.html" class="btn btn-outline plan-cta">Get started</a>
       </div>
 
       <!-- Growth (popular) -->
@@ -704,7 +704,7 @@
           <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Advanced analytics &amp; exports</li>
           <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Priority email &amp; chat support</li>
         </ul>
-        <a href="#demo" class="btn btn-primary plan-cta">Request a demo</a>
+        <a href="/request-demo.html" class="btn btn-primary plan-cta">Request a demo</a>
       </div>
 
       <!-- Enterprise -->
@@ -722,7 +722,7 @@
           <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>Dedicated account manager</li>
           <li><span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>SLA &amp; uptime guarantee</li>
         </ul>
-        <a href="#demo" class="btn btn-outline plan-cta">Talk to sales</a>
+        <a href="/request-demo.html" class="btn btn-outline plan-cta">Talk to sales</a>
       </div>
 
     </div>
@@ -734,11 +734,10 @@
   <div class="container" style="position:relative;z-index:1;">
     <h2 id="cta-heading">Ready to see Flow in action?</h2>
     <p>Book a personalised 30-minute demo — we'll walk you through everything and set up your workspace on the spot.</p>
-    <form class="demo-form" onsubmit="handleDemoRequest(event)" novalidate>
-      <input type="email" id="demo-email" placeholder="Enter your work email" aria-label="Work email address" required />
-      <button type="submit" class="btn btn-primary" style="white-space:nowrap;">Book a demo →</button>
-    </form>
-    <p class="form-note" id="form-feedback">No credit card required · Setup in minutes · Cancel any time</p>
+    <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+      <a href="/request-demo.html" class="btn btn-primary" style="padding:14px 32px;font-size:16px;">Book a demo →</a>
+    </div>
+    <p class="form-note" style="margin-top:14px;">No credit card required · Setup in minutes · Cancel any time</p>
   </div>
 </section>
 
@@ -761,7 +760,7 @@
           <li><a href="#features">Features</a></li>
           <li><a href="#pricing">Pricing</a></li>
           <li><a href="#how-it-works">How it works</a></li>
-          <li><a href="#demo">Request Demo</a></li>
+          <li><a href="/request-demo.html">Request Demo</a></li>
         </ul>
       </div>
       <div class="footer-col">
@@ -791,21 +790,6 @@
 </footer>
 
 <script>
-  // ── Demo form handler ──
-  function handleDemoRequest(e) {
-    e.preventDefault();
-    const email = document.getElementById('demo-email').value.trim();
-    const feedback = document.getElementById('form-feedback');
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      feedback.textContent = '⚠️ Please enter a valid work email address.';
-      feedback.style.color = '#fca5a5';
-      return;
-    }
-    feedback.textContent = '✅ Thanks! We\'ll be in touch within 1 business day.';
-    feedback.style.color = 'rgba(255,255,255,.9)';
-    document.getElementById('demo-email').value = '';
-  }
-
   // ── Scroll-based fade-in animations ──
   const observer = new IntersectionObserver(entries => {
     entries.forEach((entry, i) => {

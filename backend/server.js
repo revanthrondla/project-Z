@@ -32,6 +32,7 @@ const supportRoutes          = require('./routes/support');
 const platformSupportRoutes  = require('./routes/platformSupport');
 const aiChatRoutes           = require('./routes/aiChat');
 const employeeProfileRoutes  = require('./routes/employeeProfile');
+const demoRequestRoutes      = require('./routes/demoRequests');
 
 const app      = express();
 const PORT     = process.env.PORT || 3001;
@@ -124,6 +125,10 @@ app.use('/api', (req, res, next) => {
 });
 
 // ── API Routes ────────────────────────────────────────────────────────────────
+
+// Public marketing endpoints — no auth required
+app.use('/api/public/demo-requests', demoRequestRoutes);
+
 app.use('/api/auth',              authRoutes);
 app.use('/api/super-admin',       superAdminRoutes);
 app.use('/api/candidates',        candidateRoutes);
@@ -250,6 +255,14 @@ app.get('/api/health', (req, res) => res.json({
 //   HTML on each deploy, preventing "Failed to fetch dynamically imported module"
 //   errors caused by stale chunk references after a redeploy.
 const FRONTEND_DIST = path.join(__dirname, '../frontend/dist');
+
+// 0. Public marketing homepage — serve flow-homepage.html at the root URL
+//    so unauthenticated visitors land on the marketing site, not the React SPA.
+//    This must sit BEFORE express.static so it wins over dist/index.html.
+app.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.sendFile(path.join(FRONTEND_DIST, 'flow-homepage.html'));
+});
 
 // 1. Hashed assets — long-lived cache (filenames change when content changes)
 app.use('/assets', express.static(path.join(FRONTEND_DIST, 'assets'), {

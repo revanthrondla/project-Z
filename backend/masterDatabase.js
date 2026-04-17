@@ -94,8 +94,25 @@ const MASTER_DDL = `
     user_agent TEXT
   );
 
-  CREATE INDEX IF NOT EXISTS idx_tenants_slug       ON tenants(slug);
-  CREATE INDEX IF NOT EXISTS idx_tenant_modules_key ON tenant_modules(tenant_slug, module_key);
+  CREATE TABLE IF NOT EXISTS demo_requests (
+    id           BIGSERIAL PRIMARY KEY,
+    name         TEXT NOT NULL,
+    email        TEXT NOT NULL,
+    company      TEXT,
+    phone        TEXT,
+    message      TEXT,
+    status       TEXT NOT NULL DEFAULT 'new'
+                 CHECK(status IN ('new','contacted','qualified','disqualified','converted')),
+    source       TEXT NOT NULL DEFAULT 'homepage',
+    ip_address   TEXT,
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tenants_slug         ON tenants(slug);
+  CREATE INDEX IF NOT EXISTS idx_tenant_modules_key   ON tenant_modules(tenant_slug, module_key);
+  CREATE INDEX IF NOT EXISTS idx_demo_requests_status ON demo_requests(status);
+  CREATE INDEX IF NOT EXISTS idx_demo_requests_email  ON demo_requests(email);
   CREATE INDEX IF NOT EXISTS idx_pst_tenant         ON platform_support_tickets(tenant_slug);
   CREATE INDEX IF NOT EXISTS idx_pst_status         ON platform_support_tickets(status);
   CREATE INDEX IF NOT EXISTS idx_psm_ticket         ON platform_support_messages(ticket_id);
