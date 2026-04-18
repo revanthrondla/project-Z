@@ -781,6 +781,39 @@ const TENANT_DDL = `
   CREATE INDEX IF NOT EXISTS idx_ag_employees_number     ON ag_employees(employee_number);
   CREATE INDEX IF NOT EXISTS idx_ag_scanned_at           ON ag_scanned_products(scanned_at DESC);
 
+  -- ═══════════════════════════════════════════════════════════════════════════
+  -- RECRUITERS
+  -- ═══════════════════════════════════════════════════════════════════════════
+
+  CREATE TABLE IF NOT EXISTS recruiters (
+    id           BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name         TEXT NOT NULL,
+    email        TEXT NOT NULL,
+    specialties  JSONB DEFAULT '[]',
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ DEFAULT NOW()
+  );
+
+  CREATE TABLE IF NOT EXISTS recruiter_assignments (
+    id           BIGSERIAL PRIMARY KEY,
+    recruiter_id BIGINT NOT NULL REFERENCES recruiters(id) ON DELETE CASCADE,
+    candidate_id BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    notes        TEXT,
+    assigned_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(recruiter_id, candidate_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS c2c_job_cache (
+    id           BIGSERIAL PRIMARY KEY,
+    search_hash  TEXT UNIQUE NOT NULL,
+    query        TEXT NOT NULL,
+    results      JSONB NOT NULL DEFAULT '[]',
+    result_count INTEGER DEFAULT 0,
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    expires_at   TIMESTAMPTZ NOT NULL
+  );
+
   -- ── MFA email OTP codes (short-lived, per user) ─────────────────────────────
   CREATE TABLE IF NOT EXISTS mfa_otp_codes (
     id         BIGSERIAL PRIMARY KEY,
@@ -792,6 +825,10 @@ const TENANT_DDL = `
     created_at TIMESTAMPTZ DEFAULT NOW()
   );
   CREATE INDEX IF NOT EXISTS idx_mfa_otp_user ON mfa_otp_codes(user_id, expires_at);
+  CREATE INDEX IF NOT EXISTS idx_recruiter_assignments_rec ON recruiter_assignments(recruiter_id);
+  CREATE INDEX IF NOT EXISTS idx_recruiter_assignments_cand ON recruiter_assignments(candidate_id);
+  CREATE INDEX IF NOT EXISTS idx_c2c_cache_hash ON c2c_job_cache(search_hash);
+  CREATE INDEX IF NOT EXISTS idx_c2c_cache_expires ON c2c_job_cache(expires_at);
 `;
 
 /**
@@ -824,6 +861,58 @@ async function createTenantSchema(slug) {
       )
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_mfa_otp_user ON mfa_otp_codes(user_id, expires_at)`);
+
+    // ── Recruiter & Market Status migrations ────────────────────────────────────
+    // 1. Add market_status + available_date + market_notes to candidates
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS market_status TEXT DEFAULT 'employed' CHECK(market_status IN ('employed','in_market','about_to_be_in_market'))`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS available_date DATE`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS market_notes TEXT`);
+
+    // 2. Expand users.role to include 'recruiter'
+    await client.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
+    await client.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK(role IN ('admin','candidate','client','recruiter'))`);
+
+    // 3. recruiters table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS recruiters (
+        id           BIGSERIAL PRIMARY KEY,
+        user_id      BIGINT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name         TEXT NOT NULL,
+        email        TEXT NOT NULL,
+        specialties  JSONB DEFAULT '[]',
+        created_at   TIMESTAMPTZ DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // 4. recruiter_assignments table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS recruiter_assignments (
+        id           BIGSERIAL PRIMARY KEY,
+        recruiter_id BIGINT NOT NULL REFERENCES recruiters(id) ON DELETE CASCADE,
+        candidate_id BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+        notes        TEXT,
+        assigned_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(recruiter_id, candidate_id)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_recruiter_assignments_rec ON recruiter_assignments(recruiter_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_recruiter_assignments_cand ON recruiter_assignments(candidate_id)`);
+
+    // 5. c2c_job_cache table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS c2c_job_cache (
+        id           BIGSERIAL PRIMARY KEY,
+        search_hash  TEXT UNIQUE NOT NULL,
+        query        TEXT NOT NULL,
+        results      JSONB NOT NULL DEFAULT '[]',
+        result_count INTEGER DEFAULT 0,
+        created_at   TIMESTAMPTZ DEFAULT NOW(),
+        expires_at   TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_c2c_cache_hash ON c2c_job_cache(search_hash)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_c2c_cache_expires ON c2c_job_cache(expires_at)`);
 
     console.log(`✅ Schema ready: ${schema}`);
   } finally {

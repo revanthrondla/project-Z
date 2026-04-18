@@ -138,7 +138,7 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const { name, email, phone, role, hourly_rate, client_id, start_date, end_date, status, contract_type } = req.body;
+    const { name, email, phone, role, hourly_rate, client_id, start_date, end_date, status, contract_type, market_status, available_date, market_notes } = req.body;
     const validErr = validateCandidateInput({ name, email, hourly_rate, start_date, end_date });
     if (validErr) return res.status(400).json({ error: validErr });
 
@@ -148,6 +148,9 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
 
     if (name) { updateFields.push(`name = $${paramCounter++}`); values.push(name); }
     if (phone !== undefined) { updateFields.push(`phone = $${paramCounter++}`); values.push(phone); }
+    if (market_status) { updateFields.push(`market_status = $${paramCounter++}`); values.push(market_status); }
+    if (available_date !== undefined) { updateFields.push(`available_date = $${paramCounter++}`); values.push(available_date || null); }
+    if (market_notes !== undefined) { updateFields.push(`market_notes = $${paramCounter++}`); values.push(market_notes || null); }
     if (req.user.role === 'admin') {
       if (role) { updateFields.push(`role = $${paramCounter++}`); values.push(role); }
       if (hourly_rate !== undefined) { updateFields.push(`hourly_rate = $${paramCounter++}`); values.push(parseFloat(hourly_rate)); }
@@ -229,6 +232,35 @@ router.get('/:id/stats', authenticate, injectTenantDb, async (req, res) => {
     const invoiceStats = invoiceStatsResult.rows;
 
     res.json({ monthlyHours: monthlyHours.hours, yearlyHours: yearlyHours.hours, pendingEntries: pendingEntries.count, absenceStats, invoiceStats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/candidates/:id/market-status — admin or self (candidate)
+router.patch('/:id/market-status', authenticate, injectTenantDb, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    // Access check: admin or the candidate themselves
+    if (req.user.role !== 'admin' && req.user.candidateId !== id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    const { market_status, available_date, market_notes } = req.body;
+    const VALID = ['employed', 'in_market', 'about_to_be_in_market'];
+    if (market_status && !VALID.includes(market_status)) {
+      return res.status(400).json({ error: 'Invalid market_status' });
+    }
+    const result = await req.db.query(
+      `UPDATE candidates SET
+         market_status  = COALESCE($1, market_status),
+         available_date = $2,
+         market_notes   = $3,
+         updated_at     = NOW()
+       WHERE id = $4 RETURNING id, market_status, available_date, market_notes`,
+      [market_status || null, available_date || null, market_notes || null, id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Candidate not found' });
+    res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

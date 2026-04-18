@@ -27,7 +27,8 @@ const adminNav = [
   { to: '/agrow/custom-fields', icon: '🔧', label: 'Custom Fields',                            moduleKey: 'agrow_custom_fields' },
   { to: '/agrow/languages',     icon: '🌐', label: 'Languages',                                moduleKey: 'agrow_languages' },
   // ── HR/Staffing ─────────────────────────────────────────────────────────────
-  { to: '/employees', icon: '👥', label: 'Employees',  section: 'Staffing', moduleKey: 'hr_candidates' },
+  { to: '/employees',  icon: '👥', label: 'Employees',  section: 'Staffing', moduleKey: 'hr_candidates' },
+  { to: '/recruiters', icon: '🕵️', label: 'Recruiters',                        moduleKey: 'hr_candidates' },
   { to: '/jobs',       icon: '💼', label: 'Jobs',                              moduleKey: 'hr_jobs' },
   { to: '/clients',    icon: '🏢', label: 'Clients',                           moduleKey: 'hr_clients' },
   { to: '/timesheets', icon: '⏱️', label: 'Timesheets',                        moduleKey: 'hr_timesheets' },
@@ -55,8 +56,14 @@ const candidateNav = [
   { to: '/my-absences',     icon: '🏖️', label: 'My Absences',                       moduleKey: 'hr_absences' },
   { to: '/my-invoices',     icon: '📄', label: 'My Invoices',                       moduleKey: 'hr_invoices' },
   { to: '/my-resume',       icon: '📋', label: 'My Resume' },
+  { to: '/c2c-jobs',        icon: '🌐', label: 'C2C Jobs',  section: 'Job Search' },
   { to: '/documents',       icon: '📁', label: 'Documents',                         moduleKey: 'hr_documents' },
   { to: '/support',         icon: '🎫', label: 'Support',                           moduleKey: 'hr_support' },
+];
+
+const recruiterNav = [
+  { to: '/recruiter/dashboard', icon: '📊', label: 'Dashboard', section: 'Recruiter' },
+  { to: '/recruiter/jobs',      icon: '🌐', label: 'C2C Job Board' },
 ];
 
 const clientNav = [
@@ -71,6 +78,7 @@ function navForRole(role) {
   if (role === 'super_admin') return superAdminNav;
   if (role === 'admin')       return adminNav;
   if (role === 'client')      return clientNav;
+  if (role === 'recruiter')   return recruiterNav;
   return candidateNav;
 }
 

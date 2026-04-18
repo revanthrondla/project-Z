@@ -113,6 +113,13 @@ router.post('/login', async (req, res) => {
         if (clientRec) clientId = clientRec.id;
       }
 
+      let recruiterId = null;
+      if (user.role === 'recruiter') {
+        const recResult = await tenantDb.query('SELECT id FROM recruiters WHERE user_id = $1', [user.id]);
+        const rec = recResult.rows[0];
+        if (rec) recruiterId = rec.id;
+      }
+
       const mustChangePw = !!(user.must_change_password);
 
       // ── Tenant MFA policy enforcement ────────────────────────────────────────
@@ -130,7 +137,7 @@ router.post('/login', async (req, res) => {
         if (mfaMethods.includes('email_otp')) {
           const mfaToken = jwt.sign(
             { userId: user.id, email: user.email, name: user.name, role: user.role,
-              candidateId, clientId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+              candidateId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
               mustChangePw, type: 'mfa_pending' },
             JWT_SECRET, { expiresIn: '2m' }
           );
@@ -139,7 +146,7 @@ router.post('/login', async (req, res) => {
         // TOTP only — user must enroll first
         const setupToken = jwt.sign(
           { userId: user.id, email: user.email, name: user.name, role: user.role,
-            candidateId, clientId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+            candidateId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
             mustChangePw, type: 'mfa_setup_required' },
           JWT_SECRET, { expiresIn: '15m' }
         );
@@ -151,7 +158,7 @@ router.post('/login', async (req, res) => {
         const method = user.mfa_method || 'totp';
         const mfaToken = jwt.sign(
           { userId: user.id, email: user.email, name: user.name, role: user.role,
-            candidateId, clientId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+            candidateId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
             mustChangePw, type: 'mfa_pending' },
           JWT_SECRET, { expiresIn: '2m' }
         );
@@ -161,7 +168,7 @@ router.post('/login', async (req, res) => {
       const token = jwt.sign(
         {
           id: user.id, email: user.email, name: user.name, role: user.role,
-          candidateId, clientId,
+          candidateId, clientId, recruiterId,
           tenantSlug: tenant.slug,
           tenantName: tenant.company_name,
           mustChangePw,
@@ -175,7 +182,7 @@ router.post('/login', async (req, res) => {
         token,   // Also returned for API / non-browser clients
         user: {
           id: user.id, name: user.name, email: user.email, role: user.role,
-          candidateId, clientId,
+          candidateId, clientId, recruiterId,
           tenantSlug: tenant.slug,
           tenantName: tenant.company_name,
           mustChangePw,
@@ -267,6 +274,7 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
         id: user.id, email: user.email, name: user.name, role: user.role,
         candidateId: req.user.candidateId || null,
         clientId:    req.user.clientId    || null,
+        recruiterId: req.user.recruiterId || null,
         tenantSlug:  req.user.tenantSlug  || null,
         tenantName:  req.user.tenantName  || null,
         mustChangePw: false,

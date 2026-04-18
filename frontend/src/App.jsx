@@ -177,6 +177,14 @@ const ClientInvoices         = lazy(() => import('./pages/client/Invoices'));
 const ClientDocuments        = lazy(() => import('./pages/client/Documents'));
 const ClientTimesheetApproval = lazy(() => import('./pages/client/TimesheetApproval'));
 
+// Recruiter pages
+const RecruiterDashboard = lazy(() => import('./pages/recruiter/Dashboard'));
+const RecruiterC2CJobs   = lazy(() => import('./pages/recruiter/C2CJobs'));
+const AdminRecruiters    = lazy(() => import('./pages/admin/Recruiters'));
+
+// C2C Jobs for candidates
+const CandidateC2CJobs = lazy(() => import('./pages/candidate/C2CJobs'));
+
 // Super-admin pages
 const SuperAdminDashboard        = lazy(() => import('./pages/superadmin/Dashboard'));
 const SuperAdminTenants          = lazy(() => import('./pages/superadmin/Tenants'));
@@ -228,6 +236,15 @@ function SuperAdminRoute({ children }) {
   return children;
 }
 
+/** Requires recruiter role (admin or recruiter) */
+function RecruiterRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <PageSpinner />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!['recruiter', 'admin'].includes(user.role)) return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
 /**
  * ModuleRoute — gate a page behind a module key.
  * If the module is disabled for this tenant, shows a locked-feature screen
@@ -266,7 +283,7 @@ function AppRoutes() {
   const { user } = useAuth();
 
   // Determine where to redirect "/" based on role
-  const defaultPath = user?.role === 'super_admin' ? '/super-admin/dashboard' : '/dashboard';
+  const defaultPath = user?.role === 'super_admin' ? '/super-admin/dashboard' : user?.role === 'recruiter' ? '/recruiter/dashboard' : '/dashboard';
 
   return (
     <Routes>
@@ -279,6 +296,20 @@ function AppRoutes() {
       {/* Force-password-change page — accessible while logged in */}
       <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/" element={<Navigate to={defaultPath} replace />} />
+
+      {/* ── Recruiter portal ───────────────────────────────────────────── */}
+      <Route
+        path="/recruiter"
+        element={
+          <RecruiterRoute>
+            <Layout />
+          </RecruiterRoute>
+        }
+      >
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<Lazy><RecruiterDashboard /></Lazy>} />
+        <Route path="jobs"      element={<Lazy><RecruiterC2CJobs /></Lazy>} />
+      </Route>
 
       {/* ── Super-admin shell ──────────────────────────────────────────── */}
       <Route
@@ -312,6 +343,7 @@ function AppRoutes() {
         <Route path="employees"    element={<ModuleRoute moduleKey="hr_candidates" adminOnly><Lazy><AdminCandidates /></Lazy></ModuleRoute>} />
         <Route path="employees/:id" element={<ModuleRoute moduleKey="hr_candidates" adminOnly><Lazy><EmployeeProfile /></Lazy></ModuleRoute>} />
         <Route path="clients"      element={<ModuleRoute moduleKey="hr_clients"    adminOnly><Lazy><AdminClients /></Lazy></ModuleRoute>} />
+        <Route path="recruiters"   element={<PrivateRoute adminOnly><Lazy><AdminRecruiters /></Lazy></PrivateRoute>} />
         <Route path="timesheets"   element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminTimesheets /></Lazy></ModuleRoute>} />
         <Route path="absences" element={
           user?.role === 'admin'
@@ -332,6 +364,9 @@ function AppRoutes() {
             ? <ModuleRoute moduleKey="hr_jobs" adminOnly><Lazy><AdminJobs /></Lazy></ModuleRoute>
             : <ModuleRoute moduleKey="hr_jobs"><Lazy><CandidateJobs /></Lazy></ModuleRoute>
         } />
+
+        {/* C2C Jobs for candidates */}
+        <Route path="c2c-jobs" element={<Lazy><CandidateC2CJobs /></Lazy>} />
 
         {/* Documents — module-gated, role-aware */}
         <Route path="documents" element={

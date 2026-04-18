@@ -2,6 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api';
 
+const MARKET_CFG = {
+  employed:              { label: 'Employed',       color: 'bg-gray-100 text-gray-600' },
+  in_market:             { label: 'In Market',      color: 'bg-green-100 text-green-700' },
+  about_to_be_in_market: { label: 'Available Soon', color: 'bg-amber-100 text-amber-700' },
+};
+function MarketBadge({ status }) {
+  const cfg = MARKET_CFG[status] || MARKET_CFG.employed;
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color}`}>{cfg.label}</span>;
+}
+
 function Modal({ title, onClose, children }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -16,7 +26,7 @@ function Modal({ title, onClose, children }) {
   );
 }
 
-const EMPTY_FORM = { name: '', email: '', phone: '', role: '', hourly_rate: '', client_id: '', start_date: '', end_date: '', status: 'active', contract_type: 'contractor', password: 'candidate123' };
+const EMPTY_FORM = { name: '', email: '', phone: '', role: '', hourly_rate: '', client_id: '', start_date: '', end_date: '', status: 'active', contract_type: 'contractor', password: 'candidate123', market_status: 'employed', available_date: '', market_notes: '' };
 
 export default function AdminCandidates() {
   const [candidates, setCandidates] = useState([]);
@@ -44,10 +54,11 @@ export default function AdminCandidates() {
     e.preventDefault();
     setError('');
     try {
+      const payload = { ...form };
       if (editing) {
-        await api.put(`/api/candidates/${editing.id}`, form);
+        await api.put(`/api/candidates/${editing.id}`, payload);
       } else {
-        await api.post('/api/candidates', form);
+        await api.post('/api/candidates', payload);
       }
       setShowModal(false);
       load();
@@ -115,6 +126,7 @@ export default function AdminCandidates() {
                 <th className="text-left px-4 py-3 text-gray-500 font-medium">Rate</th>
                 <th className="text-left px-4 py-3 text-gray-500 font-medium">Type</th>
                 <th className="text-left px-4 py-3 text-gray-500 font-medium">Status</th>
+                <th className="text-left px-4 py-3 text-gray-500 font-medium">Market Status</th>
                 <th className="text-left px-4 py-3 text-gray-500 font-medium">Start Date</th>
                 <th className="text-right px-4 py-3 text-gray-500 font-medium">Actions</th>
               </tr>
@@ -136,6 +148,7 @@ export default function AdminCandidates() {
                   <td className="px-4 py-3 font-medium text-gray-900">${c.hourly_rate}/hr</td>
                   <td className="px-4 py-3 text-gray-500 capitalize">{c.contract_type}</td>
                   <td className="px-4 py-3"><span className={`badge-${c.status}`}>{c.status}</span></td>
+                  <td className="px-4 py-3"><MarketBadge status={c.market_status || 'employed'} /></td>
                   <td className="px-4 py-3 text-gray-500">{c.start_date || '—'}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -208,6 +221,30 @@ export default function AdminCandidates() {
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
+              <div className="col-span-2">
+                <label className="label">Market Status</label>
+                <select
+                  className="input"
+                  value={form.market_status || 'employed'}
+                  onChange={e => setForm(f => ({ ...f, market_status: e.target.value }))}
+                >
+                  <option value="employed">Employed</option>
+                  <option value="in_market">In Market — actively seeking</option>
+                  <option value="about_to_be_in_market">Available Soon</option>
+                </select>
+              </div>
+              {(form.market_status === 'in_market' || form.market_status === 'about_to_be_in_market') && (
+                <>
+                  <div>
+                    <label className="label">Available From</label>
+                    <input type="date" className="input" value={form.available_date || ''} onChange={e => setForm(f => ({ ...f, available_date: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="label">Notes</label>
+                    <textarea className="input" rows={2} placeholder="e.g. finishing current contract end of June" value={form.market_notes || ''} onChange={e => setForm(f => ({ ...f, market_notes: e.target.value }))} />
+                  </div>
+                </>
+              )}
               {!editing && (
                 <div className="col-span-2">
                   <label className="label">Initial Password</label>

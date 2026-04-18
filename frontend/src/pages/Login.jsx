@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
 import FlowLogo from '../components/FlowLogo';
 
-const REDIRECT = (role) => role === 'super_admin' ? '/super-admin/dashboard' : '/dashboard';
+const REDIRECT = (role) => role === 'super_admin' ? '/super-admin/dashboard' : role === 'recruiter' ? '/recruiter/dashboard' : '/dashboard';
 
 
 export default function Login() {

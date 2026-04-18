@@ -36,6 +36,13 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function requireRecruiter(req, res, next) {
+  if (!req.user || !['admin', 'recruiter'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Recruiter access required' });
+  }
+  next();
+}
+
 function requireSuperAdmin(req, res, next) {
   if (!req.user || req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super-admin access required' });
   next();
@@ -119,4 +126,4 @@ function requireModule(moduleKey) {
   };
 }
 
-module.exports = { authenticate, requireAdmin, requireSuperAdmin, injectTenantDb, requireModule, JWT_SECRET };
+module.exports = { authenticate, requireAdmin, requireRecruiter, requireSuperAdmin, injectTenantDb, requireModule, JWT_SECRET };
