@@ -148,9 +148,60 @@ Cloud DevOps Engineer,Manage AWS infrastructure and CI/CD pipelines,"AWS,Terrafo
 router.get('/template/:type', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   const { type } = req.params;
   if (!TEMPLATES[type]) return res.status(404).json({ error: 'Unknown template type' });
+
+  let csv = TEMPLATES[type];
+
+  // For the candidates template, append tenant-specific custom field columns
+  if (type === 'candidates') {
+    try {
+      const cfResult = await req.db.query(
+        'SELECT field_key, label, field_type, options FROM employee_custom_field_defs WHERE is_active = TRUE ORDER BY display_order ASC, id ASC'
+      );
+      if (cfResult.rows.length > 0) {
+        // Build comment block describing custom fields
+        const comments = cfResult.rows.map(f => {
+          let desc = `#   ${f.field_key} — ${f.label} (${f.field_type})`;
+          if (f.options && Array.isArray(f.options) && f.options.length > 0) {
+            const vals = f.options.map(o => o.value).join(' | ');
+            desc += ` — allowed values: ${vals}`;
+          }
+          return desc;
+        }).join('\n');
+
+        // Inject custom field comment lines and append columns to the header & sample rows
+        const lines = csv.split('\n');
+
+        // Find the header line (first non-comment, non-empty line)
+        let headerIdx = -1;
+        for (let i = 0; i < lines.length; i++) {
+          if (!lines[i].startsWith('#') && lines[i].trim()) { headerIdx = i; break; }
+        }
+
+        if (headerIdx !== -1) {
+          const cfKeys    = cfResult.rows.map(f => f.field_key);
+          const cfComment = `# Custom fields (tenant-specific):\n${comments}`;
+
+          // Insert comment before header line
+          lines.splice(headerIdx, 0, cfComment);
+          headerIdx += 1; // adjust for inserted comment
+
+          // Append custom field columns to header and each data row
+          for (let i = headerIdx; i < lines.length; i++) {
+            if (lines[i].trim() && !lines[i].startsWith('#')) {
+              lines[i] = lines[i] + ',' + cfKeys.join(',');
+            }
+          }
+          csv = lines.join('\n');
+        }
+      }
+    } catch {
+      // If custom fields can't be loaded, return standard template
+    }
+  }
+
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename="flow_${type}_template.csv"`);
-  res.send(TEMPLATES[type]);
+  res.send(csv);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -168,6 +219,13 @@ router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.si
     clientMapResult.rows.forEach(c => {
       clientMap[c.name.toLowerCase()] = c.id;
     });
+
+    // Load active custom field definitions (used to recognise CF columns in CSV)
+    const cfDefsResult = await req.db.query(
+      'SELECT field_key, field_type FROM employee_custom_field_defs WHERE is_active = TRUE'
+    );
+    const cfDefsByKey = {};
+    cfDefsResult.rows.forEach(d => { cfDefsByKey[d.field_key] = d; });
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -252,6 +310,33 @@ router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.si
             r.home_postcode?.trim() || null,
             r.home_country?.trim() || null,
           ]);
+        }
+
+        // Save custom field values — any CSV column whose key matches an active custom field
+        if (candRow) {
+          const isJsonType = t => ['select', 'radio', 'checkbox', 'multi_checkbox'].includes(t);
+          for (const [colKey, rawVal] of Object.entries(r)) {
+            if (!cfDefsByKey[colKey]) continue; // Not a custom field column
+            const def = cfDefsByKey[colKey];
+            const val = rawVal?.trim();
+            if (val === '' || val == null) continue; // Skip empty values
+
+            // multi_checkbox: pipe-separated values become an array
+            const isJson = isJsonType(def.field_type);
+            const jsonVal = def.field_type === 'multi_checkbox'
+              ? val.split('|').map(v => v.trim()).filter(Boolean)
+              : isJson ? val : null;
+
+            await req.db.query(
+              `INSERT INTO employee_custom_field_values (candidate_id, field_key, value_text, value_json, updated_at)
+               VALUES ($1, $2, $3, $4, NOW())
+               ON CONFLICT (candidate_id, field_key) DO UPDATE
+                 SET value_text = EXCLUDED.value_text,
+                     value_json  = EXCLUDED.value_json,
+                     updated_at   = NOW()`,
+              [candRow.id, colKey, isJson ? null : val, jsonVal ? JSON.stringify(jsonVal) : null]
+            );
+          }
         }
 
         // Index email → tenant for seamless login

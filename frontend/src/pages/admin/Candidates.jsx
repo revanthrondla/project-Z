@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api';
+import CustomFieldRenderer, { validateCustomFieldValues } from '../../components/CustomFieldRenderer';
 
 const MARKET_CFG = {
   employed:              { label: 'Employed',       color: 'bg-gray-100 text-gray-600' },
@@ -29,37 +30,102 @@ function Modal({ title, onClose, children }) {
 const EMPTY_FORM = { name: '', email: '', phone: '', role: '', hourly_rate: '', client_id: '', start_date: '', end_date: '', status: 'active', contract_type: 'contractor', password: 'candidate123', market_status: 'employed', available_date: '', market_notes: '' };
 
 export default function AdminCandidates() {
-  const [candidates, setCandidates] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
+  const [candidates, setCandidates]   = useState([]);
+  const [clients, setClients]         = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [showModal, setShowModal]     = useState(false);
+  const [editing, setEditing]         = useState(null);
+  const [form, setForm]               = useState(EMPTY_FORM);
+  const [error, setError]             = useState('');
+  const [search, setSearch]           = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
+  // Custom fields state
+  const [customFieldDefs, setCustomFieldDefs]   = useState([]);
+  const [customFieldValues, setCustomFieldValues] = useState({}); // { [field_key]: value }
+  const [cfErrors, setCfErrors]                 = useState({});
+
   const load = useCallback(() => {
-    Promise.all([api.get('/api/candidates'), api.get('/api/clients')])
-      .then(([c, cl]) => { setCandidates(Array.isArray(c.data) ? c.data : []); setClients(Array.isArray(cl.data) ? cl.data : []); })
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get('/api/candidates'),
+      api.get('/api/clients'),
+      api.get('/api/custom-fields/active'),
+    ]).then(([c, cl, cf]) => {
+      setCandidates(Array.isArray(c.data) ? c.data : []);
+      setClients(Array.isArray(cl.data) ? cl.data : []);
+      setCustomFieldDefs(Array.isArray(cf.data) ? cf.data : []);
+    }).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setError(''); setShowModal(true); };
-  const openEdit = (c) => { setEditing(c); setForm({ ...c, password: '' }); setError(''); setShowModal(true); };
+  const openCreate = () => {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setCustomFieldValues({});
+    setCfErrors({});
+    setError('');
+    setShowModal(true);
+  };
+
+  const openEdit = async (c) => {
+    setEditing(c);
+    setForm({ ...c, password: '' });
+    setCustomFieldValues({});
+    setCfErrors({});
+    setError('');
+    // Load existing custom field values for this candidate
+    try {
+      const valRes = await api.get(`/api/custom-fields/candidate/${c.id}/values`);
+      const vals = {};
+      for (const v of (valRes.data || [])) {
+        const isJson = ['select','radio','checkbox','multi_checkbox'].includes(v.field_type);
+        vals[v.field_key] = isJson ? v.value_json : v.value_text;
+      }
+      setCustomFieldValues(vals);
+    } catch {
+      // ignore — non-critical
+    }
+    setShowModal(true);
+  };
+
+  const handleCfChange = (fieldKey, value) => {
+    setCustomFieldValues(prev => ({ ...prev, [fieldKey]: value }));
+    setCfErrors(prev => { const n = {...prev}; delete n[fieldKey]; return n; });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    // Validate custom fields
+    const cfErrs = validateCustomFieldValues(customFieldDefs, customFieldValues);
+    if (Object.keys(cfErrs).length > 0) {
+      setCfErrors(cfErrs);
+      return;
+    }
+
     try {
       const payload = { ...form };
+      let candidateId;
       if (editing) {
         await api.put(`/api/candidates/${editing.id}`, payload);
+        candidateId = editing.id;
       } else {
-        await api.post('/api/candidates', payload);
+        const res = await api.post('/api/candidates', payload);
+        candidateId = res.data?.id || res.data?.candidate?.id;
       }
+
+      // Save custom field values if any fields exist
+      if (customFieldDefs.length > 0 && candidateId) {
+        const values = customFieldDefs
+          .filter(f => f.is_active && !f.formula)
+          .map(f => ({ field_key: f.field_key, value: customFieldValues[f.field_key] ?? null }));
+        if (values.length > 0) {
+          await api.put(`/api/custom-fields/candidate/${candidateId}/values`, { values }).catch(() => {});
+        }
+      }
+
       setShowModal(false);
       load();
     } catch (err) {
@@ -252,6 +318,27 @@ export default function AdminCandidates() {
                 </div>
               )}
             </div>
+
+            {/* Custom Fields */}
+            {customFieldDefs.length > 0 && (
+              <div className="border-t border-gray-100 pt-4 mt-2">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">Custom Fields</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  {customFieldDefs.map(field => (
+                    <div key={field.field_key} className={field.field_type === 'rich_text' ? 'col-span-2' : ''}>
+                      <CustomFieldRenderer
+                        field={field}
+                        value={customFieldValues[field.field_key]}
+                        onChange={handleCfChange}
+                        errors={cfErrors}
+                        allValues={customFieldValues}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-2">
               <button type="submit" className="btn-primary flex-1">{editing ? 'Save Changes' : 'Add Employee'}</button>
               <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>

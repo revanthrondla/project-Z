@@ -914,6 +914,40 @@ async function createTenantSchema(slug) {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_c2c_cache_hash ON c2c_job_cache(search_hash)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_c2c_cache_expires ON c2c_job_cache(expires_at)`);
 
+    // 6. Tenant custom field definitions (max 10 per tenant, admin-configurable)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS employee_custom_field_defs (
+        id            BIGSERIAL PRIMARY KEY,
+        field_key     TEXT NOT NULL UNIQUE,
+        label         TEXT NOT NULL,
+        field_type    TEXT NOT NULL DEFAULT 'text'
+                      CHECK(field_type IN ('text','rich_text','number','date','select','radio','checkbox','multi_checkbox')),
+        options       JSONB NOT NULL DEFAULT '[]',
+        validation    JSONB NOT NULL DEFAULT '{}',
+        formula       TEXT,
+        placeholder   TEXT,
+        help_text     TEXT,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // 7. Per-candidate custom field values
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS employee_custom_field_values (
+        candidate_id  BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+        field_key     TEXT NOT NULL,
+        value_text    TEXT,
+        value_json    JSONB,
+        updated_at    TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY   (candidate_id, field_key)
+      )
+    `);
+
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ecfv_candidate ON employee_custom_field_values(candidate_id)`);
+
     console.log(`✅ Schema ready: ${schema}`);
   } finally {
     client.release();
