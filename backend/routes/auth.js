@@ -2,8 +2,44 @@ const express  = require('express');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 const { authenticate, injectTenantDb, JWT_SECRET } = require('../middleware/auth');
-const { masterDb }  = require('../masterDatabase');
+const { masterDb, indexUserEmail } = require('../masterDatabase');
 const { getTenantDb, db: defaultDb } = require('../database');
+
+// ── Fallback: scan all active tenant schemas for an email ─────────────────────
+// Used when the user_tenant_index has no entry — covers users who were created
+// before the index was introduced.  Backfills the index on every hit so
+// subsequent logins are instant.
+async function findTenantsByEmailScan(normalizedEmail) {
+  const tenantsResult = await masterDb.query(
+    "SELECT slug, company_name, status FROM tenants WHERE status != 'suspended' ORDER BY created_at"
+  );
+
+  const found = [];
+  await Promise.all(
+    tenantsResult.rows.map(async (tenant) => {
+      let release;
+      try {
+        const { wrapper: tenantDb, release: rel } = await getTenantDb(tenant.slug);
+        release = rel;
+        const result = await tenantDb.query(
+          'SELECT 1 FROM users WHERE email = $1 LIMIT 1',
+          [normalizedEmail]
+        );
+        if (result.rows.length > 0) {
+          found.push(tenant);
+          // Backfill the index so next login is instant
+          indexUserEmail(normalizedEmail, tenant.slug).catch(() => {});
+        }
+      } catch {
+        // Tenant DB unreachable — skip silently
+      } finally {
+        if (release) release();
+      }
+    })
+  );
+
+  return found;
+}
 
 
 const router = express.Router();
@@ -78,17 +114,26 @@ router.post('/login', async (req, res) => {
         [normalizedEmail]
       );
 
-      if (indexResult.rows.length === 0) {
-        // No tenant found — tell user to enter their org code
+      // If index misses, fall back to scanning all tenant schemas.
+      // This covers users created before the index was introduced.
+      // On a hit we backfill the index so next login is instant.
+      let indexRows = indexResult.rows;
+      if (indexRows.length === 0) {
+        const scanned = await findTenantsByEmailScan(normalizedEmail);
+        indexRows = scanned.map(r => ({ tenant_slug: r.slug, company_name: r.company_name, status: r.status }));
+      }
+
+      if (indexRows.length === 0) {
+        // Genuinely no account anywhere — tell user to enter org code
         return res.status(401).json({
-          error: 'No account found for this email. If your organisation has a code, please enter it below.',
+          error: 'No account found for this email. Please check your email or enter your organisation code.',
           requiresOrgCode: true,
         });
       }
 
-      if (indexResult.rows.length > 1) {
+      if (indexRows.length > 1) {
         // Multiple tenants — ask user to pick one
-        const tenants = indexResult.rows
+        const tenants = indexRows
           .filter(r => r.status !== 'suspended')
           .map(r => ({ slug: r.tenant_slug, name: r.company_name }));
         return res.json({
@@ -98,13 +143,12 @@ router.post('/login', async (req, res) => {
         });
       }
 
-      // 3. Exactly one tenant — proceed with that tenant automatically
-      const autoTenant = indexResult.rows[0];
+      // 3. Exactly one tenant — proceed automatically
+      const autoTenant = indexRows[0];
       if (autoTenant.status === 'suspended') {
         return res.status(403).json({ error: 'This organisation account has been suspended' });
       }
 
-      // Resolve full tenant record and authenticate (re-uses tenant path below)
       const autoTenantFull = await masterDb.query(
         'SELECT * FROM tenants WHERE slug = $1', [autoTenant.tenant_slug]
       );
