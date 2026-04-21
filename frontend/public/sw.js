@@ -1,21 +1,24 @@
 /**
  * Flow Service Worker
  *
- * Strategy:
- *  - App shell (HTML/JS/CSS): cache-first with network fallback
- *  - API calls to /api/agrow/reference-data: stale-while-revalidate (needed offline for scan dropdowns)
- *  - All other API calls: network-first (fresh data when online)
- *  - POST /api/agrow/scanned-products/sync: queued for background sync when offline
+ * Caching strategy:
+ *  - Navigation requests (HTML pages)        → network-first, fallback to cache
+ *    This prevents stale / wrong HTML being served from cache after a deploy,
+ *    and is the root fix for the "request-demo.html shows wrong page" bug.
+ *
+ *  - Hashed assets (/assets/*)               → cache-first (filenames change on deploy)
+ *  - /api/agrow/reference-data               → stale-while-revalidate (offline scanning)
+ *  - All other API calls                     → network-first (always fresh data)
  *
  * Update flow:
  *  1. New SW installs but waits (does NOT auto-activate).
  *  2. App receives 'updatefound' / 'waiting' and shows an "Update available" banner.
  *  3. User clicks "Reload" → app sends SKIP_WAITING → SW activates → page reloads.
  *
- * To deploy a new version: increment CACHE_VERSION below.
+ * To force-clear all caches on the next deploy: increment CACHE_VERSION.
  */
 
-const CACHE_VERSION  = 1;                        // ← bump on every deploy
+const CACHE_VERSION  = 2;                        // ← bumped to clear poisoned caches
 const CACHE_NAME     = `flow-v${CACHE_VERSION}`;
 const SHELL_URLS     = ['/', '/index.html'];
 const REFERENCE_URLS = ['/api/agrow/reference-data'];
@@ -62,13 +65,32 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Other API calls: network first
+  // API calls: network-first (always get fresh data)
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirst(request));
     return;
   }
 
-  // App shell assets: cache first
+  // HTML navigation requests: ALWAYS network-first.
+  //
+  // This is the critical fix.  The old code used cacheFirst for every non-API
+  // request, which meant that if a browser ever received the React SPA
+  // (index.html) for a marketing page like /request-demo.html — because the
+  // SPA wildcard catch-all intercepted the request before the explicit route
+  // was added — that wrong response would be stuck in cache and served on
+  // every subsequent visit even after the server was fixed.
+  //
+  // Network-first for navigate requests means the browser always fetches fresh
+  // HTML.  The cached version is only used when offline.
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  // Hashed static assets (/assets/*.js, /assets/*.css, etc.): cache-first.
+  // Vite's build output uses content-hashed filenames so stale content is
+  // never an issue.  Fonts, images, and other non-hashed assets also benefit
+  // from caching.
   event.respondWith(cacheFirst(request));
 });
 
@@ -80,7 +102,6 @@ self.addEventListener('sync', event => {
 });
 
 async function syncOfflineScans() {
-  // Notify all clients to trigger sync
   const clients = await self.clients.matchAll({ type: 'window' });
   clients.forEach(client => client.postMessage({ type: 'TRIGGER_SYNC' }));
 }
@@ -111,6 +132,7 @@ async function cacheFirst(request) {
 async function networkFirst(request) {
   try {
     const response = await fetch(request);
+    // Only cache successful responses; don't cache error pages
     if (response.ok) {
       const cache = await caches.open(CACHE_NAME);
       cache.put(request, response.clone());
@@ -118,7 +140,15 @@ async function networkFirst(request) {
     return response;
   } catch {
     const cached = await caches.match(request);
-    return cached || new Response(JSON.stringify({ error: 'Offline' }), {
+    if (cached) return cached;
+    // For navigate requests, return a minimal offline page
+    if (request.mode === 'navigate') {
+      return new Response(
+        '<!doctype html><html><body><p>You are offline. Please check your connection.</p></body></html>',
+        { status: 503, headers: { 'Content-Type': 'text/html' } }
+      );
+    }
+    return new Response(JSON.stringify({ error: 'Offline' }), {
       status: 503,
       headers: { 'Content-Type': 'application/json' },
     });
