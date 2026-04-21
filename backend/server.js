@@ -76,6 +76,13 @@ const allowedOrigins = [
     : []),
 ];
 
+// Public marketing endpoints — open CORS (no credentials, no auth).
+// These are hit by fetch() inside plain HTML pages (request-demo.html, etc.)
+// which send an Origin header even for same-origin requests.  Restricting
+// them to the allowlist gains nothing and would break the demo form for
+// users on a custom domain before ALLOWED_ORIGINS is configured.
+app.use('/api/public', cors({ origin: '*' }));
+
 app.use('/api', cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);           // same-origin simple requests
@@ -102,8 +109,18 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use('/api/auth/login', authLimiter);
-app.use('/api', apiLimiter);
+// Demo form submissions: 5 per hour per IP (anti-spam, generous for real leads)
+const demoLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many demo requests from this IP. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/auth/login',          authLimiter);
+app.use('/api/public/demo-requests', demoLimiter);
+app.use('/api',                     apiLimiter);
 
 // ── Cookie & body parsing ─────────────────────────────────────────────────────
 app.use(cookieParser());
@@ -264,13 +281,28 @@ app.get('/api/health', (req, res) => res.json({
 //   errors caused by stale chunk references after a redeploy.
 const FRONTEND_DIST = path.join(__dirname, '../frontend/dist');
 
-// 0. Public marketing homepage — serve flow-homepage.html at the root URL
-//    so unauthenticated visitors land on the marketing site, not the React SPA.
-//    This must sit BEFORE express.static so it wins over dist/index.html.
-app.get('/', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.sendFile(path.join(FRONTEND_DIST, 'flow-homepage.html'));
-});
+// 0. Public marketing pages — explicit routes so the SPA wildcard can never
+//    intercept them.  order matters: these must sit BEFORE express.static and
+//    BEFORE the app.get('*') fallback.
+const mktgPages = [
+  { url: '/',                    file: 'flow-homepage.html'          },
+  { url: '/request-demo.html',   file: 'request-demo.html'           },
+  { url: '/pages/about.html',             file: 'pages/about.html'             },
+  { url: '/pages/blog.html',              file: 'pages/blog.html'              },
+  { url: '/pages/careers.html',           file: 'pages/careers.html'           },
+  { url: '/pages/contact.html',           file: 'pages/contact.html'           },
+  { url: '/pages/cookie-policy.html',     file: 'pages/cookie-policy.html'     },
+  { url: '/pages/gdpr.html',              file: 'pages/gdpr.html'              },
+  { url: '/pages/privacy-policy.html',    file: 'pages/privacy-policy.html'    },
+  { url: '/pages/terms-of-service.html',  file: 'pages/terms-of-service.html'  },
+];
+
+for (const { url, file } of mktgPages) {
+  app.get(url, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.sendFile(path.join(FRONTEND_DIST, file));
+  });
+}
 
 // 1. Hashed assets — long-lived cache (filenames change when content changes)
 app.use('/assets', express.static(path.join(FRONTEND_DIST, 'assets'), {

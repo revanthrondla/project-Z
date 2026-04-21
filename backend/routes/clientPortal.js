@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { authenticate, requireAdmin, injectTenantDb, JWT_SECRET } = require('../middleware/auth');
+const { indexUserEmail } = require('../masterDatabase');
 
 // ── Middleware: client role only ───────────────────────────────────────────
 function requireClient(req, res, next) {
@@ -43,6 +44,9 @@ router.post('/admin/clients/:id/create-login', authenticate, requireAdmin, injec
   const newUserId = userResult.rows[0].id;
 
   await req.db.query('UPDATE clients SET user_id = $1 WHERE id = $2', [newUserId, clientId]);
+
+  // Index email → tenant for seamless login
+  indexUserEmail(email.toLowerCase(), req.user.tenantSlug).catch(() => {});
 
   res.json({ message: 'Client login created', userId: newUserId });
 });

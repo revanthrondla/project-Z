@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { authenticate, requireAdmin, injectTenantDb } = require('../middleware/auth');
+const { indexUserEmail } = require('../masterDatabase');
 
 const router = express.Router();
 
@@ -116,6 +117,9 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
       );
 
       await client.query('COMMIT');
+
+      // Index email → tenant for seamless login (fire-and-forget, non-blocking)
+      indexUserEmail(email.toLowerCase().trim(), req.user.tenantSlug).catch(() => {});
 
       res.status(201).json(newCandidateResult.rows[0]);
     } catch (err) {

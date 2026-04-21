@@ -356,6 +356,10 @@ router.get('/callback', async (req, res) => {
         );
 
         user = createResult.rows[0];
+
+        // Index new SSO user for seamless login
+        const { indexUserEmail } = require('../masterDatabase');
+        indexUserEmail(email.toLowerCase(), tenant.slug).catch(() => {});
       }
 
       // Get candidateId if applicable

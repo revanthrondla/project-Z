@@ -119,6 +119,13 @@ const MASTER_DDL = `
     updated_at   TIMESTAMPTZ DEFAULT NOW()
   );
 
+  -- Fast email → tenant lookup for seamless login (no org code required)
+  CREATE TABLE IF NOT EXISTS user_tenant_index (
+    email       TEXT NOT NULL,
+    tenant_slug TEXT NOT NULL,
+    PRIMARY KEY (email, tenant_slug)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_tenants_slug         ON tenants(slug);
   CREATE INDEX IF NOT EXISTS idx_tenant_modules_key   ON tenant_modules(tenant_slug, module_key);
   CREATE INDEX IF NOT EXISTS idx_demo_requests_status ON demo_requests(status);
@@ -126,6 +133,7 @@ const MASTER_DDL = `
   CREATE INDEX IF NOT EXISTS idx_pst_tenant         ON platform_support_tickets(tenant_slug);
   CREATE INDEX IF NOT EXISTS idx_pst_status         ON platform_support_tickets(status);
   CREATE INDEX IF NOT EXISTS idx_psm_ticket         ON platform_support_messages(ticket_id);
+  CREATE INDEX IF NOT EXISTS idx_uti_email          ON user_tenant_index(email);
 `;
 
 /**
@@ -307,9 +315,52 @@ const masterDbProxy = new Proxy({}, {
   },
 });
 
+/**
+ * indexUserEmail(email, tenantSlug)
+ *
+ * Upserts a row into user_tenant_index so the email→tenant mapping is
+ * available for seamless login (no org-code required).
+ *
+ * Call this immediately after any INSERT INTO users in a tenant schema.
+ * Safe to call multiple times — idempotent ON CONFLICT DO NOTHING.
+ */
+async function indexUserEmail(email, tenantSlug) {
+  try {
+    if (!masterDb) return; // Called before initMaster — skip silently
+    await masterDb.query(
+      `INSERT INTO user_tenant_index (email, tenant_slug)
+       VALUES ($1, $2)
+       ON CONFLICT (email, tenant_slug) DO NOTHING`,
+      [email.toLowerCase().trim(), tenantSlug]
+    );
+  } catch (err) {
+    // Never throw — index failure must not break user creation
+    console.error('[indexUserEmail] Failed to index user email:', err.message);
+  }
+}
+
+/**
+ * removeUserEmailIndex(email, tenantSlug)
+ *
+ * Removes an email from the index when a user is deleted from a tenant.
+ */
+async function removeUserEmailIndex(email, tenantSlug) {
+  try {
+    if (!masterDb) return;
+    await masterDb.query(
+      'DELETE FROM user_tenant_index WHERE email = $1 AND tenant_slug = $2',
+      [email.toLowerCase().trim(), tenantSlug]
+    );
+  } catch (err) {
+    console.error('[removeUserEmailIndex] Failed to remove index entry:', err.message);
+  }
+}
+
 module.exports = {
   masterDb: masterDbProxy,   // safe to destructure at module level — no getter
   initMaster,
   seedDefaultModulesForTenant,
   getMasterDb,
+  indexUserEmail,
+  removeUserEmailIndex,
 };

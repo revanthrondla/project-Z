@@ -5,6 +5,7 @@ const { authenticate, injectTenantDb, JWT_SECRET } = require('../middleware/auth
 const { masterDb }  = require('../masterDatabase');
 const { getTenantDb, db: defaultDb } = require('../database');
 
+
 const router = express.Router();
 
 // ── Cookie options ────────────────────────────────────────────────────────────
@@ -32,42 +33,82 @@ router.post('/login', async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // ── Super-admin path (no companySlug) ──────────────────────────────────────
+    // ── No companySlug — try super-admin first, then auto-detect tenant ───────
     if (!companySlug) {
+      // 1. Check super_admins
       const superAdminResult = await masterDb.query(
         'SELECT * FROM super_admins WHERE email = $1',
         [normalizedEmail]
       );
       const superAdmin = superAdminResult.rows[0];
 
-      if (!superAdmin) {
-        return res.status(401).json({ error: 'Invalid credentials or missing organization code' });
-      }
+      if (superAdmin) {
+        const valid = bcrypt.compareSync(password, superAdmin.password_hash);
+        if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-      const valid = bcrypt.compareSync(password, superAdmin.password_hash);
-      if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+        // MFA check for super-admin
+        if (superAdmin.mfa_enabled && superAdmin.mfa_secret) {
+          const mfaToken = jwt.sign(
+            { userId: superAdmin.id, email: superAdmin.email, name: superAdmin.name, role: 'super_admin', type: 'mfa_pending' },
+            JWT_SECRET,
+            { expiresIn: '2m' }
+          );
+          return res.json({ mfaRequired: true, mfaToken });
+        }
 
-      // ── MFA check for super-admin ──────────────────────────────────────────
-      if (superAdmin.mfa_enabled && superAdmin.mfa_secret) {
-        const mfaToken = jwt.sign(
-          { userId: superAdmin.id, email: superAdmin.email, name: superAdmin.name, role: 'super_admin', type: 'mfa_pending' },
+        const token = jwt.sign(
+          { id: superAdmin.id, email: superAdmin.email, name: superAdmin.name, role: 'super_admin' },
           JWT_SECRET,
-          { expiresIn: '2m' }
+          { expiresIn: '8h' }
         );
-        return res.json({ mfaRequired: true, mfaToken });
+
+        res.cookie(COOKIE_NAME, token, cookieOptions());
+        return res.json({
+          token,
+          user: { id: superAdmin.id, name: superAdmin.name, email: superAdmin.email, role: 'super_admin' },
+        });
       }
 
-      const token = jwt.sign(
-        { id: superAdmin.id, email: superAdmin.email, name: superAdmin.name, role: 'super_admin' },
-        JWT_SECRET,
-        { expiresIn: '8h' }
+      // 2. Not a super-admin — look up tenant(s) by email index
+      const indexResult = await masterDb.query(
+        `SELECT uti.tenant_slug, t.company_name, t.status
+         FROM user_tenant_index uti
+         JOIN tenants t ON t.slug = uti.tenant_slug
+         WHERE uti.email = $1`,
+        [normalizedEmail]
       );
 
-      res.cookie(COOKIE_NAME, token, cookieOptions());
-      return res.json({
-        token,   // Also returned for API / non-browser clients
-        user: { id: superAdmin.id, name: superAdmin.name, email: superAdmin.email, role: 'super_admin' },
-      });
+      if (indexResult.rows.length === 0) {
+        // No tenant found — tell user to enter their org code
+        return res.status(401).json({
+          error: 'No account found for this email. If your organisation has a code, please enter it below.',
+          requiresOrgCode: true,
+        });
+      }
+
+      if (indexResult.rows.length > 1) {
+        // Multiple tenants — ask user to pick one
+        const tenants = indexResult.rows
+          .filter(r => r.status !== 'suspended')
+          .map(r => ({ slug: r.tenant_slug, name: r.company_name }));
+        return res.json({
+          multipleOrgs: true,
+          tenants,
+          message: 'Your email is associated with multiple organisations. Please select one.',
+        });
+      }
+
+      // 3. Exactly one tenant — proceed with that tenant automatically
+      const autoTenant = indexResult.rows[0];
+      if (autoTenant.status === 'suspended') {
+        return res.status(403).json({ error: 'This organisation account has been suspended' });
+      }
+
+      // Resolve full tenant record and authenticate (re-uses tenant path below)
+      const autoTenantFull = await masterDb.query(
+        'SELECT * FROM tenants WHERE slug = $1', [autoTenant.tenant_slug]
+      );
+      return await handleTenantLogin(res, autoTenantFull.rows[0], normalizedEmail, password);
     }
 
     // ── Tenant path (companySlug provided) ─────────────────────────────────────
@@ -84,10 +125,20 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'This organization account has been suspended' });
     }
 
-    // getTenantDb returns { wrapper, release } — must await and destructure,
-    // then release the pg client regardless of success or early return.
-    let tenantRelease;
-    try {
+    return await handleTenantLogin(res, tenant, normalizedEmail, password);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Shared tenant login handler ───────────────────────────────────────────────
+// Used by both the explicit-slug path and the auto-detect path.
+async function handleTenantLogin(res, tenant, normalizedEmail, password) {
+  // getTenantDb returns { wrapper, release } — must await and destructure,
+  // then release the pg client regardless of success or early return.
+  let tenantRelease;
+  try {
       const { wrapper: tenantDb, release } = await getTenantDb(tenant.slug);
       tenantRelease = release;
 
@@ -188,13 +239,12 @@ router.post('/login', async (req, res) => {
           mustChangePw,
         },
       });
-    } finally {
-      if (tenantRelease) tenantRelease();
-    }
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (tenantRelease) tenantRelease();
   }
-});
+}
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────────
 router.post('/logout', async (req, res) => {

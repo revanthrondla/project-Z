@@ -8,7 +8,7 @@ const REDIRECT = (role) => role === 'super_admin' ? '/super-admin/dashboard' : r
 
 
 export default function Login() {
-  const { login, verifyMfa, verifyEmailOtp } = useAuth();
+  const { loginRaw, verifyMfa, verifyEmailOtp } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -16,6 +16,12 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Org-code field is hidden by default; revealed by the user or auto-shown
+  const [showOrgCode, setShowOrgCode] = useState(false);
+  // When backend finds multiple tenants for one email, let user pick
+  const [multipleOrgs, setMultipleOrgs] = useState(null); // array of { slug, name }
+  const [selectedOrg, setSelectedOrg] = useState('');
 
   // MFA state
   const [mfaState, setMfaState] = useState(null); // { mfaToken, mfaMethod, companySlug }
@@ -83,13 +89,26 @@ export default function Login() {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Submit with a specific org slug (used for both direct and org-picker paths)
+  const doLogin = async (companySlug) => {
     setError('');
     setLoading(true);
     try {
-      const companySlug = form.companyCode.trim() || undefined;
-      const result = await login(form.email, form.password, companySlug);
+      const result = await loginRaw(form.email, form.password, companySlug || undefined);
+
+      // Multiple orgs — user must pick one
+      if (result.multipleOrgs) {
+        setMultipleOrgs(result.tenants);
+        setSelectedOrg(result.tenants[0]?.slug || '');
+        return;
+      }
+
+      // Backend says org code is needed (email not indexed yet)
+      if (result.requiresOrgCode) {
+        setShowOrgCode(true);
+        setError(result.error || 'Please enter your organisation code.');
+        return;
+      }
 
       // Org requires MFA but user hasn't set it up yet (TOTP-only policy)
       if (result.mfaSetupRequired) {
@@ -97,26 +116,37 @@ export default function Login() {
         return;
       }
 
-      // Check if MFA challenge is required
+      // MFA challenge required
       if (result.mfaRequired) {
         const mfaMethod = result.mfaMethod || 'totp';
-        setMfaState({ mfaToken: result.mfaToken, mfaMethod, companySlug: result.companySlug });
+        setMfaState({ mfaToken: result.mfaToken, mfaMethod });
         setMfaCode('');
         setUseBackupCode(false);
-        // Auto-send email OTP if that's the method
         if (mfaMethod === 'email_otp' || result.autoSend) {
           await sendEmailOtp(result.mfaToken);
         }
         return;
       }
 
-      // Normal login path
+      // Normal login path — user is already cached by loginRaw
       navigate(REDIRECT(result.user.role));
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed. Please check your details.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const companySlug = form.companyCode.trim() || undefined;
+    await doLogin(companySlug);
+  };
+
+  const handleOrgPick = async (e) => {
+    e.preventDefault();
+    setMultipleOrgs(null);
+    await doLogin(selectedOrg);
   };
 
   const handleMfaSubmit = async (e) => {
@@ -145,6 +175,8 @@ export default function Login() {
     setEmailOtpSent(false);
     setResendCountdown(0);
     setMfaSetupRequired(false);
+    setMultipleOrgs(null);
+    setSelectedOrg('');
     setError('');
   };
 
@@ -210,7 +242,7 @@ export default function Login() {
 
           {/* Back to home or back to login */}
           <div className="mb-6">
-            {mfaState || mfaSetupRequired ? (
+            {mfaState || mfaSetupRequired || multipleOrgs ? (
               <button
                 type="button"
                 onClick={handleBackToLogin}
@@ -250,6 +282,11 @@ export default function Login() {
               <>
                 <h2 className="text-2xl font-bold text-gray-900">Two-Factor Authentication</h2>
                 <p className="text-gray-500 text-sm mt-1">Enter the 6-digit code from your authenticator app</p>
+              </>
+            ) : multipleOrgs ? (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900">Select Organisation</h2>
+                <p className="text-gray-500 text-sm mt-1">Your email is linked to multiple organisations</p>
               </>
             ) : (
               <>
@@ -387,26 +424,46 @@ export default function Login() {
                 ) : 'Verify'}
               </button>
             </form>
+          ) : multipleOrgs ? (
+            /* Multiple-org picker */
+            <form onSubmit={handleOrgPick} className="space-y-5" noValidate>
+              <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <span className="text-blue-500 text-lg shrink-0">🏢</span>
+                <p className="text-sm text-blue-800">
+                  Your email <strong>{form.email}</strong> is registered with multiple organisations.
+                  Please select which one you'd like to sign in to.
+                </p>
+              </div>
+              <div>
+                <label className="label" htmlFor="orgPick">Organisation</label>
+                <select
+                  id="orgPick"
+                  className="input"
+                  value={selectedOrg}
+                  onChange={e => setSelectedOrg(e.target.value)}
+                  autoFocus
+                >
+                  {multipleOrgs.map(org => (
+                    <option key={org.slug} value={org.slug}>{org.name}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={loading || !selectedOrg}
+                className="btn-primary w-full py-3 text-base"
+              >
+                {loading ? (
+                  <><svg className="animate-spin -ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>Signing in…</>
+                ) : 'Continue'}
+              </button>
+            </form>
           ) : (
             /* Login Form */
             <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-              {/* Organisation code */}
-              <div>
-                <label className="label" htmlFor="companyCode">
-                  Organisation code
-                  <span className="text-gray-400 font-normal ml-1">(optional)</span>
-                </label>
-                <input
-                  id="companyCode"
-                  type="text"
-                  className="input font-mono"
-                  placeholder="e.g. flow-demo"
-                  value={form.companyCode}
-                  onChange={set('companyCode')}
-                  autoComplete="organization"
-                  autoFocus
-                />
-              </div>
 
               {/* Email */}
               <div>
@@ -419,6 +476,7 @@ export default function Login() {
                   value={form.email}
                   onChange={set('email')}
                   autoComplete="email"
+                  autoFocus
                   required
                 />
               </div>
@@ -457,6 +515,28 @@ export default function Login() {
                 </div>
               </div>
 
+              {/* Organisation code — hidden by default, revealed on demand */}
+              {showOrgCode && (
+                <div>
+                  <label className="label" htmlFor="companyCode">
+                    Organisation code
+                  </label>
+                  <input
+                    id="companyCode"
+                    type="text"
+                    className="input font-mono"
+                    placeholder="e.g. acme-corp"
+                    value={form.companyCode}
+                    onChange={set('companyCode')}
+                    autoComplete="organization"
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Ask your administrator for your organisation code.
+                  </p>
+                </div>
+              )}
+
               {/* SSO Button */}
               {ssoConfig?.ssoEnabled && ssoConfig?.googleConfigured && form.companyCode && (
                 <button
@@ -490,6 +570,20 @@ export default function Login() {
                   </>
                 ) : 'Sign in'}
               </button>
+
+              {/* Organisation code toggle */}
+              {!showOrgCode && (
+                <p className="text-center text-xs text-gray-400">
+                  Have an organisation code?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setShowOrgCode(true)}
+                    className="text-emerald-600 hover:text-emerald-700 underline underline-offset-2"
+                  >
+                    Enter it here
+                  </button>
+                </p>
+              )}
             </form>
           )}
 

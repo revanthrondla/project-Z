@@ -340,6 +340,10 @@ async function executeTool(db, toolName, input, userId) {
         `, [name, email, hash, 'candidate', true]);
         const newUserId = userRes.rows[0].id;
 
+        // Index email → tenant for seamless login (non-blocking)
+        const { indexUserEmail } = require('../masterDatabase');
+        indexUserEmail(email, req.user.tenantSlug).catch(() => {});
+
         await db.query(`
           INSERT INTO candidates (user_id, name, email, phone, role, hourly_rate, status, start_date)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

@@ -4,6 +4,7 @@ const multer = require('multer');
 const { parse } = require('csv-parse/sync');
 const bcrypt = require('bcryptjs');
 const { authenticate, requireAdmin, injectTenantDb } = require('../middleware/auth');
+const { indexUserEmail } = require('../masterDatabase');
 
 // ── Multer: memory storage, CSV only, max 5MB ──────────────────────────────
 const upload = multer({
@@ -252,6 +253,9 @@ router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.si
             r.home_country?.trim() || null,
           ]);
         }
+
+        // Index email → tenant for seamless login
+        indexUserEmail(r.email.trim().toLowerCase(), req.user.tenantSlug).catch(() => {});
 
         imported.push({ row: rowNum, name: r.name, email: r.email });
       } catch (err) {
