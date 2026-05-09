@@ -305,4 +305,105 @@ router.post('/invoices/:id/reject', authenticate, requireClient, injectTenantDb,
   res.json({ message: 'Invoice sent back for revision', invoice: updated });
 });
 
+// ── GET /api/client-portal/projects — project status for this client ──────────
+router.get('/projects', authenticate, requireClient, injectTenantDb, async (req, res) => {
+  try {
+    const clientResult = await req.db.query('SELECT * FROM clients WHERE user_id = $1', [req.user.id]);
+    const client = clientResult.rows[0];
+    if (!client) return res.status(404).json({ error: 'No client record found' });
+
+    const result = await req.db.query(`
+      SELECT
+        p.id, p.name, p.code, p.description, p.billing_model, p.status,
+        p.budget_hours, p.budget_amount, p.retainer_amount, p.retainer_period,
+        p.contract_start, p.contract_end, p.po_number, p.tags,
+        -- Approved hours
+        COALESCE(SUM(te.hours) FILTER (WHERE te.status = 'approved'), 0) AS approved_hours,
+        COALESCE(SUM(te.hours) FILTER (WHERE te.is_billable AND te.status = 'approved'), 0) AS billable_hours,
+        -- Invoiced total
+        COALESCE((
+          SELECT SUM(inv.total_amount)
+          FROM invoices inv
+          WHERE inv.project_id = p.id AND inv.status NOT IN ('draft','cancelled')
+        ), 0) AS invoiced_total,
+        -- Budget burn %
+        CASE WHEN p.budget_hours > 0
+          THEN ROUND(COALESCE(SUM(te.hours) FILTER (WHERE te.status='approved'), 0) / p.budget_hours * 100)
+          ELSE NULL END AS budget_burn_pct,
+        -- Retainer burn % (this period = current month)
+        CASE WHEN p.billing_model = 'retainer' AND p.retainer_amount > 0
+          THEN ROUND(
+            COALESCE(SUM(te.hours) FILTER (
+              WHERE te.status='approved' AND te.is_billable
+                AND te.date >= date_trunc('month', CURRENT_DATE)
+            ), 0) * COALESCE((
+              SELECT rc.bill_rate FROM rate_cards rc
+              WHERE rc.project_id = p.id AND (rc.effective_to IS NULL OR rc.effective_to >= CURRENT_DATE)
+              ORDER BY rc.effective_from DESC LIMIT 1
+            ), 0) / p.retainer_amount * 100
+          )
+          ELSE NULL END AS retainer_burn_pct,
+        -- Task summary
+        (SELECT COUNT(*) FROM project_tasks pt WHERE pt.project_id = p.id) AS total_tasks,
+        (SELECT COUNT(*) FROM project_tasks pt WHERE pt.project_id = p.id AND pt.status = 'completed') AS completed_tasks
+      FROM projects p
+      LEFT JOIN time_entries te ON te.project_id = p.id
+      WHERE p.client_id = $1
+      GROUP BY p.id
+      ORDER BY p.status DESC, p.name
+    `, [client.id]);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[client-portal GET /projects]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/client-portal/retainer-summary — retainer balance overview ───────
+router.get('/retainer-summary', authenticate, requireClient, injectTenantDb, async (req, res) => {
+  try {
+    const clientResult = await req.db.query('SELECT * FROM clients WHERE user_id = $1', [req.user.id]);
+    const client = clientResult.rows[0];
+    if (!client) return res.status(404).json({ error: 'No client record found' });
+
+    const result = await req.db.query(`
+      SELECT
+        p.id, p.name, p.retainer_amount, p.retainer_period,
+        COALESCE(SUM(te.hours) FILTER (
+          WHERE te.status = 'approved' AND te.is_billable
+            AND te.date >= date_trunc('month', CURRENT_DATE)
+        ), 0) AS hours_used_this_period,
+        COALESCE((
+          SELECT rc.bill_rate FROM rate_cards rc
+          WHERE rc.project_id = p.id AND (rc.effective_to IS NULL OR rc.effective_to >= CURRENT_DATE)
+          ORDER BY rc.effective_from DESC LIMIT 1
+        ), 0) AS bill_rate,
+        COALESCE((
+          SELECT SUM(inv.total_amount)
+          FROM invoices inv
+          WHERE inv.project_id = p.id
+            AND inv.invoice_date >= date_trunc('month', CURRENT_DATE)
+            AND inv.status NOT IN ('draft','cancelled')
+        ), 0) AS invoiced_this_period
+      FROM projects p
+      LEFT JOIN time_entries te ON te.project_id = p.id
+      WHERE p.client_id = $1 AND p.billing_model = 'retainer' AND p.status = 'active'
+      GROUP BY p.id, p.name, p.retainer_amount, p.retainer_period
+    `, [client.id]);
+
+    const summary = result.rows.map(r => {
+      const valueBurned = Number(r.hours_used_this_period) * Number(r.bill_rate);
+      const remaining   = Math.max(0, Number(r.retainer_amount) - valueBurned);
+      const burnPct     = r.retainer_amount > 0 ? Math.min(100, Math.round(valueBurned / Number(r.retainer_amount) * 100)) : 0;
+      return { ...r, value_burned: Math.round(valueBurned * 100) / 100, remaining_value: Math.round(remaining * 100) / 100, burn_pct: burnPct };
+    });
+
+    res.json(summary);
+  } catch (err) {
+    console.error('[client-portal GET /retainer-summary]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

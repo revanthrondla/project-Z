@@ -1,6 +1,47 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../api';
+
+// ─── Running Timer Banner ────────────────────────────────────────────────────
+function TimerBanner({ timer, onStop, projects }) {
+  const [elapsed, setElapsed] = useState(0); // seconds
+
+  useEffect(() => {
+    if (!timer?.running || !timer.entry?.timer_start) return;
+    const start = new Date(timer.entry.timer_start).getTime();
+    const tick  = () => setElapsed(Math.floor((Date.now() - start) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [timer]);
+
+  if (!timer?.running) return null;
+
+  const hrs  = Math.floor(elapsed / 3600);
+  const mins = Math.floor((elapsed % 3600) / 60);
+  const secs = elapsed % 60;
+  const display = `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+  const projectName = timer.entry?.project_name || (projects.find(p => p.id == timer.entry?.project_id)?.name) || 'No project';
+
+  return (
+    <div className="bg-emerald-600 text-white rounded-xl px-5 py-3 flex items-center justify-between mb-4 shadow">
+      <div className="flex items-center gap-3">
+        <div className="animate-pulse h-3 w-3 rounded-full bg-white"/>
+        <div>
+          <p className="text-sm font-semibold">Timer running</p>
+          <p className="text-xs text-emerald-100">{projectName}{timer.entry?.description ? ` · ${timer.entry.description}` : ''}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-4">
+        <span className="text-2xl font-mono font-bold tracking-wider">{display}</span>
+        <button onClick={onStop}
+          className="bg-white text-emerald-700 font-semibold text-sm px-4 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors">
+          ■ Stop
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function Modal({ title, onClose, children }) {
   return (
@@ -36,7 +77,14 @@ export default function LogHours() {
   const [error,       setError]       = useState('');
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7));
 
-  // Load projects once
+  // ── Timer state ────────────────────────────────────────────────────────────
+  const [timer,        setTimer]       = useState({ running: false });
+  const [timerLoading, setTimerLoading]= useState(false);
+  const [showTimerForm,setShowTimerForm] = useState(false);
+  const [timerForm,    setTimerForm]   = useState({ project_id: '', task_id: '', description: '', is_billable: true });
+  const [timerTasks,   setTimerTasks]  = useState([]);
+
+  // Load projects + timer status once on mount
   useEffect(() => {
     api.get('/api/projects')
       .then(r => {
@@ -44,7 +92,51 @@ export default function LogHours() {
         setProjects(list);
       })
       .catch(() => {});
+
+    api.get('/api/time-entries/timer/status')
+      .then(r => setTimer(r.data))
+      .catch(() => {});
   }, []);
+
+  // Load timer tasks when timer project changes
+  useEffect(() => {
+    setTimerForm(f => ({ ...f, task_id: '' }));
+    if (timerForm.project_id) {
+      api.get(`/api/projects/${timerForm.project_id}/tasks`)
+        .then(r => setTimerTasks(Array.isArray(r.data) ? r.data : []))
+        .catch(() => setTimerTasks([]));
+    } else {
+      setTimerTasks([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerForm.project_id]);
+
+  const startTimer = async () => {
+    setTimerLoading(true);
+    try {
+      const r = await api.post('/api/time-entries/timer/start', timerForm);
+      setTimer({ running: true, entry: r.data.entry });
+      setShowTimerForm(false);
+      setTimerForm({ project_id: '', task_id: '', description: '', is_billable: true });
+    } catch (e) {
+      alert(e.response?.data?.error || 'Failed to start timer');
+    } finally {
+      setTimerLoading(false);
+    }
+  };
+
+  const stopTimer = async () => {
+    setTimerLoading(true);
+    try {
+      await api.post('/api/time-entries/timer/stop', {});
+      setTimer({ running: false });
+      load();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Failed to stop timer');
+    } finally {
+      setTimerLoading(false);
+    }
+  };
 
   // Load tasks when selected project changes
   useEffect(() => {
@@ -133,13 +225,63 @@ export default function LogHours() {
 
   return (
     <div>
+      {/* Running Timer Banner */}
+      <TimerBanner timer={timer} onStop={stopTimer} projects={projects} />
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Log Hours</h1>
           <p className="text-gray-500 mt-1">{totalHours.toFixed(1)}h total · {approvedHours.toFixed(1)}h approved this period</p>
         </div>
-        <button onClick={openCreate} className="btn-primary">+ Log Hours</button>
+        <div className="flex gap-2">
+          {!timer.running && (
+            <button onClick={() => setShowTimerForm(v => !v)}
+              disabled={timerLoading}
+              className="btn-secondary flex items-center gap-1.5 text-sm">
+              ▶ Start Timer
+            </button>
+          )}
+          <button onClick={openCreate} className="btn-primary">+ Log Hours</button>
+        </div>
       </div>
+
+      {/* Quick Timer Start Form */}
+      {showTimerForm && !timer.running && (
+        <div className="card p-4 mb-4 border-l-4 border-emerald-500">
+          <p className="text-sm font-semibold text-gray-700 mb-3">Start a timer</p>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="label">Project</label>
+              <select className="input min-w-[180px]" value={timerForm.project_id}
+                onChange={e => setTimerForm(f => ({ ...f, project_id: e.target.value }))}>
+                <option value="">No project</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            {timerTasks.length > 0 && (
+              <div>
+                <label className="label">Task</label>
+                <select className="input min-w-[160px]" value={timerForm.task_id}
+                  onChange={e => setTimerForm(f => ({ ...f, task_id: e.target.value }))}>
+                  <option value="">No task</option>
+                  {timerTasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="label">Description</label>
+              <input className="input min-w-[200px]" placeholder="What are you working on?"
+                value={timerForm.description}
+                onChange={e => setTimerForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            <button onClick={startTimer} disabled={timerLoading}
+              className="btn-primary flex items-center gap-1 text-sm">
+              ▶ Start
+            </button>
+            <button onClick={() => setShowTimerForm(false)} className="btn-secondary text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
 
       {/* Month filter */}
       <div className="flex gap-3 mb-4">

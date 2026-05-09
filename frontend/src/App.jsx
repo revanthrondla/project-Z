@@ -155,6 +155,8 @@ const AIChatDocuments       = lazy(() => import('./pages/admin/AIChatDocuments')
 const EmployeeProfile       = lazy(() => import('./pages/admin/EmployeeProfile'));
 const AdminProjects         = lazy(() => import('./pages/admin/Projects'));
 const AdminExpenses         = lazy(() => import('./pages/admin/Expenses'));
+const AdminContractors      = lazy(() => import('./pages/admin/Contractors'));
+const AdminCompliance       = lazy(() => import('./pages/admin/Compliance'));
 
 // Field Ops pages
 const FieldScan       = lazy(() => import('./pages/agrow/FieldScan'));
@@ -380,9 +382,11 @@ function AppRoutes() {
         } />
 
         {/* Admin: Reports + Import + Settings */}
-        <Route path="reports"   element={<ModuleRoute moduleKey="hr_reports" adminOnly><Lazy><AdminReports /></Lazy></ModuleRoute>} />
-        <Route path="projects"  element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminProjects /></Lazy></ModuleRoute>} />
-        <Route path="expenses"  element={<PrivateRoute><Lazy><AdminExpenses /></Lazy></PrivateRoute>} />
+        <Route path="reports"     element={<ModuleRoute moduleKey="hr_reports" adminOnly><Lazy><AdminReports /></Lazy></ModuleRoute>} />
+        <Route path="projects"    element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminProjects /></Lazy></ModuleRoute>} />
+        <Route path="expenses"    element={<PrivateRoute><Lazy><AdminExpenses /></Lazy></PrivateRoute>} />
+        <Route path="contractors" element={<PrivateRoute adminOnly><Lazy><AdminContractors /></Lazy></PrivateRoute>} />
+        <Route path="compliance"  element={<PrivateRoute adminOnly><Lazy><AdminCompliance /></Lazy></PrivateRoute>} />
         <Route path="import"    element={<ModuleRoute moduleKey="hr_import"  adminOnly><Lazy><AdminImport /></Lazy></ModuleRoute>} />
         <Route path="settings" element={<PrivateRoute adminOnly><Lazy><AdminSettings /></Lazy></PrivateRoute>} />
 

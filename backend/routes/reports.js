@@ -411,20 +411,411 @@ router.get('/utilization', authenticate, requireAdmin, injectTenantDb, async (re
       ORDER BY utilization_pct DESC
     `, personParams);
 
+    // ── Retainer burn per project ──────────────────────────────────────────
+    // For retainer projects: show hours consumed vs budget (retainer_amount / avg bill rate)
+    const retainerProjects = projectResult.rows.filter(p => p.billing_model === 'retainer');
+
+    // ── Realization rate: invoiced_total / (billable_hours * bill_rate) ───
+    // Using the rate_card resolved bill_rate where available, else candidate.hourly_rate
+    const totalBillableHrs   = projectResult.rows.reduce((s, r) => s + Number(r.billable_hours), 0);
+    const totalInvoiced      = projectResult.rows.reduce((s, r) => s + Number(r.invoiced_total), 0);
+
+    // Unbilled: approved billable hours not yet on any invoice
+    const unbilledResult = await req.db.query(`
+      SELECT COALESCE(SUM(te.hours), 0) AS unbilled_hrs
+      FROM time_entries te
+      WHERE te.is_billable = TRUE AND te.status = 'approved' AND te.invoice_id IS NULL
+      ${start_date ? `AND te.date >= '${start_date}'` : ''}
+      ${end_date   ? `AND te.date <= '${end_date}'`   : ''}
+    `);
+    const unbilledHrs = Number(unbilledResult.rows[0]?.unbilled_hrs ?? 0);
+
+    // For realization we need bill rates — approximate from invoiced / billed hrs
+    const realizationPct = totalBillableHrs > 0 && totalInvoiced > 0
+      ? Math.round((totalInvoiced / (totalInvoiced + unbilledHrs * (totalInvoiced / totalBillableHrs))) * 100)
+      : 0;
+
     res.json({
       totals: {
         avg_utilization_pct: personResult.rows.length
           ? Math.round(personResult.rows.reduce((s, r) => s + Number(r.utilization_pct), 0) / personResult.rows.length)
           : 0,
-        total_billable_hrs: projectResult.rows.reduce((s, r) => s + Number(r.billable_hours), 0),
-        unbilled_hrs: 0,
-        realization_pct: 0,
+        total_billable_hrs: Math.round(totalBillableHrs * 100) / 100,
+        unbilled_hrs:       Math.round(unbilledHrs * 100) / 100,
+        total_invoiced:     Math.round(totalInvoiced * 100) / 100,
+        realization_pct:    realizationPct,
       },
       projects: projectResult.rows,
       people:   personResult.rows,
+      retainer_projects: retainerProjects.map(p => ({
+        ...p,
+        retainer_burn_pct: p.retainer_amount > 0
+          ? Math.min(100, Math.round(Number(p.invoiced_total) / Number(p.retainer_amount) * 100))
+          : null,
+      })),
     });
   } catch (err) {
     console.error('GET /reports/utilization', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GET /api/reports/overtime-risk
+// Shows employees who are at risk of overtime in the current or specified workweek.
+// ═══════════════════════════════════════════════════════════════════════════
+router.get('/overtime-risk', async (req, res) => {
+  try {
+    const { week_start } = req.query;
+
+    // Default: current workweek Mon–Sun
+    let weekBegin, weekEnd;
+    if (week_start) {
+      weekBegin = week_start;
+      const d = new Date(week_start + 'T12:00:00Z');
+      d.setUTCDate(d.getUTCDate() + 6);
+      weekEnd = d.toISOString().slice(0, 10);
+    } else {
+      const now = new Date();
+      const dow = now.getUTCDay(); // 0=Sun
+      const diff = dow === 0 ? 6 : dow - 1; // Mon=0
+      const mon = new Date(now); mon.setUTCDate(now.getUTCDate() - diff);
+      const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
+      weekBegin = mon.toISOString().slice(0, 10);
+      weekEnd   = sun.toISOString().slice(0, 10);
+    }
+
+    const result = await req.db.query(`
+      SELECT
+        ca.id, ca.name, ca.role, ca.hourly_rate,
+        COALESCE(pr.weekly_ot_threshold, 40) AS ot_threshold,
+        COALESCE(SUM(te.hours), 0)           AS hours_this_week,
+        COALESCE(SUM(te.hours), 0) - COALESCE(pr.weekly_ot_threshold, 40) AS ot_exposure_hrs,
+        CASE WHEN COALESCE(SUM(te.hours), 0) >= COALESCE(pr.weekly_ot_threshold, 40)
+          THEN 'over' WHEN COALESCE(SUM(te.hours), 0) >= COALESCE(pr.weekly_ot_threshold, 40) * 0.8
+          THEN 'at_risk' ELSE 'safe' END      AS risk_level,
+        pr.name AS pay_rule_name
+      FROM candidates ca
+      LEFT JOIN pay_rules pr ON pr.id = COALESCE(ca.pay_rule_id,
+        (SELECT id FROM pay_rules WHERE is_default = TRUE LIMIT 1))
+      LEFT JOIN time_entries te ON te.candidate_id = ca.id
+        AND te.date BETWEEN $1 AND $2
+        AND te.status != 'rejected'
+      WHERE ca.status = 'active' AND ca.deleted_at IS NULL
+      GROUP BY ca.id, ca.name, ca.role, ca.hourly_rate, pr.weekly_ot_threshold, pr.name
+      ORDER BY hours_this_week DESC
+    `, [weekBegin, weekEnd]);
+
+    const rows = result.rows;
+    res.json({
+      week: { start: weekBegin, end: weekEnd },
+      summary: {
+        total_employees: rows.length,
+        over_ot:         rows.filter(r => r.risk_level === 'over').length,
+        at_risk:         rows.filter(r => r.risk_level === 'at_risk').length,
+        safe:            rows.filter(r => r.risk_level === 'safe').length,
+      },
+      employees: rows,
+    });
+  } catch (err) {
+    console.error('GET /reports/overtime-risk', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GET /api/reports/missing-approvals
+// Lists time entries that have been pending for more than N days.
+// ═══════════════════════════════════════════════════════════════════════════
+router.get('/missing-approvals', async (req, res) => {
+  try {
+    const { days_pending = 3, candidate_id, client_id } = req.query;
+
+    const params  = [parseInt(days_pending, 10)];
+    const extras  = [];
+
+    if (candidate_id) { params.push(parseInt(candidate_id, 10)); extras.push(`te.candidate_id = $${params.length}`); }
+    if (client_id)    { params.push(parseInt(client_id, 10));    extras.push(`ca.client_id    = $${params.length}`); }
+
+    const extraWhere = extras.length ? ` AND ${extras.join(' AND ')}` : '';
+
+    const result = await req.db.query(`
+      SELECT
+        te.id, te.date, te.hours, te.description, te.created_at, te.project_id,
+        ca.name AS candidate_name, ca.email AS candidate_email,
+        cl.name AS client_name,
+        p.name  AS project_name,
+        CURRENT_DATE - te.date::date AS days_old,
+        NOW() - te.created_at        AS age
+      FROM time_entries te
+      JOIN candidates ca ON ca.id = te.candidate_id
+      LEFT JOIN clients cl ON cl.id = ca.client_id
+      LEFT JOIN projects p ON p.id = te.project_id
+      WHERE te.status = 'pending'
+        AND te.date < CURRENT_DATE - ($1 || ' days')::interval
+        ${extraWhere}
+      ORDER BY te.date ASC
+    `, params);
+
+    res.json({
+      threshold_days: parseInt(days_pending, 10),
+      count:          result.rows.length,
+      entries:        result.rows,
+    });
+  } catch (err) {
+    console.error('GET /reports/missing-approvals', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GET /api/reports/compliance
+// Compliance exceptions: missing records, retention alerts, classification risks
+// ═══════════════════════════════════════════════════════════════════════════
+router.get('/compliance', async (req, res) => {
+  try {
+    // 1. Employees missing critical records (I-9 metadata flag = w9_collected)
+    const missingW9 = await req.db.query(`
+      SELECT ca.id, ca.name, ca.email, ca.classification_status, ca.start_date
+      FROM candidates ca
+      WHERE ca.classification_status = 'contractor'
+        AND (ca.w9_collected = FALSE OR ca.w9_collected IS NULL)
+        AND ca.deleted_at IS NULL AND ca.status = 'active'
+      ORDER BY ca.name
+    `);
+
+    // 2. Pending contractor classification reviews
+    const pendingClassification = await req.db.query(`
+      SELECT ca.id, ca.name, ca.email, ca.start_date, ca.classification_notes
+      FROM candidates ca
+      WHERE ca.classification_status = 'pending_review'
+        AND ca.deleted_at IS NULL
+      ORDER BY ca.start_date
+    `);
+
+    // 3. Time entries with no approval for >7 days (payroll deadline risk)
+    const staleEntries = await req.db.query(`
+      SELECT COUNT(*) AS count
+      FROM time_entries te
+      WHERE te.status = 'pending' AND te.date < CURRENT_DATE - INTERVAL '7 days'
+    `);
+
+    // 4. Employees with end dates in the past but still active
+    const terminatedActive = await req.db.query(`
+      SELECT ca.id, ca.name, ca.end_date, ca.status
+      FROM candidates ca
+      WHERE ca.end_date IS NOT NULL
+        AND ca.end_date < CURRENT_DATE
+        AND ca.status = 'active'
+        AND ca.deleted_at IS NULL
+      ORDER BY ca.end_date
+    `);
+
+    // 5. Data requests pending > 30 days (CCPA: 45-day response deadline)
+    const overdueDataRequests = await req.db.query(`
+      SELECT dr.id, dr.request_type, dr.created_at, dr.status,
+             ca.name AS candidate_name
+      FROM data_requests dr
+      JOIN candidates ca ON ca.id = dr.candidate_id
+      WHERE dr.status IN ('pending','in_progress')
+        AND dr.created_at < NOW() - INTERVAL '30 days'
+      ORDER BY dr.created_at
+    `).catch(() => ({ rows: [] })); // table may not exist on older tenants
+
+    // 6. Documents approaching retention expiry (within 60 days)
+    const expiringDocs = await req.db.query(`
+      SELECT d.id, d.title, d.document_type, d.expires_at, ca.name AS candidate_name
+      FROM documents d
+      LEFT JOIN candidates ca ON ca.id = d.candidate_id
+      WHERE d.expires_at IS NOT NULL
+        AND d.expires_at BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '60 days'
+      ORDER BY d.expires_at
+    `).catch(() => ({ rows: [] }));
+
+    res.json({
+      summary: {
+        missing_w9:            missingW9.rows.length,
+        pending_classification: pendingClassification.rows.length,
+        stale_pending_entries:  parseInt(staleEntries.rows[0]?.count ?? 0, 10),
+        terminated_still_active: terminatedActive.rows.length,
+        overdue_data_requests:  overdueDataRequests.rows.length,
+        expiring_documents:     expiringDocs.rows.length,
+      },
+      missing_w9:             missingW9.rows,
+      pending_classification: pendingClassification.rows,
+      terminated_still_active: terminatedActive.rows,
+      overdue_data_requests:  overdueDataRequests.rows,
+      expiring_documents:     expiringDocs.rows,
+    });
+  } catch (err) {
+    console.error('GET /reports/compliance', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CSV EXPORT ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function toCSV(rows, columns) {
+  const header = columns.map(c => `"${c.label}"`).join(',');
+  const lines  = rows.map(row =>
+    columns.map(c => {
+      const v = row[c.key] ?? '';
+      const s = String(v).replace(/"/g, '""');
+      return `"${s}"`;
+    }).join(',')
+  );
+  return [header, ...lines].join('\r\n');
+}
+
+// GET /api/reports/export/time-entries.csv
+router.get('/export/time-entries.csv', async (req, res) => {
+  try {
+    const { start_date, end_date, candidate_id, status } = req.query;
+    const params = []; const where = [];
+    if (start_date)   { params.push(start_date); where.push(`te.date >= $${params.length}`); }
+    if (end_date)     { params.push(end_date);   where.push(`te.date <= $${params.length}`); }
+    if (candidate_id) { params.push(parseInt(candidate_id,10)); where.push(`te.candidate_id = $${params.length}`); }
+    if (status)       { params.push(status);     where.push(`te.status = $${params.length}`); }
+
+    const result = await req.db.query(`
+      SELECT te.id, te.date, ca.name AS employee, cl.name AS client, p.name AS project,
+             pt.name AS task, te.hours, te.is_billable, te.status, te.description,
+             te.billing_notes, ca.hourly_rate,
+             ROUND(te.hours * ca.hourly_rate, 2) AS amount, te.created_at
+      FROM time_entries te
+      JOIN candidates ca ON ca.id = te.candidate_id
+      LEFT JOIN clients cl ON cl.id = ca.client_id
+      LEFT JOIN projects p ON p.id = te.project_id
+      LEFT JOIN project_tasks pt ON pt.id = te.task_id
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY te.date, ca.name
+    `, params);
+
+    const csv = toCSV(result.rows, [
+      { key: 'id',           label: 'ID' },
+      { key: 'date',         label: 'Date' },
+      { key: 'employee',     label: 'Employee' },
+      { key: 'client',       label: 'Client' },
+      { key: 'project',      label: 'Project' },
+      { key: 'task',         label: 'Task' },
+      { key: 'hours',        label: 'Hours' },
+      { key: 'is_billable',  label: 'Billable' },
+      { key: 'status',       label: 'Status' },
+      { key: 'description',  label: 'Description' },
+      { key: 'billing_notes',label: 'Billing Notes' },
+      { key: 'hourly_rate',  label: 'Rate ($/hr)' },
+      { key: 'amount',       label: 'Amount ($)' },
+    ]);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="time-entries.csv"');
+    res.send(csv);
+  } catch (err) {
+    console.error('GET /reports/export/time-entries.csv', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/reports/export/invoices.csv
+router.get('/export/invoices.csv', async (req, res) => {
+  try {
+    const { start_date, end_date, status } = req.query;
+    const params = []; const where = [];
+    if (start_date) { params.push(start_date); where.push(`inv.invoice_date >= $${params.length}`); }
+    if (end_date)   { params.push(end_date);   where.push(`inv.invoice_date <= $${params.length}`); }
+    if (status)     { params.push(status);     where.push(`inv.status = $${params.length}`); }
+
+    const result = await req.db.query(`
+      SELECT inv.id, inv.invoice_number, inv.invoice_date, inv.due_date,
+             cl.name AS client, ca.name AS employee, p.name AS project,
+             inv.subtotal, inv.tax_amount, inv.discount_amount, inv.total_amount,
+             inv.billing_model, inv.status, inv.paid_at, inv.sent_at
+      FROM invoices inv
+      LEFT JOIN clients cl ON cl.id = inv.client_id
+      LEFT JOIN candidates ca ON ca.id = inv.candidate_id
+      LEFT JOIN projects p ON p.id = inv.project_id
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY inv.invoice_date DESC
+    `, params);
+
+    const csv = toCSV(result.rows, [
+      { key: 'invoice_number', label: 'Invoice #' },
+      { key: 'invoice_date',   label: 'Date' },
+      { key: 'due_date',       label: 'Due Date' },
+      { key: 'client',         label: 'Client' },
+      { key: 'employee',       label: 'Employee' },
+      { key: 'project',        label: 'Project' },
+      { key: 'billing_model',  label: 'Billing Model' },
+      { key: 'subtotal',       label: 'Subtotal ($)' },
+      { key: 'discount_amount',label: 'Discount ($)' },
+      { key: 'tax_amount',     label: 'Tax ($)' },
+      { key: 'total_amount',   label: 'Total ($)' },
+      { key: 'status',         label: 'Status' },
+      { key: 'sent_at',        label: 'Sent At' },
+      { key: 'paid_at',        label: 'Paid At' },
+    ]);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="invoices.csv"');
+    res.send(csv);
+  } catch (err) {
+    console.error('GET /reports/export/invoices.csv', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/reports/export/payroll.csv
+router.get('/export/payroll.csv', async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const params = []; const where = ['te.status = \'approved\''];
+    if (start_date) { params.push(start_date); where.push(`te.date >= $${params.length}`); }
+    if (end_date)   { params.push(end_date);   where.push(`te.date <= $${params.length}`); }
+
+    const result = await req.db.query(`
+      SELECT
+        ca.name AS employee, ca.email, ca.role, ca.contract_type, ca.hourly_rate,
+        COALESCE(pr.weekly_ot_threshold, 40) AS ot_threshold,
+        COALESCE(pr.ot_multiplier, 1.5) AS ot_multiplier,
+        SUM(te.hours)                    AS total_hours,
+        LEAST(SUM(te.hours), COALESCE(pr.weekly_ot_threshold, 40)) AS regular_hours,
+        GREATEST(SUM(te.hours) - COALESCE(pr.weekly_ot_threshold, 40), 0) AS ot_hours,
+        ROUND(
+          LEAST(SUM(te.hours), COALESCE(pr.weekly_ot_threshold, 40)) * ca.hourly_rate
+          + GREATEST(SUM(te.hours) - COALESCE(pr.weekly_ot_threshold, 40), 0)
+            * ca.hourly_rate * COALESCE(pr.ot_multiplier, 1.5), 2
+        ) AS gross_pay
+      FROM time_entries te
+      JOIN candidates ca ON ca.id = te.candidate_id
+      LEFT JOIN pay_rules pr ON pr.id = COALESCE(ca.pay_rule_id,
+        (SELECT id FROM pay_rules WHERE is_default = TRUE LIMIT 1))
+      WHERE ${where.join(' AND ')}
+      GROUP BY ca.id, ca.name, ca.email, ca.role, ca.contract_type, ca.hourly_rate,
+               pr.weekly_ot_threshold, pr.ot_multiplier
+      ORDER BY ca.name
+    `, params);
+
+    const csv = toCSV(result.rows, [
+      { key: 'employee',      label: 'Employee' },
+      { key: 'email',         label: 'Email' },
+      { key: 'role',          label: 'Role' },
+      { key: 'contract_type', label: 'Employment Type' },
+      { key: 'hourly_rate',   label: 'Rate ($/hr)' },
+      { key: 'total_hours',   label: 'Total Hours' },
+      { key: 'regular_hours', label: 'Regular Hours' },
+      { key: 'ot_hours',      label: 'OT Hours' },
+      { key: 'ot_threshold',  label: 'OT Threshold' },
+      { key: 'ot_multiplier', label: 'OT Rate' },
+      { key: 'gross_pay',     label: 'Gross Pay ($)' },
+    ]);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="payroll.csv"');
+    res.send(csv);
+  } catch (err) {
+    console.error('GET /reports/export/payroll.csv', err);
     res.status(500).json({ error: err.message });
   }
 });

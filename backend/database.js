@@ -1192,6 +1192,114 @@ async function createTenantSchema(slug) {
     await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS sow_url               TEXT`);
     await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS target_utilization    NUMERIC(5,2) DEFAULT 80`);
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // PAY RULES ENGINE  (FLSA overtime, minimum wage, rounding, breaks)
+    // ══════════════════════════════════════════════════════════════════════════
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pay_rules (
+        id                    BIGSERIAL PRIMARY KEY,
+        name                  TEXT NOT NULL,
+        is_default            BOOLEAN NOT NULL DEFAULT FALSE,
+        -- Workweek anchor
+        workweek_start        TEXT NOT NULL DEFAULT 'monday'
+                              CHECK(workweek_start IN ('monday','tuesday','wednesday','thursday','friday','saturday','sunday')),
+        -- Overtime thresholds (FLSA daily + weekly)
+        daily_ot_threshold    NUMERIC(5,2),            -- null = no daily OT
+        weekly_ot_threshold   NUMERIC(5,2) DEFAULT 40, -- FLSA standard
+        double_time_threshold NUMERIC(5,2),            -- CA-style DT
+        ot_multiplier         NUMERIC(4,2) DEFAULT 1.5,
+        dt_multiplier         NUMERIC(4,2) DEFAULT 2.0,
+        -- Minimum wage (USD/hr; override at location level if needed)
+        minimum_wage          NUMERIC(8,2) DEFAULT 7.25,
+        -- Time rounding: 'none' | '6min' | '15min' | 'nearest_quarter'
+        time_rounding         TEXT NOT NULL DEFAULT 'none'
+                              CHECK(time_rounding IN ('none','6min','15min','nearest_quarter')),
+        -- Break rules (minutes)
+        break_threshold_hours NUMERIC(4,2) DEFAULT 6,  -- hours worked before break required
+        break_duration_min    INTEGER DEFAULT 30,       -- length of required unpaid break
+        paid_breaks           BOOLEAN DEFAULT FALSE,
+        -- Location / scope
+        location_id           BIGINT REFERENCES org_locations(id) ON DELETE SET NULL,
+        notes                 TEXT,
+        created_at            TIMESTAMPTZ DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_pay_rules_default ON pay_rules(is_default) WHERE is_default = TRUE`);
+
+    // Candidate-to-rule assignment (override default)
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS pay_rule_id BIGINT REFERENCES pay_rules(id) ON DELETE SET NULL`);
+
+    // ── Seed one FLSA-compliant default rule ─────────────────────────────────
+    await client.query(`
+      INSERT INTO pay_rules (name, is_default, workweek_start, weekly_ot_threshold, ot_multiplier, minimum_wage, time_rounding)
+      SELECT 'FLSA Standard', TRUE, 'monday', 40, 1.5, 7.25, 'none'
+      WHERE NOT EXISTS (SELECT 1 FROM pay_rules WHERE is_default = TRUE)
+    `);
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // PRIVACY / DATA REQUEST CENTER
+    // ══════════════════════════════════════════════════════════════════════════
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS data_requests (
+        id             BIGSERIAL PRIMARY KEY,
+        candidate_id   BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+        request_type   TEXT NOT NULL CHECK(request_type IN ('export','delete','correct','opt_out')),
+        status         TEXT NOT NULL DEFAULT 'pending'
+                       CHECK(status IN ('pending','in_progress','completed','rejected')),
+        requested_by   BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        processed_by   BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        request_notes  TEXT,
+        response_notes TEXT,
+        legal_basis    TEXT,
+        completed_at   TIMESTAMPTZ,
+        created_at     TIMESTAMPTZ DEFAULT NOW(),
+        updated_at     TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_data_requests_candidate ON data_requests(candidate_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_data_requests_status    ON data_requests(status)`);
+
+    // Legal hold flag on candidates + soft delete
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS legal_hold     BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS legal_hold_reason TEXT`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS deleted_at     TIMESTAMPTZ`);
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // WEBHOOK & TENANT API KEY TABLE
+    // ══════════════════════════════════════════════════════════════════════════
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id           BIGSERIAL PRIMARY KEY,
+        name         TEXT NOT NULL,
+        key_prefix   TEXT NOT NULL,
+        key_hash     TEXT NOT NULL UNIQUE,
+        scopes       TEXT NOT NULL DEFAULT 'read',
+        last_used_at TIMESTAMPTZ,
+        expires_at   TIMESTAMPTZ,
+        created_by   BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        is_active    BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS webhooks (
+        id           BIGSERIAL PRIMARY KEY,
+        name         TEXT NOT NULL,
+        url          TEXT NOT NULL,
+        events       JSONB NOT NULL DEFAULT '[]',
+        secret_hash  TEXT,
+        is_active    BOOLEAN NOT NULL DEFAULT TRUE,
+        last_fired_at TIMESTAMPTZ,
+        failure_count INTEGER DEFAULT 0,
+        created_by   BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        created_at   TIMESTAMPTZ DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(is_active) WHERE is_active = TRUE`);
+
     console.log(`✅ Schema ready: ${schema}`);
   } finally {
     client.release();

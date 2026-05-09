@@ -42,6 +42,9 @@ const orgSetupRoutes         = require('./routes/orgSetup');
 const projectRoutes          = require('./routes/projects');
 const rateCardRoutes         = require('./routes/ratecards');
 const expenseRoutes          = require('./routes/expenses');
+const payRulesRoutes         = require('./routes/payRules');
+const privacyRoutes          = require('./routes/privacy');
+const { auditLogViewer }     = require('./middleware/auditLog');
 
 const app      = express();
 const PORT     = process.env.PORT || 3001;
@@ -187,9 +190,14 @@ app.use('/api/org-setup',        orgSetupRoutes);
 app.use('/api/projects',         projectRoutes);
 app.use('/api/rate-cards',       rateCardRoutes);
 app.use('/api/expenses',         expenseRoutes);
+app.use('/api/pay-rules',        payRulesRoutes);
+app.use('/api/privacy',          privacyRoutes);
+
+// ── Audit log viewer ──────────────────────────────────────────────────────────
+const { authenticate, requireAdmin, injectTenantDb } = require('./middleware/auth');
+app.get('/api/audit-logs', authenticate, requireAdmin, injectTenantDb, auditLogViewer);
 
 // ── Admin dashboard stats ─────────────────────────────────────────────────────
-const { authenticate, requireAdmin, injectTenantDb } = require('./middleware/auth');
 
 app.get('/api/dashboard/stats', authenticate, injectTenantDb, requireAdmin, async (req, res) => {
   try {

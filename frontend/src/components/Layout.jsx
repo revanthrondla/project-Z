@@ -38,6 +38,8 @@ const adminNav = [
   { to: '/invoices',   icon: '📄', label: 'Invoices',                           moduleKey: 'hr_invoices' },
   { to: '/documents',              icon: '📁', label: 'Documents',               moduleKey: 'hr_documents' },
   { to: '/reports',                icon: '📉', label: 'Reports',                 moduleKey: 'hr_reports' },
+  { to: '/contractors',            icon: '🤝', label: 'Contractors',  section: 'Compliance' },
+  { to: '/compliance',             icon: '⚖️', label: 'Compliance Center' },
   { to: '/import',                icon: '📥', label: 'Import',                 moduleKey: 'hr_import' },
   // ── Payroll & Tools ─────────────────────────────────────────────────────────
   { to: '/payroll-reconciliation', icon: '💰', label: 'Payroll',        section: 'Payroll & Tools' },

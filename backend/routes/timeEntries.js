@@ -377,4 +377,126 @@ router.post('/:id/client-reject', authenticate, injectTenantDb, async (req, res)
   res.json(result.rows[0]);
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// TIMER: START / STOP / STATUS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// POST /api/time-entries/timer/start
+// Body: { project_id?, task_id?, description?, is_billable? }
+// Creates a new time_entry with timer_start = NOW() and hours = 0
+router.post('/timer/start', authenticate, injectTenantDb, async (req, res) => {
+  try {
+    const candidateId = req.user.candidateId;
+    if (!candidateId) return res.status(403).json({ error: 'Only candidates can start a timer' });
+
+    // Check if there's already a running timer
+    const existing = await req.db.query(
+      `SELECT id FROM time_entries WHERE candidate_id = $1 AND timer_start IS NOT NULL AND hours = 0 LIMIT 1`,
+      [candidateId]
+    );
+    if (existing.rows.length) {
+      return res.status(409).json({ error: 'A timer is already running. Stop it before starting a new one.', timer_id: existing.rows[0].id });
+    }
+
+    const { project_id, task_id, description, is_billable, billing_notes } = req.body;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const result = await req.db.query(`
+      INSERT INTO time_entries
+        (candidate_id, date, hours, description, project_id, task_id,
+         is_billable, billing_notes, timer_start, status)
+      VALUES ($1, $2, 0, $3, $4, $5, $6, $7, NOW(), 'pending')
+      RETURNING *
+    `, [
+      candidateId, today,
+      description || null,
+      project_id  || null,
+      task_id     || null,
+      is_billable !== false,
+      billing_notes || null,
+    ]);
+
+    res.status(201).json({ message: 'Timer started', entry: result.rows[0] });
+  } catch (err) {
+    console.error('[timer/start]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/time-entries/timer/stop
+// Body: { entry_id, description? }
+// Calculates elapsed hours and updates the time entry
+router.post('/timer/stop', authenticate, injectTenantDb, async (req, res) => {
+  try {
+    const candidateId = req.user.candidateId;
+    if (!candidateId) return res.status(403).json({ error: 'Only candidates can stop a timer' });
+
+    const { entry_id, description } = req.body;
+
+    // Find the running entry
+    let entryQuery, entryParams;
+    if (entry_id) {
+      entryQuery  = `SELECT * FROM time_entries WHERE id = $1 AND candidate_id = $2 AND timer_start IS NOT NULL`;
+      entryParams = [parseInt(entry_id, 10), candidateId];
+    } else {
+      entryQuery  = `SELECT * FROM time_entries WHERE candidate_id = $1 AND timer_start IS NOT NULL AND hours = 0 ORDER BY timer_start DESC LIMIT 1`;
+      entryParams = [candidateId];
+    }
+
+    const entryResult = await req.db.query(entryQuery, entryParams);
+    if (!entryResult.rows.length) return res.status(404).json({ error: 'No running timer found' });
+
+    const entry = entryResult.rows[0];
+    const startTime = new Date(entry.timer_start);
+    const now       = new Date();
+    const elapsedMs = now - startTime;
+    const elapsedHrs = Math.round((elapsedMs / 3600000) * 4) / 4; // round to nearest 0.25h, min 0.25
+    const hours = Math.max(0.25, elapsedHrs);
+
+    const updated = await req.db.query(`
+      UPDATE time_entries SET
+        hours       = $1,
+        timer_start = NULL,
+        description = COALESCE($2, description),
+        updated_at  = NOW()
+      WHERE id = $3
+      RETURNING *
+    `, [hours, description || null, entry.id]);
+
+    res.json({ message: 'Timer stopped', hours_logged: hours, entry: updated.rows[0] });
+  } catch (err) {
+    console.error('[timer/stop]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/time-entries/timer/status
+// Returns the currently running timer for the authenticated candidate, if any
+router.get('/timer/status', authenticate, injectTenantDb, async (req, res) => {
+  try {
+    const candidateId = req.user.candidateId;
+    if (!candidateId) return res.json({ running: false });
+
+    const result = await req.db.query(`
+      SELECT te.*, p.name AS project_name, pt.name AS task_name
+      FROM time_entries te
+      LEFT JOIN projects p ON p.id = te.project_id
+      LEFT JOIN project_tasks pt ON pt.id = te.task_id
+      WHERE te.candidate_id = $1 AND te.timer_start IS NOT NULL
+      ORDER BY te.timer_start DESC LIMIT 1
+    `, [candidateId]);
+
+    if (!result.rows.length) return res.json({ running: false });
+
+    const entry      = result.rows[0];
+    const elapsedMs  = new Date() - new Date(entry.timer_start);
+    const elapsedHrs = Math.round((elapsedMs / 3600000) * 100) / 100;
+
+    res.json({ running: true, entry, elapsed_hours: elapsedHrs, elapsed_ms: elapsedMs });
+  } catch (err) {
+    console.error('[timer/status]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
