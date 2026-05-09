@@ -169,25 +169,21 @@ router.post('/bulk-approve', authenticate, requireAdmin, injectTenantDb, async (
   const approvedAt = new Date().toISOString();
   const label = status === 'approved' ? 'approved' : 'rejected';
 
-  // PostgreSQL doesn't have transaction() method on pool, use client
-  const client = await req.db.connect();
-  try {
-    await client.query('BEGIN');
-
+  await req.db.transaction(async (tx) => {
     for (const id of ids) {
-      const entryResult = await client.query('SELECT * FROM time_entries WHERE id = $1', [id]);
+      const entryResult = await tx.query('SELECT * FROM time_entries WHERE id = $1', [id]);
       const entry = entryResult.rows[0];
 
-      await client.query('UPDATE time_entries SET status = $1, approved_by = $2, approved_at = $3 WHERE id = $4',
+      await tx.query('UPDATE time_entries SET status = $1, approved_by = $2, approved_at = $3 WHERE id = $4',
         [status, req.user.id, approvedAt, id]);
 
       // Notify candidate
       if (entry) {
-        const candidateResult = await client.query('SELECT user_id FROM candidates WHERE id = $1', [entry.candidate_id]);
+        const candidateResult = await tx.query('SELECT user_id FROM candidates WHERE id = $1', [entry.candidate_id]);
         const candidate = candidateResult.rows[0];
         if (candidate) {
           createNotification(
-            client,
+            tx,
             candidate.user_id,
             `timesheet_${label}`,
             `Timesheet ${label.charAt(0).toUpperCase() + label.slice(1)}`,
@@ -198,14 +194,7 @@ router.post('/bulk-approve', authenticate, requireAdmin, injectTenantDb, async (
         }
       }
     }
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 
   res.json({ message: `${ids.length} entries ${status}` });
 });

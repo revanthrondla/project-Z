@@ -433,12 +433,10 @@ router.post('/scanned-products/sync', async (req, res) => {
       return res.status(400).json({ error: 'items array is required' });
     }
 
-    const ids = [];
-    const client = await req.db.connect();
-    try {
-      await client.query('BEGIN');
+    const ids = await req.db.transaction(async (tx) => {
+      const inserted = [];
       for (const item of items) {
-        const result = await client.query(`
+        const result = await tx.query(`
           INSERT INTO ag_scanned_products
             (product_name, quantity, unit, user_name, entity_name,
              crew_name, ranch, picking_average, highest_picking_speed,
@@ -454,15 +452,10 @@ router.post('/scanned-products/sync', async (req, res) => {
           true,
           JSON.stringify(item.custom_fields || {})
         ]);
-        ids.push(result.rows[0].id);
+        inserted.push(result.rows[0].id);
       }
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+      return inserted;
+    });
 
     res.json({ message: `${ids.length} items synced`, ids });
   } catch (err) {

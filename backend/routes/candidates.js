@@ -87,18 +87,14 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
 
     const hash = await bcrypt.hash(password || 'candidate123', 10);
 
-    // PostgreSQL doesn't have transaction() method on pool, use client
-    const client = await req.db.connect();
-    try {
-      await client.query('BEGIN');
-
-      const userResult = await client.query(
+    const newCandidate = await req.db.transaction(async (tx) => {
+      const userResult = await tx.query(
         'INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
         [name, email.toLowerCase().trim(), hash, 'candidate']
       );
       const userId = userResult.rows[0].id;
 
-      const candidateResult = await client.query(`
+      const candidateResult = await tx.query(`
         INSERT INTO candidates (user_id, name, email, phone, role, hourly_rate, client_id, start_date, end_date, status, contract_type)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id
@@ -111,23 +107,18 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
 
       const candidateId = candidateResult.rows[0].id;
 
-      const newCandidateResult = await client.query(
+      const newCandidateResult = await tx.query(
         'SELECT c.*, cl.name as client_name FROM candidates c LEFT JOIN clients cl ON c.client_id = cl.id WHERE c.id = $1',
         [candidateId]
       );
 
-      await client.query('COMMIT');
+      return newCandidateResult.rows[0];
+    });
 
-      // Index email → tenant for seamless login (fire-and-forget, non-blocking)
-      indexUserEmail(email.toLowerCase().trim(), req.user.tenantSlug).catch(() => {});
+    // Index email → tenant for seamless login (fire-and-forget, non-blocking)
+    indexUserEmail(email.toLowerCase().trim(), req.user.tenantSlug).catch(() => {});
 
-      res.status(201).json(newCandidateResult.rows[0]);
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+    res.status(201).json(newCandidate);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

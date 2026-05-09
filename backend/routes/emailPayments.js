@@ -199,12 +199,9 @@ router.post('/imports/:id/confirm', async (req, res) => {
   if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ error: 'Valid payment amount required.' });
   if (!payment_date) return res.status(400).json({ error: 'Payment date required.' });
 
-  const client = await req.db.connect();
-  try {
-    await client.query('BEGIN');
-
+  await req.db.transaction(async (tx) => {
     // 1. Record the invoice payment
-    await client.query(`
+    await tx.query(`
       INSERT INTO invoice_payments
         (invoice_id, amount, payment_date, payment_method, reference_number, notes, recorded_by)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -214,33 +211,26 @@ router.post('/imports/:id/confirm', async (req, res) => {
         req.user.id]);
 
     // 2. Check if invoice is now fully paid
-    const invoiceResult = await client.query('SELECT * FROM invoices WHERE id = $1', [invoice_id]);
+    const invoiceResult = await tx.query('SELECT * FROM invoices WHERE id = $1', [invoice_id]);
     const invoice = invoiceResult.rows[0];
 
-    const paidRowResult = await client.query(
+    const paidRowResult = await tx.query(
       'SELECT COALESCE(SUM(amount),0) AS total FROM invoice_payments WHERE invoice_id = $1',
       [invoice_id]
     );
     const totalPaid = paidRowResult.rows[0].total;
 
     if (totalPaid >= invoice.total_amount - 0.01) {
-      await client.query("UPDATE invoices SET status = $1, updated_at = NOW() WHERE id = $2", ['paid', invoice_id]);
+      await tx.query("UPDATE invoices SET status = $1, updated_at = NOW() WHERE id = $2", ['paid', invoice_id]);
     }
 
     // 3. Mark import confirmed
-    await client.query(`
+    await tx.query(`
       UPDATE email_payment_imports
       SET status = $1, matched_invoice_id = $2, confirmed_by = $3, confirmed_at = NOW()
       WHERE id = $4
     `, ['confirmed', invoice_id, req.user.id, imp.id]);
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 
   const updatedResult = await req.db.query('SELECT * FROM email_payment_imports WHERE id = $1', [imp.id]);
   const updated = updatedResult.rows[0];

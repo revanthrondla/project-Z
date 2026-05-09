@@ -369,15 +369,12 @@ router.put('/tenants/:id/modules', async (req, res) => {
 
     const validKeys = new Set(MODULE_REGISTRY.map(m => m.key));
 
-    // PostgreSQL doesn't have a native transaction object like SQLite's better-sqlite3
-    // Instead, execute all inserts within a single batch or use a transaction wrapper
-    const client = await masterDb.connect();
-    try {
-      await client.query('BEGIN');
-
+    // Use the wrapper's built-in transaction() — handles BEGIN/COMMIT/ROLLBACK
+    // and checks out a dedicated pg client for the duration.
+    await masterDb.transaction(async (tx) => {
       for (const [key, enabled] of Object.entries(modules)) {
         if (!validKeys.has(key)) continue;
-        await client.query(`
+        await tx.query(`
           INSERT INTO tenant_modules (tenant_slug, module_key, enabled, enabled_at)
           VALUES ($1, $2, $3, NOW())
           ON CONFLICT(tenant_slug, module_key) DO UPDATE SET
@@ -385,14 +382,7 @@ router.put('/tenants/:id/modules', async (req, res) => {
             enabled_at = NOW()
         `, [tenant.slug, key, enabled ? true : false]);
       }
-
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+    });
 
     const rowsResult = await masterDb.query(
       'SELECT module_key, enabled, enabled_at FROM tenant_modules WHERE tenant_slug = $1',
