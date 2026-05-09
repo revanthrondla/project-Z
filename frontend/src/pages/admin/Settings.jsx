@@ -832,6 +832,789 @@ function SecurityTab() {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Tab: Organisation Setup ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Reference data for dropdowns
+const TIMEZONES = [
+  'UTC','America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
+  'America/Phoenix','America/Anchorage','Pacific/Honolulu',
+  'Europe/London','Europe/Paris','Europe/Berlin','Europe/Rome','Europe/Madrid',
+  'Europe/Amsterdam','Europe/Stockholm','Europe/Zurich','Europe/Warsaw',
+  'Asia/Dubai','Asia/Kolkata','Asia/Dhaka','Asia/Bangkok','Asia/Singapore',
+  'Asia/Hong_Kong','Asia/Shanghai','Asia/Tokyo','Asia/Seoul',
+  'Australia/Sydney','Australia/Melbourne','Australia/Brisbane','Australia/Perth',
+  'Pacific/Auckland','America/Toronto','America/Vancouver','America/Mexico_City',
+  'America/Sao_Paulo','America/Buenos_Aires','Africa/Johannesburg','Africa/Lagos',
+  'Africa/Nairobi',
+];
+
+const CURRENCIES = [
+  { code:'USD', symbol:'$',  name:'US Dollar' },
+  { code:'GBP', symbol:'£',  name:'British Pound' },
+  { code:'EUR', symbol:'€',  name:'Euro' },
+  { code:'CAD', symbol:'$',  name:'Canadian Dollar' },
+  { code:'AUD', symbol:'$',  name:'Australian Dollar' },
+  { code:'NZD', symbol:'$',  name:'New Zealand Dollar' },
+  { code:'SGD', symbol:'$',  name:'Singapore Dollar' },
+  { code:'HKD', symbol:'$',  name:'Hong Kong Dollar' },
+  { code:'JPY', symbol:'¥',  name:'Japanese Yen' },
+  { code:'CNY', symbol:'¥',  name:'Chinese Yuan' },
+  { code:'INR', symbol:'₹',  name:'Indian Rupee' },
+  { code:'AED', symbol:'د.إ',name:'UAE Dirham' },
+  { code:'SAR', symbol:'﷼',  name:'Saudi Riyal' },
+  { code:'ZAR', symbol:'R',  name:'South African Rand' },
+  { code:'BRL', symbol:'R$', name:'Brazilian Real' },
+  { code:'MXN', symbol:'$',  name:'Mexican Peso' },
+  { code:'CHF', symbol:'₣',  name:'Swiss Franc' },
+  { code:'SEK', symbol:'kr', name:'Swedish Krona' },
+  { code:'NOK', symbol:'kr', name:'Norwegian Krone' },
+  { code:'DKK', symbol:'kr', name:'Danish Krone' },
+  { code:'PLN', symbol:'zł', name:'Polish Zloty' },
+];
+
+const COUNTRIES = [
+  'US','GB','AU','CA','NZ','SG','HK','IE','ZA','IN','AE','SA',
+  'DE','FR','IT','ES','NL','SE','NO','DK','FI','CH','PL','AT',
+  'BR','MX','AR','JP','CN','KR','TH','MY','PH','ID','VN',
+];
+
+const ORG_SECTIONS = [
+  { key:'profile',    icon:'🏢', label:'Company Profile' },
+  { key:'legal',      icon:'⚖️', label:'Legal & Tax' },
+  { key:'locations',  icon:'📍', label:'Locations' },
+  { key:'departments',icon:'🗂️', label:'Departments' },
+  { key:'workweek',   icon:'🗓️', label:'Workweek & Time' },
+  { key:'invoicing',  icon:'🧾', label:'Invoicing' },
+  { key:'payretention',icon:'💰',label:'Pay & Retention' },
+];
+
+// ── Shared save hook for the profile singleton ─────────────────────────────
+function useOrgProfile() {
+  const [profile, setProfile]   = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState('');
+  const [success, setSuccess]   = useState('');
+
+  useEffect(() => {
+    api.get('/api/org-setup/profile')
+      .then(r => setProfile(r.data || {}))
+      .catch(() => setError('Failed to load organisation profile'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const save = async (patch) => {
+    setError(''); setSuccess(''); setSaving(true);
+    try {
+      const r = await api.put('/api/org-setup/profile', { ...(profile || {}), ...patch });
+      setProfile(r.data);
+      setSuccess('Saved');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return { profile, setProfile, loading, saving, save, error, setError, success };
+}
+
+// ── Section: Company Profile ───────────────────────────────────────────────
+function CompanyProfileSection() {
+  const { profile, loading, saving, save, error, setError, success } = useOrgProfile();
+  const [form, setForm] = useState(null);
+
+  useEffect(() => {
+    if (profile) setForm({
+      trading_name: profile.trading_name || '',
+      description:  profile.description  || '',
+      industry:     profile.industry     || '',
+      website:      profile.website      || '',
+    });
+  }, [profile]);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  if (loading || !form) return <Spinner />;
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); save(form); }} className="space-y-5 max-w-2xl">
+      <Banner type="error"   message={error}   onClose={() => setError('')} />
+      <Banner type="success" message={success} />
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-semibold text-gray-800">Company Profile</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className="label">Trading / Brand Name</label>
+            <input className="input" value={form.trading_name} onChange={e => set('trading_name', e.target.value)} placeholder="The name customers see" />
+          </div>
+          <div>
+            <label className="label">Industry</label>
+            <input className="input" value={form.industry} onChange={e => set('industry', e.target.value)} placeholder="e.g. Staffing, Technology" />
+          </div>
+          <div>
+            <label className="label">Website</label>
+            <input type="url" className="input" value={form.website} onChange={e => set('website', e.target.value)} placeholder="https://www.example.com" />
+          </div>
+          <div className="col-span-2">
+            <label className="label">Company Description</label>
+            <textarea rows={3} className="input" value={form.description} onChange={e => set('description', e.target.value)} placeholder="Brief description of what your company does" />
+          </div>
+        </div>
+      </div>
+      <div className="flex justify-end"><button type="submit" disabled={saving} className="btn-primary px-6 py-2">{saving ? 'Saving…' : 'Save'}</button></div>
+    </form>
+  );
+}
+
+// ── Section: Legal & Tax ──────────────────────────────────────────────────
+function LegalTaxSection() {
+  const { profile, loading, saving, save, error, setError, success } = useOrgProfile();
+  const [form, setForm] = useState(null);
+
+  useEffect(() => {
+    if (profile) setForm({
+      legal_name:          profile.legal_name          || '',
+      tax_id_label:        profile.tax_id_label        || 'Tax ID',
+      tax_id:              profile.tax_id              || '',
+      vat_number:          profile.vat_number          || '',
+      registration_number: profile.registration_number || '',
+      address_line1:       profile.address_line1       || '',
+      address_line2:       profile.address_line2       || '',
+      city:                profile.city                || '',
+      state:               profile.state               || '',
+      postcode:            profile.postcode            || '',
+      country:             profile.country             || 'US',
+    });
+  }, [profile]);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  if (loading || !form) return <Spinner />;
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); save(form); }} className="space-y-5 max-w-2xl">
+      <Banner type="error"   message={error}   onClose={() => setError('')} />
+      <Banner type="success" message={success} />
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-semibold text-gray-800">Legal Entity</h3>
+        <div>
+          <label className="label">Legal Name <span className="text-xs text-gray-400">(as registered)</span></label>
+          <input className="input" value={form.legal_name} onChange={e => set('legal_name', e.target.value)} placeholder="Full registered legal name" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Tax ID Label</label>
+            <input className="input" value={form.tax_id_label} onChange={e => set('tax_id_label', e.target.value)} placeholder="e.g. EIN, ABN, VAT, TRN" />
+          </div>
+          <div>
+            <label className="label">Tax ID / Number</label>
+            <input className="input" value={form.tax_id} onChange={e => set('tax_id', e.target.value)} placeholder="e.g. 12-3456789" />
+          </div>
+          <div>
+            <label className="label">VAT Number</label>
+            <input className="input" value={form.vat_number} onChange={e => set('vat_number', e.target.value)} placeholder="e.g. GB123456789" />
+          </div>
+          <div>
+            <label className="label">Company Registration No.</label>
+            <input className="input" value={form.registration_number} onChange={e => set('registration_number', e.target.value)} placeholder="e.g. 01234567" />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-semibold text-gray-800">Registered Address</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className="label">Address Line 1</label>
+            <input className="input" value={form.address_line1} onChange={e => set('address_line1', e.target.value)} placeholder="Street / Building" />
+          </div>
+          <div className="col-span-2">
+            <label className="label">Address Line 2</label>
+            <input className="input" value={form.address_line2} onChange={e => set('address_line2', e.target.value)} placeholder="Suite, Floor, etc." />
+          </div>
+          <div><label className="label">City</label><input className="input" value={form.city} onChange={e => set('city', e.target.value)} /></div>
+          <div><label className="label">State / Region</label><input className="input" value={form.state} onChange={e => set('state', e.target.value)} /></div>
+          <div><label className="label">Postcode / ZIP</label><input className="input" value={form.postcode} onChange={e => set('postcode', e.target.value)} /></div>
+          <div>
+            <label className="label">Country</label>
+            <select className="input" value={form.country} onChange={e => set('country', e.target.value)}>
+              {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+      <div className="flex justify-end"><button type="submit" disabled={saving} className="btn-primary px-6 py-2">{saving ? 'Saving…' : 'Save'}</button></div>
+    </form>
+  );
+}
+
+// ── Section: Locations ────────────────────────────────────────────────────
+function LocationModal({ loc, onSave, onClose }) {
+  const isEdit = !!loc?.id;
+  const [form, setForm] = useState(loc ? { ...loc } : {
+    name:'', address_line1:'', address_line2:'', city:'', state:'',
+    postcode:'', country:'US', timezone:'UTC', phone:'', is_primary: false, is_active: true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+  const set = (k,v) => setForm(f => ({ ...f, [k]: v }));
+
+  const submit = async (e) => {
+    e.preventDefault(); setError(''); setSaving(true);
+    try {
+      if (isEdit) await api.put(`/api/org-setup/locations/${loc.id}`, form);
+      else        await api.post('/api/org-setup/locations', form);
+      onSave();
+    } catch (err) { setError(err.response?.data?.error || 'Save failed'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h3 className="font-semibold text-gray-900">{isEdit ? 'Edit Location' : 'Add Location'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <form onSubmit={submit} className="p-6 space-y-4">
+          {error && <Banner type="error" message={error} onClose={() => setError('')} />}
+          <div>
+            <label className="label">Location Name <span className="text-red-500">*</span></label>
+            <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Head Office, Sydney Branch" required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2"><label className="label">Address</label><input className="input" value={form.address_line1 || ''} onChange={e => set('address_line1', e.target.value)} placeholder="Street" /></div>
+            <div><label className="label">City</label><input className="input" value={form.city || ''} onChange={e => set('city', e.target.value)} /></div>
+            <div><label className="label">State</label><input className="input" value={form.state || ''} onChange={e => set('state', e.target.value)} /></div>
+            <div><label className="label">Postcode</label><input className="input" value={form.postcode || ''} onChange={e => set('postcode', e.target.value)} /></div>
+            <div>
+              <label className="label">Country</label>
+              <select className="input" value={form.country || 'US'} onChange={e => set('country', e.target.value)}>
+                {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Time Zone</label>
+              <select className="input" value={form.timezone || 'UTC'} onChange={e => set('timezone', e.target.value)}>
+                {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+              </select>
+            </div>
+            <div><label className="label">Phone</label><input className="input" value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="+1 555 0100" /></div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer text-sm">
+            <input type="checkbox" className="w-4 h-4 accent-emerald-600" checked={!!form.is_primary} onChange={e => set('is_primary', e.target.checked)} />
+            Set as primary location
+          </label>
+          <div className="flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary px-4 py-2">Cancel</button>
+            <button type="submit" disabled={saving} className="btn-primary px-6 py-2">{saving ? 'Saving…' : isEdit ? 'Save' : 'Add'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function LocationsSection() {
+  const [locations, setLocations] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [modal, setModal]         = useState(null); // null | 'new' | location obj
+  const [error, setError]         = useState('');
+  const [success, setSuccess]     = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get('/api/org-setup/locations')
+      .then(r => setLocations(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setError('Failed to load locations'))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const handleSave = () => { setModal(null); setSuccess('Saved'); setTimeout(() => setSuccess(''), 3000); load(); };
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this location?')) return;
+    try { await api.delete(`/api/org-setup/locations/${id}`); load(); }
+    catch (err) { setError(err.response?.data?.error || 'Delete failed'); }
+  };
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      <Banner type="error"   message={error}   onClose={() => setError('')} />
+      <Banner type="success" message={success} />
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-gray-800">Office Locations</h3>
+            <p className="text-sm text-gray-500 mt-0.5">Define where your business operates. Each employee can be assigned to a location.</p>
+          </div>
+          <button onClick={() => setModal('new')} className="btn-primary px-4 py-2 text-sm">+ Add Location</button>
+        </div>
+        {loading ? <Spinner /> : locations.length === 0 ? (
+          <div className="text-center py-10 text-gray-400"><div className="text-3xl mb-2">📍</div><p className="text-sm">No locations yet.</p></div>
+        ) : (
+          <div className="space-y-2">
+            {locations.map(loc => (
+              <div key={loc.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-gray-300">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm text-gray-800">{loc.name}</span>
+                    {loc.is_primary && <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Primary</span>}
+                    {!loc.is_active && <span className="text-xs text-gray-400">inactive</span>}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {[loc.city, loc.state, loc.country].filter(Boolean).join(', ')}{loc.timezone ? ` · ${loc.timezone}` : ''}
+                  </p>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => setModal(loc)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg" title="Edit">✏️</button>
+                  <button onClick={() => handleDelete(loc.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg" title="Delete">🗑️</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {modal && <LocationModal loc={modal === 'new' ? null : modal} onSave={handleSave} onClose={() => setModal(null)} />}
+    </div>
+  );
+}
+
+// ── Section: Departments ──────────────────────────────────────────────────
+function DeptModal({ dept, allDepts, onSave, onClose }) {
+  const isEdit = !!dept?.id;
+  const [form, setForm] = useState(dept ? { name: dept.name, code: dept.code||'', cost_center: dept.cost_center||'', description: dept.description||'', parent_id: dept.parent_id||'', is_active: dept.is_active !== false } : { name:'', code:'', cost_center:'', description:'', parent_id:'', is_active: true });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+  const set = (k,v) => setForm(f => ({ ...f, [k]: v }));
+
+  const submit = async (e) => {
+    e.preventDefault(); setError(''); setSaving(true);
+    try {
+      const payload = { ...form, parent_id: form.parent_id || null };
+      if (isEdit) await api.put(`/api/org-setup/departments/${dept.id}`, payload);
+      else        await api.post('/api/org-setup/departments', payload);
+      onSave();
+    } catch (err) { setError(err.response?.data?.error || 'Save failed'); }
+    finally { setSaving(false); }
+  };
+
+  const parentOptions = allDepts.filter(d => !isEdit || d.id !== dept?.id);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h3 className="font-semibold text-gray-900">{isEdit ? 'Edit Department' : 'Add Department'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <form onSubmit={submit} className="p-6 space-y-4">
+          {error && <Banner type="error" message={error} onClose={() => setError('')} />}
+          <div>
+            <label className="label">Department Name <span className="text-red-500">*</span></label>
+            <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Engineering, Finance" required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Code</label>
+              <input className="input font-mono" value={form.code} onChange={e => set('code', e.target.value.toUpperCase())} placeholder="ENG" maxLength={10} />
+            </div>
+            <div>
+              <label className="label">Cost Centre</label>
+              <input className="input" value={form.cost_center} onChange={e => set('cost_center', e.target.value)} placeholder="CC-1001" />
+            </div>
+          </div>
+          <div>
+            <label className="label">Parent Department</label>
+            <select className="input" value={form.parent_id || ''} onChange={e => set('parent_id', e.target.value)}>
+              <option value="">— None (top-level) —</option>
+              {parentOptions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Description</label>
+            <textarea rows={2} className="input" value={form.description} onChange={e => set('description', e.target.value)} />
+          </div>
+          <div className="flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary px-4 py-2">Cancel</button>
+            <button type="submit" disabled={saving} className="btn-primary px-6 py-2">{saving ? 'Saving…' : isEdit ? 'Save' : 'Add'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function DepartmentsSection() {
+  const [depts, setDepts]     = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal]     = useState(null);
+  const [error, setError]     = useState('');
+  const [success, setSuccess] = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get('/api/org-setup/departments')
+      .then(r => setDepts(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setError('Failed to load departments'))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const handleSave  = () => { setModal(null); setSuccess('Saved'); setTimeout(() => setSuccess(''), 3000); load(); };
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this department? Sub-departments will become top-level.')) return;
+    try { await api.delete(`/api/org-setup/departments/${id}`); load(); }
+    catch (err) { setError(err.response?.data?.error || 'Delete failed'); }
+  };
+
+  // Build tree display: top-level first, then children indented
+  const topLevel   = depts.filter(d => !d.parent_id);
+  const childrenOf = (pid) => depts.filter(d => d.parent_id === pid);
+
+  const renderDept = (d, depth = 0) => (
+    <React.Fragment key={d.id}>
+      <div className={`flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-gray-300 ${depth > 0 ? 'ml-6' : ''}`}>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            {depth > 0 && <span className="text-gray-300 text-sm">↳</span>}
+            <span className="font-medium text-sm text-gray-800">{d.name}</span>
+            {d.code && <span className="text-xs font-mono bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{d.code}</span>}
+            {!d.is_active && <span className="text-xs text-gray-400">inactive</span>}
+          </div>
+          {(d.cost_center || d.description) && (
+            <p className="text-xs text-gray-500 mt-0.5">
+              {d.cost_center && <span className="mr-2">Cost centre: {d.cost_center}</span>}
+              {d.description && <span>{d.description}</span>}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-1 shrink-0">
+          <button onClick={() => setModal(d)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg" title="Edit">✏️</button>
+          <button onClick={() => handleDelete(d.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg" title="Delete">🗑️</button>
+        </div>
+      </div>
+      {childrenOf(d.id).map(c => renderDept(c, depth + 1))}
+    </React.Fragment>
+  );
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      <Banner type="error"   message={error}   onClose={() => setError('')} />
+      <Banner type="success" message={success} />
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-gray-800">Departments</h3>
+            <p className="text-sm text-gray-500 mt-0.5">Organise your workforce into departments. Supports parent/child hierarchy.</p>
+          </div>
+          <button onClick={() => setModal('new')} className="btn-primary px-4 py-2 text-sm">+ Add Department</button>
+        </div>
+        {loading ? <Spinner /> : depts.length === 0 ? (
+          <div className="text-center py-10 text-gray-400"><div className="text-3xl mb-2">🗂️</div><p className="text-sm">No departments yet.</p></div>
+        ) : (
+          <div className="space-y-2">{topLevel.map(d => renderDept(d))}</div>
+        )}
+      </div>
+      {modal && <DeptModal dept={modal === 'new' ? null : modal} allDepts={depts} onSave={handleSave} onClose={() => setModal(null)} />}
+    </div>
+  );
+}
+
+// ── Section: Workweek & Time ───────────────────────────────────────────────
+function WorkweekSection() {
+  const { profile, loading, saving, save, error, setError, success } = useOrgProfile();
+  const [form, setForm] = useState(null);
+
+  useEffect(() => {
+    if (profile) setForm({
+      week_start_day:          profile.week_start_day          || 'monday',
+      standard_hours_per_day:  profile.standard_hours_per_day  ?? 8,
+      standard_hours_per_week: profile.standard_hours_per_week ?? 40,
+      default_timezone:        profile.default_timezone        || 'UTC',
+      date_format:             profile.date_format             || 'YYYY-MM-DD',
+    });
+  }, [profile]);
+
+  const set = (k,v) => setForm(f => ({ ...f, [k]: v }));
+  if (loading || !form) return <Spinner />;
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); save(form); }} className="space-y-5 max-w-2xl">
+      <Banner type="error"   message={error}   onClose={() => setError('')} />
+      <Banner type="success" message={success} />
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-semibold text-gray-800">Work Schedule</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Week Starts On</label>
+            <select className="input" value={form.week_start_day} onChange={e => set('week_start_day', e.target.value)}>
+              <option value="monday">Monday</option>
+              <option value="sunday">Sunday</option>
+              <option value="saturday">Saturday</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Default Timezone</label>
+            <select className="input" value={form.default_timezone} onChange={e => set('default_timezone', e.target.value)}>
+              {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Standard Hours / Day</label>
+            <input type="number" min="1" max="24" step="0.5" className="input" value={form.standard_hours_per_day} onChange={e => set('standard_hours_per_day', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Standard Hours / Week</label>
+            <input type="number" min="1" max="168" step="0.5" className="input" value={form.standard_hours_per_week} onChange={e => set('standard_hours_per_week', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Date Format</label>
+            <select className="input" value={form.date_format} onChange={e => set('date_format', e.target.value)}>
+              <option value="YYYY-MM-DD">YYYY-MM-DD (ISO)</option>
+              <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+              <option value="DD-MM-YYYY">DD-MM-YYYY</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+          Preview: <strong>{new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' }).replace(/\//g, form.date_format.includes('/') ? '/' : '-')}</strong>
+          &nbsp;· Timezone: <strong>{form.default_timezone}</strong>
+          &nbsp;· Week starts: <strong className="capitalize">{form.week_start_day}</strong>
+        </div>
+      </div>
+      <div className="flex justify-end"><button type="submit" disabled={saving} className="btn-primary px-6 py-2">{saving ? 'Saving…' : 'Save'}</button></div>
+    </form>
+  );
+}
+
+// ── Section: Invoicing ────────────────────────────────────────────────────
+function InvoicingSection() {
+  const { profile, loading, saving, save, error, setError, success } = useOrgProfile();
+  const [form, setForm] = useState(null);
+
+  useEffect(() => {
+    if (profile) setForm({
+      default_currency:    profile.default_currency    || 'USD',
+      currency_symbol:     profile.currency_symbol     || '$',
+      currency_position:   profile.currency_position   || 'before',
+      invoice_prefix:      profile.invoice_prefix      || 'INV',
+      invoice_separator:   profile.invoice_separator   || '-',
+      invoice_next_number: profile.invoice_next_number ?? 1001,
+      invoice_padding:     profile.invoice_padding     ?? 4,
+    });
+  }, [profile]);
+
+  const set = (k,v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Auto-fill symbol when currency changes
+  const onCurrencyChange = (code) => {
+    const cur = CURRENCIES.find(c => c.code === code);
+    setForm(f => ({ ...f, default_currency: code, currency_symbol: cur?.symbol || f.currency_symbol }));
+  };
+
+  if (loading || !form) return <Spinner />;
+
+  // Live invoice number preview
+  const padded  = String(form.invoice_next_number || 1001).padStart(parseInt(form.invoice_padding) || 4, '0');
+  const preview = `${form.invoice_prefix || 'INV'}${form.invoice_separator || '-'}${padded}`;
+  const exampleAmt = form.currency_position === 'before'
+    ? `${form.currency_symbol}1,250.00`
+    : `1,250.00${form.currency_symbol}`;
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); save(form); }} className="space-y-5 max-w-2xl">
+      <Banner type="error"   message={error}   onClose={() => setError('')} />
+      <Banner type="success" message={success} />
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-semibold text-gray-800">Currency</h3>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="label">Default Currency</label>
+            <select className="input" value={form.default_currency} onChange={e => onCurrencyChange(e.target.value)}>
+              {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Symbol</label>
+            <input className="input" value={form.currency_symbol} onChange={e => set('currency_symbol', e.target.value)} maxLength={5} />
+          </div>
+          <div>
+            <label className="label">Position</label>
+            <select className="input" value={form.currency_position} onChange={e => set('currency_position', e.target.value)}>
+              <option value="before">Before amount ({form.currency_symbol}100)</option>
+              <option value="after">After amount (100{form.currency_symbol})</option>
+            </select>
+          </div>
+        </div>
+        <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
+          Example: <strong>{exampleAmt}</strong>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-semibold text-gray-800">Invoice Numbering</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Prefix</label>
+            <input className="input font-mono" value={form.invoice_prefix} onChange={e => set('invoice_prefix', e.target.value.toUpperCase())} placeholder="INV" maxLength={10} />
+          </div>
+          <div>
+            <label className="label">Separator</label>
+            <input className="input font-mono" value={form.invoice_separator} onChange={e => set('invoice_separator', e.target.value)} placeholder="-" maxLength={3} />
+          </div>
+          <div>
+            <label className="label">Next Number</label>
+            <input type="number" min="1" className="input" value={form.invoice_next_number} onChange={e => set('invoice_next_number', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Zero Padding (digits)</label>
+            <select className="input" value={form.invoice_padding} onChange={e => set('invoice_padding', e.target.value)}>
+              {[3,4,5,6].map(n => <option key={n} value={n}>{n} digits</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
+          Next invoice: <strong className="font-mono text-emerald-700">{preview}</strong>
+        </div>
+      </div>
+      <div className="flex justify-end"><button type="submit" disabled={saving} className="btn-primary px-6 py-2">{saving ? 'Saving…' : 'Save'}</button></div>
+    </form>
+  );
+}
+
+// ── Section: Pay & Retention ──────────────────────────────────────────────
+function PayRetentionSection() {
+  const { profile, loading, saving, save, error, setError, success } = useOrgProfile();
+  const [form, setForm] = useState(null);
+
+  useEffect(() => {
+    if (profile) setForm({
+      default_pay_period:     profile.default_pay_period     || 'weekly',
+      pay_period_anchor_date: profile.pay_period_anchor_date ? profile.pay_period_anchor_date.split('T')[0] : '',
+      doc_retention_years:    profile.doc_retention_years    ?? 7,
+      doc_retention_policy:   profile.doc_retention_policy   || '',
+    });
+  }, [profile]);
+
+  const set = (k,v) => setForm(f => ({ ...f, [k]: v }));
+  if (loading || !form) return <Spinner />;
+
+  const PAY_LABELS = { weekly:'Weekly (every 7 days)', fortnightly:'Fortnightly (every 2 weeks)', semi_monthly:'Semi-monthly (1st & 15th)', monthly:'Monthly' };
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); save(form); }} className="space-y-5 max-w-2xl">
+      <Banner type="error"   message={error}   onClose={() => setError('')} />
+      <Banner type="success" message={success} />
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-semibold text-gray-800">Default Pay Period</h3>
+        <p className="text-sm text-gray-500">Sets the default schedule for new employees. Individual records can override this.</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Pay Frequency</label>
+            <select className="input" value={form.default_pay_period} onChange={e => set('default_pay_period', e.target.value)}>
+              {Object.entries(PAY_LABELS).map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">First Pay Period Start Date</label>
+            <input type="date" className="input" value={form.pay_period_anchor_date} onChange={e => set('pay_period_anchor_date', e.target.value)} />
+            <p className="text-xs text-gray-400 mt-1">Used to calculate all subsequent pay period boundaries.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-semibold text-gray-800">Document Retention</h3>
+        <p className="text-sm text-gray-500">How long employee records, timesheets, contracts and invoices must be kept.</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Retention Period (years)</label>
+            <select className="input" value={form.doc_retention_years} onChange={e => set('doc_retention_years', e.target.value)}>
+              {[1,2,3,5,7,10,15,20].map(y => <option key={y} value={y}>{y} year{y > 1 ? 's' : ''}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="label">Retention Policy Notes</label>
+          <textarea rows={4} className="input" value={form.doc_retention_policy} onChange={e => set('doc_retention_policy', e.target.value)}
+            placeholder="Describe your document retention policy, regulatory requirements, deletion procedures, etc." />
+        </div>
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          Records older than <strong>{form.doc_retention_years} years</strong> may be scheduled for deletion in accordance with your policy.
+          Always verify local regulatory requirements (e.g. GDPR, HMRC, ATO, IRS) before reducing this value.
+        </div>
+      </div>
+      <div className="flex justify-end"><button type="submit" disabled={saving} className="btn-primary px-6 py-2">{saving ? 'Saving…' : 'Save'}</button></div>
+    </form>
+  );
+}
+
+// ── Spinner helper ─────────────────────────────────────────────────────────
+function Spinner() {
+  return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"/></div>;
+}
+
+// ── Main OrgSetupTab — sidebar + section switcher ─────────────────────────
+function OrgSetupTab() {
+  const [section, setSection] = useState('profile');
+
+  const SECTION_COMPONENTS = {
+    profile:     CompanyProfileSection,
+    legal:       LegalTaxSection,
+    locations:   LocationsSection,
+    departments: DepartmentsSection,
+    workweek:    WorkweekSection,
+    invoicing:   InvoicingSection,
+    payretention:PayRetentionSection,
+  };
+
+  const ActiveSection = SECTION_COMPONENTS[section] || CompanyProfileSection;
+
+  return (
+    <div className="flex gap-6">
+      {/* Sidebar nav */}
+      <aside className="w-52 shrink-0">
+        <nav className="space-y-1">
+          {ORG_SECTIONS.map(s => (
+            <button
+              key={s.key}
+              onClick={() => setSection(s.key)}
+              className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                section === s.key
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+              }`}
+            >
+              <span className="text-base">{s.icon}</span>
+              {s.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      {/* Section content */}
+      <div className="flex-1 min-w-0">
+        <div className="mb-5">
+          <h2 className="text-base font-semibold text-gray-800">
+            {ORG_SECTIONS.find(s => s.key === section)?.label}
+          </h2>
+        </div>
+        <ActiveSection />
+      </div>
+    </div>
+  );
+}
+
 // ── Tab: Custom Fields ────────────────────────────────────────────────────────
 
 const FIELD_TYPES = [

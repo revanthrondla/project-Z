@@ -38,6 +38,7 @@ const demoRequestRoutes      = require('./routes/demoRequests');
 const recruiterRoutes        = require('./routes/recruiters');
 const c2cJobRoutes           = require('./routes/c2cJobs');
 const customFieldRoutes      = require('./routes/customFields');
+const orgSetupRoutes         = require('./routes/orgSetup');
 
 const app      = express();
 const PORT     = process.env.PORT || 3001;
@@ -179,6 +180,7 @@ app.use('/api/employees',         employeeProfileRoutes);
 app.use('/api/recruiters',        recruiterRoutes);
 app.use('/api/c2c-jobs',          c2cJobRoutes);
 app.use('/api/custom-fields',    customFieldRoutes);
+app.use('/api/org-setup',        orgSetupRoutes);
 
 // ── Admin dashboard stats ─────────────────────────────────────────────────────
 const { authenticate, requireAdmin, injectTenantDb } = require('./middleware/auth');

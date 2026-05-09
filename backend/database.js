@@ -948,6 +948,102 @@ async function createTenantSchema(slug) {
 
     await client.query(`CREATE INDEX IF NOT EXISTS idx_ecfv_candidate ON employee_custom_field_values(candidate_id)`);
 
+    // ── 8. Organisation setup ─────────────────────────────────────────────────
+
+    // 8a. Singleton org profile (one row per tenant — upsert pattern)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS org_profile (
+        id                        BIGSERIAL PRIMARY KEY,
+        -- Company profile
+        legal_name                TEXT,
+        trading_name              TEXT,
+        description               TEXT,
+        industry                  TEXT,
+        website                   TEXT,
+        -- Tax & legal
+        tax_id_label              TEXT NOT NULL DEFAULT 'Tax ID',
+        tax_id                    TEXT,
+        vat_number                TEXT,
+        registration_number       TEXT,
+        -- Address (primary / registered office)
+        address_line1             TEXT,
+        address_line2             TEXT,
+        city                      TEXT,
+        state                     TEXT,
+        postcode                  TEXT,
+        country                   TEXT NOT NULL DEFAULT 'US',
+        -- Workweek
+        week_start_day            TEXT NOT NULL DEFAULT 'monday'
+                                  CHECK(week_start_day IN ('monday','sunday','saturday')),
+        standard_hours_per_day    NUMERIC(4,2) NOT NULL DEFAULT 8,
+        standard_hours_per_week   NUMERIC(5,2) NOT NULL DEFAULT 40,
+        -- Time zone & locale
+        default_timezone          TEXT NOT NULL DEFAULT 'UTC',
+        date_format               TEXT NOT NULL DEFAULT 'YYYY-MM-DD',
+        -- Currency
+        default_currency          TEXT NOT NULL DEFAULT 'USD',
+        currency_symbol           TEXT NOT NULL DEFAULT '$',
+        currency_position         TEXT NOT NULL DEFAULT 'before'
+                                  CHECK(currency_position IN ('before','after')),
+        -- Invoice numbering
+        invoice_prefix            TEXT NOT NULL DEFAULT 'INV',
+        invoice_separator         TEXT NOT NULL DEFAULT '-',
+        invoice_next_number       INTEGER NOT NULL DEFAULT 1001,
+        invoice_padding           INTEGER NOT NULL DEFAULT 4,
+        -- Pay periods
+        default_pay_period        TEXT NOT NULL DEFAULT 'weekly'
+                                  CHECK(default_pay_period IN ('weekly','fortnightly','semi_monthly','monthly')),
+        pay_period_anchor_date    DATE,
+        -- Document retention
+        doc_retention_years       INTEGER NOT NULL DEFAULT 7,
+        doc_retention_policy      TEXT,
+        updated_at                TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // 8b. Locations (many per tenant)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS org_locations (
+        id            BIGSERIAL PRIMARY KEY,
+        name          TEXT NOT NULL,
+        address_line1 TEXT,
+        address_line2 TEXT,
+        city          TEXT,
+        state         TEXT,
+        postcode      TEXT,
+        country       TEXT NOT NULL DEFAULT 'US',
+        timezone      TEXT NOT NULL DEFAULT 'UTC',
+        phone         TEXT,
+        is_primary    BOOLEAN NOT NULL DEFAULT FALSE,
+        is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_org_locations_active ON org_locations(is_active)`);
+
+    // 8c. Departments (many per tenant)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS org_departments (
+        id            BIGSERIAL PRIMARY KEY,
+        name          TEXT NOT NULL,
+        code          TEXT,
+        cost_center   TEXT,
+        description   TEXT,
+        parent_id     BIGINT REFERENCES org_departments(id) ON DELETE SET NULL,
+        is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_org_departments_active ON org_departments(is_active)`);
+
+    // Add department_id to candidates if not exists (migration-safe)
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS department_id BIGINT REFERENCES org_departments(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS location_id   BIGINT REFERENCES org_locations(id)   ON DELETE SET NULL`);
+
     console.log(`✅ Schema ready: ${schema}`);
   } finally {
     client.release();
