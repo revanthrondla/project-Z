@@ -153,6 +153,8 @@ const EmailPayments         = lazy(() => import('./pages/admin/EmailPayments'));
 const AdminSupportDashboard = lazy(() => import('./pages/admin/SupportDashboard'));
 const AIChatDocuments       = lazy(() => import('./pages/admin/AIChatDocuments'));
 const EmployeeProfile       = lazy(() => import('./pages/admin/EmployeeProfile'));
+const AdminProjects         = lazy(() => import('./pages/admin/Projects'));
+const AdminExpenses         = lazy(() => import('./pages/admin/Expenses'));
 
 // Field Ops pages
 const FieldScan       = lazy(() => import('./pages/agrow/FieldScan'));
@@ -378,8 +380,10 @@ function AppRoutes() {
         } />
 
         {/* Admin: Reports + Import + Settings */}
-        <Route path="reports"  element={<ModuleRoute moduleKey="hr_reports" adminOnly><Lazy><AdminReports /></Lazy></ModuleRoute>} />
-        <Route path="import"   element={<ModuleRoute moduleKey="hr_import"  adminOnly><Lazy><AdminImport /></Lazy></ModuleRoute>} />
+        <Route path="reports"   element={<ModuleRoute moduleKey="hr_reports" adminOnly><Lazy><AdminReports /></Lazy></ModuleRoute>} />
+        <Route path="projects"  element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminProjects /></Lazy></ModuleRoute>} />
+        <Route path="expenses"  element={<PrivateRoute><Lazy><AdminExpenses /></Lazy></PrivateRoute>} />
+        <Route path="import"    element={<ModuleRoute moduleKey="hr_import"  adminOnly><Lazy><AdminImport /></Lazy></ModuleRoute>} />
         <Route path="settings" element={<PrivateRoute adminOnly><Lazy><AdminSettings /></Lazy></PrivateRoute>} />
 
         {/* Admin: Resume Builder + Payroll + Email Payments */}

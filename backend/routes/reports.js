@@ -347,4 +347,86 @@ router.get('/summary', async (req, res) => {
   }
 });
 
+// GET /api/reports/utilization — Project utilization & per-person utilization
+router.get('/utilization', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
+  try {
+    const { start_date, end_date, client_id } = req.query;
+
+    // ── Project-level query ──────────────────────────────────────────────────
+    const projParams = [];
+    const projWhere  = [`p.status != 'cancelled'`];
+    let   teJoinCond = '';
+
+    if (client_id)  { projParams.push(parseInt(client_id, 10)); projWhere.push(`p.client_id = $${projParams.length}`); }
+    if (start_date) { projParams.push(start_date); teJoinCond += ` AND te.date >= $${projParams.length}`; }
+    if (end_date)   { projParams.push(end_date);   teJoinCond += ` AND te.date <= $${projParams.length}`; }
+
+    const projectResult = await req.db.query(`
+      SELECT
+        p.id, p.name AS project_name, p.billing_model, p.budget_hours, p.budget_amount,
+        c.name AS client_name,
+        COALESCE(SUM(te.hours), 0)                                                                   AS total_hours,
+        COALESCE(SUM(te.hours) FILTER (WHERE te.status = 'approved'), 0)                             AS approved_hours,
+        COALESCE(SUM(te.hours) FILTER (WHERE te.is_billable = TRUE AND te.status = 'approved'), 0)   AS billable_hours,
+        COALESCE((
+          SELECT SUM(inv.total_amount)
+          FROM invoices inv
+          WHERE inv.project_id = p.id AND inv.status NOT IN ('cancelled','draft')
+        ), 0) AS invoiced_total,
+        CASE WHEN COALESCE(SUM(te.hours), 0) > 0
+          THEN ROUND(COALESCE(SUM(te.hours) FILTER (WHERE te.is_billable = TRUE AND te.status = 'approved'), 0)
+                     / COALESCE(SUM(te.hours), 1) * 100)
+          ELSE 0 END AS utilization_pct
+      FROM projects p
+      LEFT JOIN clients c       ON c.id  = p.client_id
+      LEFT JOIN time_entries te ON te.project_id = p.id ${teJoinCond}
+      WHERE ${projWhere.join(' AND ')}
+      GROUP BY p.id, p.name, p.billing_model, p.budget_hours, p.budget_amount, c.name
+      HAVING COALESCE(SUM(te.hours), 0) > 0
+      ORDER BY billable_hours DESC
+    `, projParams);
+
+    // ── Per-person query ─────────────────────────────────────────────────────
+    const personParams = [];
+    const personWhere  = [];
+
+    if (client_id)  { personParams.push(parseInt(client_id, 10)); personWhere.push(`ca.client_id = $${personParams.length}`); }
+    if (start_date) { personParams.push(start_date); personWhere.push(`te.date >= $${personParams.length}`); }
+    if (end_date)   { personParams.push(end_date);   personWhere.push(`te.date <= $${personParams.length}`); }
+
+    const personResult = await req.db.query(`
+      SELECT
+        ca.id, ca.name, ca.role, ca.target_utilization,
+        COALESCE(SUM(te.hours), 0)                                                                   AS total_hours,
+        COALESCE(SUM(te.hours) FILTER (WHERE te.is_billable = TRUE AND te.status = 'approved'), 0)   AS billable_hours,
+        COALESCE(SUM(te.hours) FILTER (WHERE te.status = 'approved'), 0)                             AS approved_hours,
+        CASE WHEN COALESCE(SUM(te.hours), 0) > 0
+          THEN ROUND(COALESCE(SUM(te.hours) FILTER (WHERE te.is_billable = TRUE AND te.status = 'approved'), 0)
+                     / COALESCE(SUM(te.hours), 1) * 100)
+          ELSE 0 END AS utilization_pct
+      FROM candidates ca
+      INNER JOIN time_entries te ON te.candidate_id = ca.id
+      ${personWhere.length ? 'WHERE ' + personWhere.join(' AND ') : ''}
+      GROUP BY ca.id, ca.name, ca.role, ca.target_utilization
+      ORDER BY utilization_pct DESC
+    `, personParams);
+
+    res.json({
+      totals: {
+        avg_utilization_pct: personResult.rows.length
+          ? Math.round(personResult.rows.reduce((s, r) => s + Number(r.utilization_pct), 0) / personResult.rows.length)
+          : 0,
+        total_billable_hrs: projectResult.rows.reduce((s, r) => s + Number(r.billable_hours), 0),
+        unbilled_hrs: 0,
+        realization_pct: 0,
+      },
+      projects: projectResult.rows,
+      people:   personResult.rows,
+    });
+  } catch (err) {
+    console.error('GET /reports/utilization', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

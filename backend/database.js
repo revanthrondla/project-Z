@@ -1044,6 +1044,154 @@ async function createTenantSchema(slug) {
     await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS department_id BIGINT REFERENCES org_departments(id) ON DELETE SET NULL`);
     await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS location_id   BIGINT REFERENCES org_locations(id)   ON DELETE SET NULL`);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CONSULTING / PROFESSIONAL SERVICES SCHEMA
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // 9a. Projects — linked to clients, with billing model and budget
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id                   BIGSERIAL PRIMARY KEY,
+        client_id            BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        name                 TEXT NOT NULL,
+        code                 TEXT,
+        description          TEXT,
+        billing_model        TEXT DEFAULT 'hourly'
+                             CHECK(billing_model IN ('hourly','retainer','fixed_fee','milestone')),
+        budget_hours         NUMERIC(10,2),
+        budget_amount        NUMERIC(14,2),
+        retainer_amount      NUMERIC(14,2),
+        retainer_period      TEXT DEFAULT 'monthly' CHECK(retainer_period IN ('weekly','monthly','quarterly')),
+        po_number            TEXT,
+        contract_start       DATE,
+        contract_end         DATE,
+        project_manager_id   BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        status               TEXT DEFAULT 'active'
+                             CHECK(status IN ('active','on_hold','completed','cancelled')),
+        tags                 TEXT,
+        notes                TEXT,
+        created_at           TIMESTAMPTZ DEFAULT NOW(),
+        updated_at           TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // 9b. Project tasks (optional breakdown within a project)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS project_tasks (
+        id              BIGSERIAL PRIMARY KEY,
+        project_id      BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name            TEXT NOT NULL,
+        description     TEXT,
+        estimated_hours NUMERIC(8,2),
+        is_billable     BOOLEAN DEFAULT TRUE,
+        status          TEXT DEFAULT 'active'
+                        CHECK(status IN ('active','completed','cancelled')),
+        sort_order      INTEGER DEFAULT 0,
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // 9c. Rate cards — hierarchical: person > project > role > client_default
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS rate_cards (
+        id                 BIGSERIAL PRIMARY KEY,
+        name               TEXT NOT NULL,
+        rate_type          TEXT NOT NULL
+                           CHECK(rate_type IN ('person','role','project','client_default')),
+        candidate_id       BIGINT REFERENCES candidates(id) ON DELETE CASCADE,
+        client_id          BIGINT REFERENCES clients(id) ON DELETE CASCADE,
+        project_id         BIGINT REFERENCES projects(id) ON DELETE CASCADE,
+        role_name          TEXT,
+        bill_rate          NUMERIC(12,2) NOT NULL,
+        cost_rate          NUMERIC(12,2),
+        overtime_bill_rate NUMERIC(12,2),
+        currency           TEXT DEFAULT 'USD',
+        effective_from     DATE DEFAULT CURRENT_DATE,
+        effective_to       DATE,
+        notes              TEXT,
+        created_at         TIMESTAMPTZ DEFAULT NOW(),
+        updated_at         TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // 9d. Expenses — reimbursable/billable, receipt, approval, invoice pass-through
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id              BIGSERIAL PRIMARY KEY,
+        candidate_id    BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+        client_id       BIGINT REFERENCES clients(id) ON DELETE SET NULL,
+        project_id      BIGINT REFERENCES projects(id) ON DELETE SET NULL,
+        task_id         BIGINT REFERENCES project_tasks(id) ON DELETE SET NULL,
+        expense_date    DATE NOT NULL,
+        category        TEXT NOT NULL
+                        CHECK(category IN ('travel','mileage','per_diem','software',
+                                           'hardware','meals','accommodation','other')),
+        description     TEXT NOT NULL,
+        amount          NUMERIC(12,2),
+        mileage_miles   NUMERIC(8,2),
+        mileage_rate    NUMERIC(6,4) DEFAULT 0.670,
+        currency        TEXT DEFAULT 'USD',
+        is_billable     BOOLEAN DEFAULT TRUE,
+        is_reimbursable BOOLEAN DEFAULT TRUE,
+        receipt_url     TEXT,
+        status          TEXT DEFAULT 'pending'
+                        CHECK(status IN ('pending','approved','rejected','invoiced')),
+        approved_by     BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        approved_at     TIMESTAMPTZ,
+        rejected_reason TEXT,
+        invoice_id      BIGINT REFERENCES invoices(id) ON DELETE SET NULL,
+        notes           TEXT,
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Indexes for consulting tables
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_projects_client      ON projects(client_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_projects_status      ON projects(status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_project_tasks_proj   ON project_tasks(project_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_rate_cards_candidate ON rate_cards(candidate_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_rate_cards_project   ON rate_cards(project_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_expenses_candidate   ON expenses(candidate_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_expenses_project     ON expenses(project_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_expenses_status      ON expenses(status)`);
+
+    // Migration-safe ALTERs on existing tables for consulting fields
+
+    // time_entries: project FK, task FK, billable flag, billing notes, timer, rejection reason
+    await client.query(`ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS project_id     BIGINT REFERENCES projects(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS task_id        BIGINT REFERENCES project_tasks(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS is_billable    BOOLEAN DEFAULT TRUE`);
+    await client.query(`ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS billing_notes  TEXT`);
+    await client.query(`ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS timer_start    TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS rejected_reason TEXT`);
+
+    // clients: extended profile fields
+    await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS po_number      TEXT`);
+    await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS billing_address TEXT`);
+    await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS tax_id         TEXT`);
+    await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS currency       TEXT DEFAULT 'USD'`);
+    await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS payment_terms  INTEGER DEFAULT 30`);
+    await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS website        TEXT`);
+    await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS notes          TEXT`);
+
+    // invoices: project link, expense total, billing model, timestamps
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS project_id        BIGINT REFERENCES projects(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS expense_total     NUMERIC(14,2) DEFAULT 0`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS billing_model     TEXT DEFAULT 'hourly'`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS sent_at           TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS client_approved_at TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_terms     INTEGER DEFAULT 30`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax_rate          NUMERIC(5,4) DEFAULT 0`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS discount_amount   NUMERIC(12,2) DEFAULT 0`);
+
+    // candidates: contractor management fields + utilization target
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS w9_collected          BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS classification_status TEXT DEFAULT 'employee' CHECK(classification_status IN ('employee','contractor','pending_review'))`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS classification_notes  TEXT`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS sow_url               TEXT`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS target_utilization    NUMERIC(5,2) DEFAULT 80`);
+
     console.log(`✅ Schema ready: ${schema}`);
   } finally {
     client.release();

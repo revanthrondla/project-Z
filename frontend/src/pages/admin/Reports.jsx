@@ -39,7 +39,7 @@ function StatusBar({ approved, pending, rejected, total }) {
   );
 }
 
-const TABS = ['Hours', 'Absences', 'Revenue'];
+const TABS = ['Hours', 'Absences', 'Revenue', 'Utilization'];
 
 export default function Reports() {
   const today     = new Date().toISOString().slice(0, 10);
@@ -58,6 +58,7 @@ export default function Reports() {
   const [hoursData,   setHoursData]   = useState(null);
   const [absData,     setAbsData]     = useState(null);
   const [revData,     setRevData]     = useState(null);
+  const [utilData,    setUtilData]    = useState(null);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState('');
 
@@ -86,14 +87,16 @@ export default function Reports() {
 
     setLoading(true); setError('');
     Promise.all([
-      api.get('/api/reports/hours',    { params: p }),
-      api.get('/api/reports/absences', { params: p }),
-      api.get('/api/reports/revenue',  { params: p }),
+      api.get('/api/reports/hours',       { params: p }),
+      api.get('/api/reports/absences',    { params: p }),
+      api.get('/api/reports/revenue',     { params: p }),
+      api.get('/api/reports/utilization', { params: p }),
     ])
-      .then(([h, a, r]) => {
+      .then(([h, a, r, u]) => {
         setHoursData(h.data);
         setAbsData(a.data);
         setRevData(r.data);
+        setUtilData(u.data);
       })
       .catch(() => setError('Failed to load report data. Is the server running?'))
       .finally(() => setLoading(false));
@@ -227,9 +230,10 @@ export default function Reports() {
             className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
               tab === t ? 'bg-white border border-b-white border-gray-100 text-emerald-600 -mb-px' : 'text-gray-500 hover:text-gray-700'
             }`}>
-            {t === 'Hours'    && '⏱️ '}
-            {t === 'Absences' && '🏖️ '}
-            {t === 'Revenue'  && '💰 '}
+            {t === 'Hours'       && '⏱️ '}
+            {t === 'Absences'    && '🏖️ '}
+            {t === 'Revenue'     && '💰 '}
+            {t === 'Utilization' && '📊 '}
             {t}
           </button>
         ))}
@@ -521,6 +525,134 @@ export default function Reports() {
             <div className="card text-center py-12 text-gray-400">
               <div className="text-4xl mb-2">📄</div>
               <p>No invoices in this period</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          TAB: UTILIZATION & PROFITABILITY
+      ══════════════════════════════════════════════ */}
+      {!loading && tab === 'Utilization' && utilData && (
+        <div className="space-y-6">
+
+          {/* Org-wide KPIs */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard icon="📊" label="Avg Utilization"     value={`${utilData.totals?.avg_utilization_pct ?? 0}%`}  sub="billable / total hrs"          color="blue"   />
+            <KpiCard icon="⏱️" label="Total Billable Hrs"  value={`${fmt(utilData.totals?.total_billable_hrs)}h`}   sub="approved, billable"            color="green"  />
+            <KpiCard icon="💸" label="Unbilled Approved"   value={`${fmt(utilData.totals?.unbilled_hrs)}h`}         sub="approved, not yet invoiced"    color="yellow" />
+            <KpiCard icon="🏆" label="Realization Rate"    value={`${utilData.totals?.realization_pct ?? 0}%`}      sub="invoiced ÷ billable value"     color="purple" />
+          </div>
+
+          {/* Per-project breakdown */}
+          {utilData.projects?.length > 0 && (
+            <div className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 font-semibold text-gray-700 text-sm">📁 Project Profitability</div>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium">Project</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium hidden md:table-cell">Client</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium hidden lg:table-cell">Billing</th>
+                    <th className="text-right px-4 py-3 text-gray-500 font-medium">Approx Hrs</th>
+                    <th className="text-right px-4 py-3 text-gray-500 font-medium">Billable Hrs</th>
+                    <th className="text-right px-4 py-3 text-gray-500 font-medium hidden md:table-cell">Util %</th>
+                    <th className="text-right px-4 py-3 text-gray-500 font-medium">Invoiced</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium">Budget</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {utilData.projects.map((p, i) => {
+                    const budgetPct = p.budget_hours ? Math.min(100, Math.round((p.approved_hours / p.budget_hours) * 100)) : null;
+                    const overBudget = budgetPct !== null && budgetPct >= 90;
+                    return (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">{p.project_name}</td>
+                        <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{p.client_name}</td>
+                        <td className="px-4 py-3 hidden lg:table-cell">
+                          <span className="text-xs bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">{p.billing_model}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right">{fmt(p.approved_hours)}h</td>
+                        <td className="px-4 py-3 text-right text-green-700 font-medium">{fmt(p.billable_hours)}h</td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell">
+                          <span className={`font-semibold ${p.utilization_pct >= 80 ? 'text-green-600' : p.utilization_pct >= 60 ? 'text-yellow-600' : 'text-red-500'}`}>
+                            {p.utilization_pct}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold">{money(p.invoiced_total)}</td>
+                        <td className="px-4 py-3">
+                          {budgetPct !== null ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${overBudget ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${budgetPct}%` }} />
+                              </div>
+                              <span className={`text-xs ${overBudget ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>{budgetPct}%</span>
+                            </div>
+                          ) : <span className="text-gray-300 text-xs">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Per-person utilization */}
+          {utilData.people?.length > 0 && (
+            <div className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 font-semibold text-gray-700 text-sm">👥 Team Utilization</div>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium">Name</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium hidden md:table-cell">Role</th>
+                    <th className="text-right px-4 py-3 text-gray-500 font-medium">Total Hrs</th>
+                    <th className="text-right px-4 py-3 text-gray-500 font-medium">Billable Hrs</th>
+                    <th className="text-right px-4 py-3 text-gray-500 font-medium">Utilization</th>
+                    <th className="text-right px-4 py-3 text-gray-500 font-medium hidden lg:table-cell">Target</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium">vs Target</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {utilData.people.map((p, i) => {
+                    const utilPct  = Number(p.utilization_pct) || 0;
+                    const target   = Number(p.target_utilization) || 80;
+                    const delta    = utilPct - target;
+                    const barColor = utilPct >= target ? 'bg-green-500' : utilPct >= target * 0.75 ? 'bg-yellow-400' : 'bg-red-400';
+                    return (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell">{p.role || '—'}</td>
+                        <td className="px-4 py-3 text-right">{fmt(p.total_hours)}h</td>
+                        <td className="px-4 py-3 text-right text-green-700">{fmt(p.billable_hours)}h</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(100, utilPct)}%` }} />
+                            </div>
+                            <span className="font-semibold w-10 text-right">{utilPct}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-400 hidden lg:table-cell">{target}%</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-semibold ${delta >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {delta >= 0 ? `+${delta.toFixed(0)}` : delta.toFixed(0)}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {(!utilData.projects?.length && !utilData.people?.length) && (
+            <div className="card text-center py-12 text-gray-400">
+              <div className="text-4xl mb-2">📊</div>
+              <p>No project time data in this period</p>
+              <p className="text-sm mt-1">Log time against projects to see utilization metrics</p>
             </div>
           )}
         </div>

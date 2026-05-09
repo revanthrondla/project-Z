@@ -39,6 +39,9 @@ const recruiterRoutes        = require('./routes/recruiters');
 const c2cJobRoutes           = require('./routes/c2cJobs');
 const customFieldRoutes      = require('./routes/customFields');
 const orgSetupRoutes         = require('./routes/orgSetup');
+const projectRoutes          = require('./routes/projects');
+const rateCardRoutes         = require('./routes/ratecards');
+const expenseRoutes          = require('./routes/expenses');
 
 const app      = express();
 const PORT     = process.env.PORT || 3001;
@@ -181,6 +184,9 @@ app.use('/api/recruiters',        recruiterRoutes);
 app.use('/api/c2c-jobs',          c2cJobRoutes);
 app.use('/api/custom-fields',    customFieldRoutes);
 app.use('/api/org-setup',        orgSetupRoutes);
+app.use('/api/projects',         projectRoutes);
+app.use('/api/rate-cards',       rateCardRoutes);
+app.use('/api/expenses',         expenseRoutes);
 
 // ── Admin dashboard stats ─────────────────────────────────────────────────────
 const { authenticate, requireAdmin, injectTenantDb } = require('./middleware/auth');

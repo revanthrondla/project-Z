@@ -6,11 +6,16 @@ const router = express.Router();
 
 // GET /api/time-entries
 router.get('/', authenticate, injectTenantDb, async (req, res) => {
-  const { candidate_id, start_date, end_date, status, month } = req.query;
+  const { candidate_id, start_date, end_date, status, month, project_id } = req.query;
   let query = `
-    SELECT te.*, c.name as candidate_name, c.hourly_rate
+    SELECT te.*,
+           c.name as candidate_name, c.hourly_rate,
+           p.name as project_name,
+           pt.name as task_name
     FROM time_entries te
     JOIN candidates c ON te.candidate_id = c.id
+    LEFT JOIN projects p ON p.id = te.project_id
+    LEFT JOIN project_tasks pt ON pt.id = te.task_id
     WHERE 1=1
   `;
   const params = [];
@@ -28,6 +33,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
   if (end_date) { query += ' AND te.date <= $' + (params.length + 1); params.push(end_date); }
   if (status) { query += ' AND te.status = $' + (params.length + 1); params.push(status); }
   if (month) { query += " AND TO_CHAR(te.date, 'YYYY-MM') = $" + (params.length + 1); params.push(month); }
+  if (project_id) { query += ' AND te.project_id = $' + (params.length + 1); params.push(parseInt(project_id, 10)); }
 
   query += ' ORDER BY te.date DESC, te.id DESC';
 
@@ -37,7 +43,10 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
 
 // POST /api/time-entries
 router.post('/', authenticate, injectTenantDb, async (req, res) => {
-  const { candidate_id, date, hours, description, project } = req.body;
+  const {
+    candidate_id, date, hours, description, project,
+    project_id, task_id, is_billable, billing_notes
+  } = req.body;
 
   // Validate
   if (!date || !hours) return res.status(400).json({ error: 'Date and hours are required' });
@@ -54,26 +63,37 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
   }
   if (!cid) return res.status(400).json({ error: 'Candidate ID required' });
 
-  // Check for duplicate date entry (same candidate, same date)
+  // Check for duplicate date+project entry
   const existing = await req.db.query(
-    'SELECT id FROM time_entries WHERE candidate_id = $1 AND date = $2',
-    [cid, date]
+    'SELECT id FROM time_entries WHERE candidate_id = $1 AND date = $2 AND (project_id = $3 OR (project_id IS NULL AND $3 IS NULL))',
+    [cid, date, project_id ? parseInt(project_id, 10) : null]
   );
   if (existing.rows.length > 0) {
-    return res.status(409).json({ error: 'A time entry already exists for this date' });
+    return res.status(409).json({ error: 'A time entry already exists for this date and project' });
   }
 
+  const pid = project_id ? parseInt(project_id, 10) : null;
+  const tid = task_id ? parseInt(task_id, 10) : null;
+
   const insertResult = await req.db.query(`
-    INSERT INTO time_entries (candidate_id, date, hours, description, project, status)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO time_entries (candidate_id, date, hours, description, project,
+                              project_id, task_id, is_billable, billing_notes, status)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING id
-  `, [cid, date, parseFloat(hours), description || null, project || null, 'pending']);
+  `, [
+    cid, date, parsedHours, description || null, project || null,
+    pid, tid, is_billable !== false, billing_notes || null, 'pending'
+  ]);
 
   const entryId = insertResult.rows[0].id;
 
   const entry = await req.db.query(`
-    SELECT te.*, c.name as candidate_name, c.hourly_rate
-    FROM time_entries te JOIN candidates c ON te.candidate_id = c.id
+    SELECT te.*, c.name as candidate_name, c.hourly_rate,
+           p.name as project_name, pt.name as task_name
+    FROM time_entries te
+    JOIN candidates c ON te.candidate_id = c.id
+    LEFT JOIN projects p ON p.id = te.project_id
+    LEFT JOIN project_tasks pt ON pt.id = te.task_id
     WHERE te.id = $1
   `, [entryId]);
 
@@ -97,14 +117,17 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
     }
   }
 
-  const { date, hours, description, project, status } = req.body;
+  const { date, hours, description, project, status,
+          project_id, task_id, is_billable, billing_notes, rejected_reason } = req.body;
 
   if (req.user.role === 'admin' && status) {
     // Admin can approve/reject
     const approvedAt = (status === 'approved' || status === 'rejected') ? new Date().toISOString() : null;
     await req.db.query(`
-      UPDATE time_entries SET status = $1, approved_by = $2, approved_at = $3 WHERE id = $4
-    `, [status, req.user.id, approvedAt, id]);
+      UPDATE time_entries SET status = $1, approved_by = $2, approved_at = $3,
+        rejected_reason = CASE WHEN $1 = 'rejected' THEN $5 ELSE NULL END
+      WHERE id = $4
+    `, [status, req.user.id, approvedAt, id, rejected_reason || null]);
 
     // Notify the candidate
     const candidateResult = await req.db.query(`
@@ -124,21 +147,40 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
       );
     }
   } else {
-    // Candidate edits
+    // Candidate/admin non-status edits
     if (hours && (hours <= 0 || hours > 24)) return res.status(400).json({ error: 'Hours must be between 0 and 24' });
+    const pid = project_id !== undefined ? (project_id ? parseInt(project_id, 10) : null) : undefined;
+    const tid = task_id !== undefined ? (task_id ? parseInt(task_id, 10) : null) : undefined;
     await req.db.query(`
       UPDATE time_entries SET
-        date = COALESCE($1, date),
-        hours = COALESCE($2, hours),
-        description = COALESCE($3, description),
-        project = COALESCE($4, project)
-      WHERE id = $5
-    `, [date || null, hours ? parseFloat(hours) : null, description || null, project || null, id]);
+        date          = COALESCE($1, date),
+        hours         = COALESCE($2, hours),
+        description   = COALESCE($3, description),
+        project       = COALESCE($4, project),
+        project_id    = CASE WHEN $5::text IS NOT NULL THEN $5::bigint ELSE project_id END,
+        task_id       = CASE WHEN $6::text IS NOT NULL THEN $6::bigint ELSE task_id END,
+        is_billable   = COALESCE($7, is_billable),
+        billing_notes = COALESCE($8, billing_notes)
+      WHERE id = $9
+    `, [
+      date || null, hours ? parseFloat(hours) : null,
+      description !== undefined ? description : null,
+      project !== undefined ? project : null,
+      pid !== undefined ? (pid !== null ? String(pid) : null) : null,
+      tid !== undefined ? (tid !== null ? String(tid) : null) : null,
+      is_billable !== undefined ? is_billable : null,
+      billing_notes !== undefined ? billing_notes : null,
+      id
+    ]);
   }
 
   const updatedResult = await req.db.query(`
-    SELECT te.*, c.name as candidate_name, c.hourly_rate
-    FROM time_entries te JOIN candidates c ON te.candidate_id = c.id
+    SELECT te.*, c.name as candidate_name, c.hourly_rate,
+           p.name as project_name, pt.name as task_name
+    FROM time_entries te
+    JOIN candidates c ON te.candidate_id = c.id
+    LEFT JOIN projects p ON p.id = te.project_id
+    LEFT JOIN project_tasks pt ON pt.id = te.task_id
     WHERE te.id = $1
   `, [id]);
   res.json(updatedResult.rows[0]);
