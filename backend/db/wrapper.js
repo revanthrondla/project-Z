@@ -46,9 +46,13 @@ function isInsert(sql) {
  * Create a db wrapper around a pg client (or pool).
  *
  * @param {import('pg').PoolClient | import('pg').Pool} client
- * @param {string} schema  - PostgreSQL schema name to set as search_path
+ * @param {string} schema       - PostgreSQL schema name to set as search_path
+ * @param {boolean} inTx        - internal flag: true when already inside a BEGIN block
  */
-function createWrapper(client, schema) {
+function createWrapper(client, schema, inTx = false) {
+  // Mutable flag — tracks whether this client is already inside a BEGIN/COMMIT block.
+  // Used by transaction() to decide between BEGIN…COMMIT and SAVEPOINT.
+  let _inTransaction = inTx;
   /**
    * Execute a query against the client, setting search_path first if needed.
    * Returns the full pg QueryResult.
@@ -114,8 +118,11 @@ function createWrapper(client, schema) {
   }
 
   /**
-   * Run a function inside a BEGIN / COMMIT / ROLLBACK transaction.
-   * A scoped wrapper (using the same client) is passed to the callback.
+   * Run a function inside a transaction.
+   * Three cases:
+   *   1. client is a Pool → check out a fresh PoolClient, BEGIN/COMMIT/ROLLBACK, release.
+   *   2. client is a dedicated PoolClient NOT yet in a transaction → BEGIN/COMMIT/ROLLBACK.
+   *   3. client is a dedicated PoolClient already inside a BEGIN block → SAVEPOINT (nested).
    *
    * Usage:
    *   const id = await db.transaction(async (tx) => {
@@ -125,15 +132,13 @@ function createWrapper(client, schema) {
    *   });
    */
   async function transaction(fn) {
-    // If the client is a Pool (top-level), check out a dedicated client
-    // for the duration of the transaction.
-    const isPool = typeof client.connect === 'function' && typeof client.query === 'function' && client.constructor.name === 'Pool';
+    const isPool = client.constructor?.name === 'Pool';
 
     if (isPool) {
+      // ── Case 1: Pool — check out a fresh client for this transaction ──────
       const txClient = await client.connect();
-      // Set search_path on the dedicated transaction client
-      if (schema) await txClient.query(`SET search_path TO "${schema}"`);
-      const txWrapper = createWrapper(txClient, null); // search_path already set
+      if (schema) await txClient.query(`SET search_path TO "${schema}", public`);
+      const txWrapper = createWrapper(txClient, null, true);
       try {
         await txClient.query('BEGIN');
         const result = await fn(txWrapper);
@@ -145,17 +150,32 @@ function createWrapper(client, schema) {
       } finally {
         txClient.release();
       }
-    } else {
-      // Already on a dedicated client (nested transaction — use savepoint)
-      const savepoint = `sp_${Date.now()}`;
-      const txWrapper = createWrapper(client, null);
-      await client.query(`SAVEPOINT ${savepoint}`);
+    } else if (!_inTransaction) {
+      // ── Case 2: Dedicated client, no active transaction — use BEGIN ───────
+      _inTransaction = true;
+      const txWrapper = createWrapper(client, null, true);
       try {
+        await client.query('BEGIN');
+        const result = await fn(txWrapper);
+        await client.query('COMMIT');
+        return result;
+      } catch (err) {
+        try { await client.query('ROLLBACK'); } catch { /* ignore rollback error */ }
+        throw err;
+      } finally {
+        _inTransaction = false;
+      }
+    } else {
+      // ── Case 3: Already inside BEGIN — use SAVEPOINT for nesting ──────────
+      const savepoint = `sp_${Date.now()}`;
+      const txWrapper = createWrapper(client, null, true);
+      try {
+        await client.query(`SAVEPOINT ${savepoint}`);
         const result = await fn(txWrapper);
         await client.query(`RELEASE SAVEPOINT ${savepoint}`);
         return result;
       } catch (err) {
-        await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+        try { await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`); } catch { /* ignore */ }
         throw err;
       }
     }
