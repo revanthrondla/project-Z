@@ -157,6 +157,7 @@ const AdminProjects         = lazy(() => import('./pages/admin/Projects'));
 const AdminExpenses         = lazy(() => import('./pages/admin/Expenses'));
 const AdminContractors      = lazy(() => import('./pages/admin/Contractors'));
 const AdminCompliance       = lazy(() => import('./pages/admin/Compliance'));
+const AdminEEO              = lazy(() => import('./pages/admin/EEO'));
 
 // Field Ops pages
 const FieldScan       = lazy(() => import('./pages/agrow/FieldScan'));
@@ -387,6 +388,7 @@ function AppRoutes() {
         <Route path="expenses"    element={<PrivateRoute><Lazy><AdminExpenses /></Lazy></PrivateRoute>} />
         <Route path="contractors" element={<PrivateRoute adminOnly><Lazy><AdminContractors /></Lazy></PrivateRoute>} />
         <Route path="compliance"  element={<PrivateRoute adminOnly><Lazy><AdminCompliance /></Lazy></PrivateRoute>} />
+        <Route path="eeo"         element={<PrivateRoute adminOnly><Lazy><AdminEEO /></Lazy></PrivateRoute>} />
         <Route path="import"    element={<ModuleRoute moduleKey="hr_import"  adminOnly><Lazy><AdminImport /></Lazy></ModuleRoute>} />
         <Route path="settings" element={<PrivateRoute adminOnly><Lazy><AdminSettings /></Lazy></PrivateRoute>} />
 

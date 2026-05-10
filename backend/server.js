@@ -44,6 +44,7 @@ const rateCardRoutes         = require('./routes/ratecards');
 const expenseRoutes          = require('./routes/expenses');
 const payRulesRoutes         = require('./routes/payRules');
 const privacyRoutes          = require('./routes/privacy');
+const eeoRoutes              = require('./routes/eeo');
 const { auditLogViewer }     = require('./middleware/auditLog');
 
 const app      = express();
@@ -192,6 +193,7 @@ app.use('/api/rate-cards',       rateCardRoutes);
 app.use('/api/expenses',         expenseRoutes);
 app.use('/api/pay-rules',        payRulesRoutes);
 app.use('/api/privacy',          privacyRoutes);
+app.use('/api/eeo',              eeoRoutes);
 
 // ── Audit log viewer ──────────────────────────────────────────────────────────
 const { authenticate, requireAdmin, injectTenantDb } = require('./middleware/auth');

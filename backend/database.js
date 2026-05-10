@@ -1300,6 +1300,86 @@ async function createTenantSchema(slug) {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(is_active) WHERE is_active = TRUE`);
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // EEO / EEOC COMPLIANCE FIELDS
+    // Covers: EEO-1 (EEOC), VEVRAA (veteran status), Section 503 / ADA (disability)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // --- Org-level EEO configuration (org_profile) ---
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS eeo_company_number     TEXT`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS naics_code             TEXT`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS naics_description      TEXT`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS establishment_type     TEXT DEFAULT 'single'
+                        CHECK(establishment_type IN ('single','multi_hq','multi_establishment'))`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS eeo1_filing_required   BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS is_federal_contractor  BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS federal_contractor_uei TEXT`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS aap_in_place           BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS aap_effective_date     DATE`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS eeo_officer_name       TEXT`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS eeo_officer_email      TEXT`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS eeo_snapshot_date      DATE`);
+
+    // --- Candidate / employee-level EEO fields ---
+
+    // Race / ethnicity (EEO-1 required, 7 EEOC categories + prefer_not_to_say)
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_race_ethnicity TEXT
+      CHECK(eeo_race_ethnicity IN (
+        'hispanic_latino','white','black_african_american',
+        'native_hawaiian_pacific_islander','asian',
+        'american_indian_alaska_native','two_or_more_races','prefer_not_to_say'
+      ))`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_race_self_identified BOOLEAN DEFAULT TRUE`);
+
+    // Sex / gender (EEO-1 required; nonbinary included for EEOC proposed expansion)
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_gender TEXT
+      CHECK(eeo_gender IN ('male','female','nonbinary','prefer_not_to_say'))`);
+
+    // EEO-1 job category (9 EEOC occupational groups)
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_job_category TEXT
+      CHECK(eeo_job_category IN (
+        'exec_senior_mgr','first_mid_mgr','professional','technician',
+        'sales','admin_support','craft','operative',
+        'laborer_helper','service_worker','not_assigned'
+      ))`);
+
+    // Veteran status (VEVRAA — required for federal contractors)
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS veteran_status TEXT
+      CHECK(veteran_status IN (
+        'not_veteran','disabled_veteran','recently_separated_veteran',
+        'active_duty_wartime_badge_veteran','armed_forces_service_medal_veteran',
+        'prefer_not_to_say'
+      ))`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS veteran_self_identified BOOLEAN DEFAULT TRUE`);
+
+    // Disability status (Section 503 / ADA)
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS disability_status TEXT
+      CHECK(disability_status IN ('yes_disability','no_disability','prefer_not_to_say'))`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS disability_self_identified BOOLEAN DEFAULT TRUE`);
+
+    // Self-ID audit trail
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_self_id_date DATE`);
+    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_data_source  TEXT DEFAULT 'not_collected'
+      CHECK(eeo_data_source IN ('self_identified','visual_observation','payroll_records','not_collected'))`);
+
+    // --- EEO-1 snapshot/reporting table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS eeo_reports (
+        id             BIGSERIAL PRIMARY KEY,
+        snapshot_date  DATE        NOT NULL,
+        report_year    INTEGER     NOT NULL,
+        location_id    BIGINT      REFERENCES org_locations(id) ON DELETE SET NULL,
+        job_category   TEXT        NOT NULL,
+        race_ethnicity TEXT        NOT NULL,
+        gender         TEXT        NOT NULL,
+        headcount      INTEGER     NOT NULL DEFAULT 0,
+        created_at     TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_eeo_reports_year         ON eeo_reports(report_year)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_eeo_reports_snapshot     ON eeo_reports(snapshot_date)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_eeo_reports_job_category ON eeo_reports(job_category)`);
+
     console.log(`✅ Schema ready: ${schema}`);
   } finally {
     client.release();

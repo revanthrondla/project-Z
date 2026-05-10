@@ -1033,6 +1033,218 @@ function ProfileHeader({ empId }) {
   );
 }
 
+// ─── TAB: EEO ─────────────────────────────────────────────────────────────────
+
+const EEO_RACE_OPTIONS = [
+  { value: 'hispanic_latino',                  label: 'Hispanic or Latino' },
+  { value: 'white',                            label: 'White (Not Hispanic or Latino)' },
+  { value: 'black_african_american',           label: 'Black or African American' },
+  { value: 'native_hawaiian_pacific_islander', label: 'Native Hawaiian or Other Pacific Islander' },
+  { value: 'asian',                            label: 'Asian (Not Hispanic or Latino)' },
+  { value: 'american_indian_alaska_native',    label: 'American Indian or Alaska Native' },
+  { value: 'two_or_more_races',                label: 'Two or More Races' },
+  { value: 'prefer_not_to_say',               label: 'Prefer Not to Say / Not Disclosed' },
+];
+
+const EEO_JOB_CAT_OPTIONS = [
+  { value: 'exec_senior_mgr', label: '1.1 Executive/Senior Level Officials & Managers' },
+  { value: 'first_mid_mgr',   label: '1.2 First/Mid Level Officials & Managers' },
+  { value: 'professional',    label: '2. Professionals' },
+  { value: 'technician',      label: '3. Technicians' },
+  { value: 'sales',           label: '4. Sales Workers' },
+  { value: 'admin_support',   label: '5. Administrative Support Workers' },
+  { value: 'craft',           label: '6. Craft Workers' },
+  { value: 'operative',       label: '7. Operatives' },
+  { value: 'laborer_helper',  label: '8. Laborers & Helpers' },
+  { value: 'service_worker',  label: '9. Service Workers' },
+  { value: 'not_assigned',    label: 'Not Assigned' },
+];
+
+const EEO_VETERAN_OPTIONS = [
+  { value: 'not_veteran',                        label: 'Not a Veteran' },
+  { value: 'disabled_veteran',                   label: 'Disabled Veteran' },
+  { value: 'recently_separated_veteran',         label: 'Recently Separated Veteran' },
+  { value: 'active_duty_wartime_badge_veteran',  label: 'Active Duty Wartime / Campaign Badge Veteran' },
+  { value: 'armed_forces_service_medal_veteran', label: 'Armed Forces Service Medal Veteran' },
+  { value: 'prefer_not_to_say',                 label: 'Prefer Not to Say' },
+];
+
+function EEOTab({ empId }) {
+  const [form,    setForm]    = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
+  const [err,     setErr]     = useState(null);
+
+  useEffect(() => {
+    api.get(`/eeo/candidates/${empId}`)
+      .then(r => setForm(r.data))
+      .catch(e => setErr(e.response?.data?.error || e.message))
+      .finally(() => setLoading(false));
+  }, [empId]);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const save = async () => {
+    setSaving(true); setErr(null); setSaved(false);
+    try {
+      const { id, name, email, role, _labels, ...body } = form;
+      await api.put(`/eeo/candidates/${empId}`, body);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setErr(e.response?.data?.error || e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <p className="text-sm text-gray-500">Loading EEO data…</p>;
+
+  const SL = ({ label, field, options, help }) => (
+    <div>
+      <label className="block text-xs text-gray-500 mb-1">{label}</label>
+      <select
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+        value={form[field] || ''}
+        onChange={e => set(field, e.target.value || null)}
+      >
+        <option value="">— Not provided —</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      {help && <p className="text-xs text-gray-400 mt-0.5">{help}</p>}
+    </div>
+  );
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+        <strong>Voluntary Self-Identification</strong> — All EEO fields are collected on a voluntary, confidential basis per EEOC guidelines.
+        Employees may select "Prefer Not to Say" or leave any field blank. This data is used solely for regulatory reporting and is never used in employment decisions.
+      </div>
+
+      {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{err}</div>}
+
+      {/* EEO-1 Fields */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-5">
+        <h3 className="font-semibold text-gray-800 mb-4 text-sm flex items-center gap-2">
+          <span>📋</span> EEO-1 Data (EEOC Required)
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <SL label="Race / Ethnicity" field="eeo_race_ethnicity" options={EEO_RACE_OPTIONS} />
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Gender</label>
+            <select
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              value={form.eeo_gender || ''}
+              onChange={e => set('eeo_gender', e.target.value || null)}
+            >
+              <option value="">— Not provided —</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="nonbinary">Nonbinary</option>
+              <option value="prefer_not_to_say">Prefer Not to Say</option>
+            </select>
+          </div>
+          <div className="md:col-span-2">
+            <SL label="EEO-1 Job Category" field="eeo_job_category" options={EEO_JOB_CAT_OPTIONS} help="Maps this employee to the EEOC occupational group for EEO-1 filing" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Race/Ethnicity Data Source</label>
+            <select
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              value={form.eeo_data_source || 'not_collected'}
+              onChange={e => set('eeo_data_source', e.target.value)}
+            >
+              <option value="self_identified">Self-Identified (preferred)</option>
+              <option value="visual_observation">Visual Observation</option>
+              <option value="payroll_records">Payroll Records</option>
+              <option value="not_collected">Not Collected</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Self-ID Date</label>
+            <input
+              type="date"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 cursor-default"
+              value={form.eeo_self_id_date || ''}
+              readOnly
+            />
+            <p className="text-xs text-gray-400 mt-0.5">Auto-set when any EEO field is saved</p>
+          </div>
+        </div>
+      </div>
+
+      {/* VEVRAA */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-5">
+        <h3 className="font-semibold text-gray-800 mb-1 text-sm flex items-center gap-2">
+          <span>🎖️</span> Veteran Status (VEVRAA)
+        </h3>
+        <p className="text-xs text-gray-500 mb-4">Required for federal contractors. Voluntary for all others.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <SL label="Veteran Status" field="veteran_status" options={EEO_VETERAN_OPTIONS} />
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Self-Identified?</label>
+            <select
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              value={form.veteran_self_identified === false ? 'false' : 'true'}
+              onChange={e => set('veteran_self_identified', e.target.value === 'true')}
+            >
+              <option value="true">Yes — self-identified</option>
+              <option value="false">No — employer-identified</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 503 / ADA */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-5">
+        <h3 className="font-semibold text-gray-800 mb-1 text-sm flex items-center gap-2">
+          <span>♿</span> Disability Status (Section 503 / ADA)
+        </h3>
+        <p className="text-xs text-gray-500 mb-4">Required for federal contractors. Voluntary for all others. Employees are invited to self-identify at hire and every 5 years thereafter.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Disability Status</label>
+            <select
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              value={form.disability_status || ''}
+              onChange={e => set('disability_status', e.target.value || null)}
+            >
+              <option value="">— Not provided —</option>
+              <option value="yes_disability">Yes, I have a disability</option>
+              <option value="no_disability">No, I do not have a disability</option>
+              <option value="prefer_not_to_say">Prefer not to answer</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Self-Identified?</label>
+            <select
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              value={form.disability_self_identified === false ? 'false' : 'true'}
+              onChange={e => set('disability_self_identified', e.target.value === 'true')}
+            >
+              <option value="true">Yes — self-identified</option>
+              <option value="false">No — employer-identified</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium px-6 py-2 rounded-lg text-sm transition-colors"
+        >
+          {saving ? 'Saving…' : 'Save EEO Data'}
+        </button>
+        {saved && <span className="text-green-600 text-sm font-medium">✓ Saved</span>}
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -1046,6 +1258,7 @@ const TABS = [
   { id: 'reviews',     label: '📊 Reviews',     component: ReviewsTab },
   { id: 'training',    label: '🎓 Training',    component: TrainingTab },
   { id: 'licenses',    label: '📜 Licences',    component: LicencesTab },
+  { id: 'eeo',         label: '⚖️ EEO',         component: EEOTab },
 ];
 
 export default function EmployeeProfile() {
