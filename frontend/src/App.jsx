@@ -137,7 +137,7 @@ import ChangePassword from './pages/ChangePassword';
 
 // Admin pages
 const AdminDashboard        = lazy(() => import('./pages/admin/Dashboard'));
-const AdminCandidates       = lazy(() => import('./pages/admin/Candidates'));
+const AdminEmployees        = lazy(() => import('./pages/admin/Employees'));
 const AdminClients          = lazy(() => import('./pages/admin/Clients'));
 const AdminTimesheets       = lazy(() => import('./pages/admin/Timesheets'));
 const AdminAbsences         = lazy(() => import('./pages/admin/Absences'));
@@ -345,7 +345,7 @@ function AppRoutes() {
         } />
 
         {/* Admin-only routes — module-gated */}
-        <Route path="employees"    element={<ModuleRoute moduleKey="hr_candidates" adminOnly><Lazy><AdminCandidates /></Lazy></ModuleRoute>} />
+        <Route path="employees"    element={<ModuleRoute moduleKey="hr_candidates" adminOnly><Lazy><AdminEmployees /></Lazy></ModuleRoute>} />
         <Route path="employees/:id" element={<ModuleRoute moduleKey="hr_candidates" adminOnly><Lazy><EmployeeProfile /></Lazy></ModuleRoute>} />
         <Route path="clients"      element={<ModuleRoute moduleKey="hr_clients"    adminOnly><Lazy><AdminClients /></Lazy></ModuleRoute>} />
         <Route path="recruiters"   element={<PrivateRoute adminOnly><Lazy><AdminRecruiters /></Lazy></PrivateRoute>} />

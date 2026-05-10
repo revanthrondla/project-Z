@@ -194,11 +194,11 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
       if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
       // ── Resolve linked IDs (needed for MFA token and session token) ────────────
-      let candidateId = null;
+      let employeeId = null;
       if (user.role === 'candidate') {
-        const candResult = await tenantDb.query('SELECT id FROM candidates WHERE user_id = $1', [user.id]);
+        const candResult = await tenantDb.query('SELECT id FROM employees WHERE user_id = $1', [user.id]);
         const cand = candResult.rows[0];
-        if (cand) candidateId = cand.id;
+        if (cand) employeeId = cand.id;
       }
 
       let clientId = null;
@@ -232,7 +232,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
         if (mfaMethods.includes('email_otp')) {
           const mfaToken = jwt.sign(
             { userId: user.id, email: user.email, name: user.name, role: user.role,
-              candidateId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+              employeeId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
               mustChangePw, type: 'mfa_pending' },
             JWT_SECRET, { expiresIn: '2m' }
           );
@@ -241,7 +241,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
         // TOTP only — user must enroll first
         const setupToken = jwt.sign(
           { userId: user.id, email: user.email, name: user.name, role: user.role,
-            candidateId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+            employeeId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
             mustChangePw, type: 'mfa_setup_required' },
           JWT_SECRET, { expiresIn: '15m' }
         );
@@ -253,7 +253,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
         const method = user.mfa_method || 'totp';
         const mfaToken = jwt.sign(
           { userId: user.id, email: user.email, name: user.name, role: user.role,
-            candidateId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+            employeeId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
             mustChangePw, type: 'mfa_pending' },
           JWT_SECRET, { expiresIn: '2m' }
         );
@@ -263,7 +263,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
       const token = jwt.sign(
         {
           id: user.id, email: user.email, name: user.name, role: user.role,
-          candidateId, clientId, recruiterId,
+          employeeId, clientId, recruiterId,
           tenantSlug: tenant.slug,
           tenantName: tenant.company_name,
           mustChangePw,
@@ -277,7 +277,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
         token,   // Also returned for API / non-browser clients
         user: {
           id: user.id, name: user.name, email: user.email, role: user.role,
-          candidateId, clientId, recruiterId,
+          employeeId, clientId, recruiterId,
           tenantSlug: tenant.slug,
           tenantName: tenant.company_name,
           mustChangePw,
@@ -366,7 +366,7 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
     const freshToken = jwt.sign(
       {
         id: user.id, email: user.email, name: user.name, role: user.role,
-        candidateId: req.user.candidateId || null,
+        employeeId: req.user.employeeId || null,
         clientId:    req.user.clientId    || null,
         recruiterId: req.user.recruiterId || null,
         tenantSlug:  req.user.tenantSlug  || null,

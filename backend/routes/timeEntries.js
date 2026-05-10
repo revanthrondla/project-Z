@@ -9,11 +9,11 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
   const { candidate_id, start_date, end_date, status, month, project_id } = req.query;
   let query = `
     SELECT te.*,
-           c.name as candidate_name, c.hourly_rate,
+           c.name as employee_name, c.hourly_rate,
            p.name as project_name,
            pt.name as task_name
     FROM time_entries te
-    JOIN candidates c ON te.candidate_id = c.id
+    JOIN employees c ON te.candidate_id = c.id
     LEFT JOIN projects p ON p.id = te.project_id
     LEFT JOIN project_tasks pt ON pt.id = te.task_id
     WHERE 1=1
@@ -23,7 +23,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
   // Candidates can only see their own
   if (req.user.role === 'candidate') {
     query += ' AND te.candidate_id = $' + (params.length + 1);
-    params.push(req.user.candidateId);
+    params.push(req.user.employeeId);
   } else if (candidate_id) {
     query += ' AND te.candidate_id = $' + (params.length + 1);
     params.push(candidate_id);
@@ -59,7 +59,7 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
   // Determine candidate_id
   let cid = candidate_id;
   if (req.user.role === 'candidate') {
-    cid = req.user.candidateId;
+    cid = req.user.employeeId;
   }
   if (!cid) return res.status(400).json({ error: 'Candidate ID required' });
 
@@ -88,10 +88,10 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
   const entryId = insertResult.rows[0].id;
 
   const entry = await req.db.query(`
-    SELECT te.*, c.name as candidate_name, c.hourly_rate,
+    SELECT te.*, c.name as employee_name, c.hourly_rate,
            p.name as project_name, pt.name as task_name
     FROM time_entries te
-    JOIN candidates c ON te.candidate_id = c.id
+    JOIN employees c ON te.candidate_id = c.id
     LEFT JOIN projects p ON p.id = te.project_id
     LEFT JOIN project_tasks pt ON pt.id = te.task_id
     WHERE te.id = $1
@@ -109,7 +109,7 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
 
   // Check ownership
   if (req.user.role === 'candidate') {
-    if (entry.candidate_id !== req.user.candidateId) {
+    if (entry.candidate_id !== req.user.employeeId) {
       return res.status(403).json({ error: 'Access denied' });
     }
     if (entry.status !== 'pending') {
@@ -131,7 +131,7 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
 
     // Notify the candidate
     const candidateResult = await req.db.query(`
-      SELECT c.user_id, c.name FROM candidates c WHERE c.id = $1
+      SELECT c.user_id, c.name FROM employees c WHERE c.id = $1
     `, [entry.candidate_id]);
     const candidate = candidateResult.rows[0];
     if (candidate) {
@@ -175,10 +175,10 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
   }
 
   const updatedResult = await req.db.query(`
-    SELECT te.*, c.name as candidate_name, c.hourly_rate,
+    SELECT te.*, c.name as employee_name, c.hourly_rate,
            p.name as project_name, pt.name as task_name
     FROM time_entries te
-    JOIN candidates c ON te.candidate_id = c.id
+    JOIN employees c ON te.candidate_id = c.id
     LEFT JOIN projects p ON p.id = te.project_id
     LEFT JOIN project_tasks pt ON pt.id = te.task_id
     WHERE te.id = $1
@@ -194,7 +194,7 @@ router.delete('/:id', authenticate, injectTenantDb, async (req, res) => {
   if (!entry) return res.status(404).json({ error: 'Time entry not found' });
 
   if (req.user.role === 'candidate') {
-    if (entry.candidate_id !== req.user.candidateId) return res.status(403).json({ error: 'Access denied' });
+    if (entry.candidate_id !== req.user.employeeId) return res.status(403).json({ error: 'Access denied' });
     if (entry.status !== 'pending') return res.status(400).json({ error: 'Cannot delete approved entries' });
   }
 
@@ -221,7 +221,7 @@ router.post('/bulk-approve', authenticate, requireAdmin, injectTenantDb, async (
 
       // Notify candidate
       if (entry) {
-        const candidateResult = await tx.query('SELECT user_id FROM candidates WHERE id = $1', [entry.candidate_id]);
+        const candidateResult = await tx.query('SELECT user_id FROM employees WHERE id = $1', [entry.candidate_id]);
         const candidate = candidateResult.rows[0];
         if (candidate) {
           createNotification(
@@ -258,12 +258,12 @@ router.get('/client-pending', authenticate, injectTenantDb, async (req, res) => 
   let q = `
     SELECT
       te.*,
-      c.name       AS candidate_name,
+      c.name       AS employee_name,
       c.hourly_rate,
       cl.name      AS client_name,
       (te.hours * c.hourly_rate) AS amount
     FROM time_entries te
-    JOIN candidates c ON te.candidate_id = c.id
+    JOIN employees c ON te.candidate_id = c.id
     LEFT JOIN clients cl ON c.client_id = cl.id
     WHERE te.status = 'approved'
   `;
@@ -295,7 +295,7 @@ async function assertClientOwnsEntry(db, userId, entryId) {
   if (!client) return null;
   const entryResult = await db.query(`
     SELECT te.* FROM time_entries te
-    JOIN candidates c ON te.candidate_id = c.id
+    JOIN employees c ON te.candidate_id = c.id
     WHERE te.id = $1 AND c.client_id = $2
   `, [entryId, client.id]);
   return entryResult.rows[0];
@@ -386,13 +386,13 @@ router.post('/:id/client-reject', authenticate, injectTenantDb, async (req, res)
 // Creates a new time_entry with timer_start = NOW() and hours = 0
 router.post('/timer/start', authenticate, injectTenantDb, async (req, res) => {
   try {
-    const candidateId = req.user.candidateId;
-    if (!candidateId) return res.status(403).json({ error: 'Only candidates can start a timer' });
+    const employeeId = req.user.employeeId;
+    if (!employeeId) return res.status(403).json({ error: 'Only candidates can start a timer' });
 
     // Check if there's already a running timer
     const existing = await req.db.query(
       `SELECT id FROM time_entries WHERE candidate_id = $1 AND timer_start IS NOT NULL AND hours = 0 LIMIT 1`,
-      [candidateId]
+      [employeeId]
     );
     if (existing.rows.length) {
       return res.status(409).json({ error: 'A timer is already running. Stop it before starting a new one.', timer_id: existing.rows[0].id });
@@ -408,7 +408,7 @@ router.post('/timer/start', authenticate, injectTenantDb, async (req, res) => {
       VALUES ($1, $2, 0, $3, $4, $5, $6, $7, NOW(), 'pending')
       RETURNING *
     `, [
-      candidateId, today,
+      employeeId, today,
       description || null,
       project_id  || null,
       task_id     || null,
@@ -428,8 +428,8 @@ router.post('/timer/start', authenticate, injectTenantDb, async (req, res) => {
 // Calculates elapsed hours and updates the time entry
 router.post('/timer/stop', authenticate, injectTenantDb, async (req, res) => {
   try {
-    const candidateId = req.user.candidateId;
-    if (!candidateId) return res.status(403).json({ error: 'Only candidates can stop a timer' });
+    const employeeId = req.user.employeeId;
+    if (!employeeId) return res.status(403).json({ error: 'Only candidates can stop a timer' });
 
     const { entry_id, description } = req.body;
 
@@ -437,10 +437,10 @@ router.post('/timer/stop', authenticate, injectTenantDb, async (req, res) => {
     let entryQuery, entryParams;
     if (entry_id) {
       entryQuery  = `SELECT * FROM time_entries WHERE id = $1 AND candidate_id = $2 AND timer_start IS NOT NULL`;
-      entryParams = [parseInt(entry_id, 10), candidateId];
+      entryParams = [parseInt(entry_id, 10), employeeId];
     } else {
       entryQuery  = `SELECT * FROM time_entries WHERE candidate_id = $1 AND timer_start IS NOT NULL AND hours = 0 ORDER BY timer_start DESC LIMIT 1`;
-      entryParams = [candidateId];
+      entryParams = [employeeId];
     }
 
     const entryResult = await req.db.query(entryQuery, entryParams);
@@ -474,8 +474,8 @@ router.post('/timer/stop', authenticate, injectTenantDb, async (req, res) => {
 // Returns the currently running timer for the authenticated candidate, if any
 router.get('/timer/status', authenticate, injectTenantDb, async (req, res) => {
   try {
-    const candidateId = req.user.candidateId;
-    if (!candidateId) return res.json({ running: false });
+    const employeeId = req.user.employeeId;
+    if (!employeeId) return res.json({ running: false });
 
     const result = await req.db.query(`
       SELECT te.*, p.name AS project_name, pt.name AS task_name
@@ -484,7 +484,7 @@ router.get('/timer/status', authenticate, injectTenantDb, async (req, res) => {
       LEFT JOIN project_tasks pt ON pt.id = te.task_id
       WHERE te.candidate_id = $1 AND te.timer_start IS NOT NULL
       ORDER BY te.timer_start DESC LIMIT 1
-    `, [candidateId]);
+    `, [employeeId]);
 
     if (!result.rows.length) return res.json({ running: false });
 

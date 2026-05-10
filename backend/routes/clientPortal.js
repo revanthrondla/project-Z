@@ -88,7 +88,7 @@ router.get('/dashboard', authenticate, requireClient, injectTenantDb, async (req
       COALESCE(SUM(CASE WHEN te.status = 'approved' THEN te.hours ELSE 0 END), 0) AS approved_hours,
       COALESCE(SUM(CASE WHEN te.status = 'pending'  THEN te.hours ELSE 0 END), 0) AS pending_hours,
       COALESCE(SUM(CASE WHEN te.status = 'approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0) AS approved_amount
-    FROM candidates c
+    FROM employees c
     LEFT JOIN time_entries te ON te.candidate_id = c.id
     WHERE c.client_id = $1
     GROUP BY c.id
@@ -97,9 +97,9 @@ router.get('/dashboard', authenticate, requireClient, injectTenantDb, async (req
   const candidates = candidatesResult.rows;
 
   const recentTimesheetsResult = await req.db.query(`
-    SELECT te.*, cand.name AS candidate_name
+    SELECT te.*, cand.name AS employee_name
     FROM time_entries te
-    JOIN candidates cand ON te.candidate_id = cand.id
+    JOIN employees cand ON te.candidate_id = cand.id
     WHERE cand.client_id = $1
     ORDER BY te.date DESC
     LIMIT 20
@@ -112,7 +112,7 @@ router.get('/dashboard', authenticate, requireClient, injectTenantDb, async (req
       COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 0) AS total_approved_hours,
       COALESCE(SUM(CASE WHEN te.status='pending'  THEN te.hours ELSE 0 END), 0) AS total_pending_hours,
       COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0) AS total_cost
-    FROM candidates c
+    FROM employees c
     LEFT JOIN time_entries te ON te.candidate_id = c.id
     WHERE c.client_id = $1
   `, [client.id]);
@@ -129,9 +129,9 @@ router.get('/invoices', authenticate, requireClient, injectTenantDb, async (req,
   if (!client) return res.status(404).json({ error: 'No client record found' });
 
   const invoicesResult = await req.db.query(`
-    SELECT i.*, cand.name AS candidate_name, cand.role AS candidate_role
+    SELECT i.*, cand.name AS employee_name, cand.role AS candidate_role
     FROM invoices i
-    JOIN candidates cand ON i.candidate_id = cand.id
+    JOIN employees cand ON i.candidate_id = cand.id
     WHERE i.client_id = $1
     ORDER BY i.period_start DESC
   `, [client.id]);
@@ -147,9 +147,9 @@ router.get('/invoices/:id', authenticate, requireClient, injectTenantDb, async (
   if (!client) return res.status(404).json({ error: 'No client record found' });
 
   const invoiceResult = await req.db.query(`
-    SELECT i.*, cand.name AS candidate_name, cand.role AS candidate_role, cand.hourly_rate
+    SELECT i.*, cand.name AS employee_name, cand.role AS candidate_role, cand.hourly_rate
     FROM invoices i
-    JOIN candidates cand ON i.candidate_id = cand.id
+    JOIN employees cand ON i.candidate_id = cand.id
     WHERE i.id = $1 AND i.client_id = $2
   `, [req.params.id, client.id]);
   const invoice = invoiceResult.rows[0];

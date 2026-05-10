@@ -42,7 +42,7 @@ router.get('/tenants', async (req, res) => {
         rel = release;
         const [candidates, clients, users] = await Promise.all([
           (async () => {
-            const res = await tdb.query("SELECT COUNT(*)::int AS c FROM candidates WHERE status='active'");
+            const res = await tdb.query("SELECT COUNT(*)::int AS c FROM employees WHERE status='active'");
             return res.rows[0];
           })(),
           (async () => {
@@ -54,7 +54,7 @@ router.get('/tenants', async (req, res) => {
             return res.rows[0];
           })(),
         ]);
-        return { ...t, candidate_count: candidates.c, client_count: clients.c, user_count: users.c };
+        return { ...t, candidate_count: employees.c, client_count: clients.c, user_count: users.c };
       } catch {
         return { ...t, candidate_count: 0, client_count: 0, user_count: 0 };
       } finally {
@@ -82,11 +82,11 @@ router.get('/tenants/:id', async (req, res) => {
       statsRel = release;
       const [cand, activeCand, clients, invoices, revenue, timesheets, users] = await Promise.all([
         (async () => {
-          const res = await tdb.query("SELECT COUNT(*)::int AS c FROM candidates");
+          const res = await tdb.query("SELECT COUNT(*)::int AS c FROM employees");
           return res.rows[0];
         })(),
         (async () => {
-          const res = await tdb.query("SELECT COUNT(*)::int AS c FROM candidates WHERE status='active'");
+          const res = await tdb.query("SELECT COUNT(*)::int AS c FROM employees WHERE status='active'");
           return res.rows[0];
         })(),
         (async () => {
@@ -301,7 +301,7 @@ router.get('/stats', async (req, res) => {
         sRel = release;
         const [cand, cli, inv] = await Promise.all([
           (async () => {
-            const res = await tdb.query("SELECT COUNT(*)::int AS c FROM candidates WHERE status='active'");
+            const res = await tdb.query("SELECT COUNT(*)::int AS c FROM employees WHERE status='active'");
             return res.rows[0];
           })(),
           (async () => {

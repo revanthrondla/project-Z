@@ -85,7 +85,7 @@ export default function Recruiters() {
     try {
       const [assignRes, candRes] = await Promise.all([
         api.get(`/api/recruiters/${recruiter.id}/assignments`),
-        api.get('/api/candidates'),
+        api.get('/api/employees'),
       ]);
       setAssignments(assignRes.data);
       // Only show candidates who are in market or about to be (and not already assigned)
@@ -106,7 +106,7 @@ export default function Recruiters() {
     setAssignLoading(true);
     try {
       await api.post(`/api/recruiters/${selectedRecruiter.id}/assignments`, {
-        candidateId: parseInt(assignCandidateId),
+        employeeId: parseInt(assignCandidateId),
         notes: assignNotes,
       });
       setSuccess('Candidate assigned');
@@ -121,9 +121,9 @@ export default function Recruiters() {
     }
   };
 
-  const handleUnassign = async (candidateId) => {
+  const handleUnassign = async (employeeId) => {
     try {
-      await api.delete(`/api/recruiters/${selectedRecruiter.id}/assignments/${candidateId}`);
+      await api.delete(`/api/recruiters/${selectedRecruiter.id}/assignments/${employeeId}`);
       openAssignments(selectedRecruiter);
     } catch (err) {
       setError('Failed to remove assignment');
@@ -318,7 +318,7 @@ export default function Recruiters() {
                   Current Assignments ({assignments.length})
                 </h3>
                 {assignments.length === 0 ? (
-                  <p className="text-xs text-gray-500">No candidates assigned yet.</p>
+                  <p className="text-xs text-gray-500">No employees assigned yet.</p>
                 ) : (
                   <div className="space-y-2">
                     {assignments.map(cand => (

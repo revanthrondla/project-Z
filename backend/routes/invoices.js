@@ -20,10 +20,10 @@ async function generateInvoiceNumber(db) {
 router.get('/', authenticate, injectTenantDb, async (req, res) => {
   const { candidate_id, status, year } = req.query;
   let query = `
-    SELECT i.*, c.name as candidate_name, c.hourly_rate as candidate_rate,
+    SELECT i.*, c.name as employee_name, c.hourly_rate as candidate_rate,
            cl.name as client_name
     FROM invoices i
-    JOIN candidates c ON i.candidate_id = c.id
+    JOIN employees c ON i.candidate_id = c.id
     LEFT JOIN clients cl ON i.client_id = cl.id
     WHERE 1=1
   `;
@@ -32,7 +32,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
   if (req.user.role === 'candidate') {
     // Candidates see only their own invoices
     query += ' AND i.candidate_id = $' + (params.length + 1);
-    params.push(req.user.candidateId);
+    params.push(req.user.employeeId);
   } else if (req.user.role === 'client') {
     // Clients see only invoices for their client_id (regardless of query params)
     query += ' AND i.client_id = $' + (params.length + 1);
@@ -61,11 +61,11 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
 // GET /api/invoices/:id
 router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
   const result = await req.db.query(`
-    SELECT i.*, c.name as candidate_name, c.email as candidate_email,
+    SELECT i.*, c.name as employee_name, c.email as employee_email,
            c.role as candidate_role, c.hourly_rate as candidate_rate,
            cl.name as client_name, cl.contact_email as client_email, cl.address as client_address
     FROM invoices i
-    JOIN candidates c ON i.candidate_id = c.id
+    JOIN employees c ON i.candidate_id = c.id
     LEFT JOIN clients cl ON i.client_id = cl.id
     WHERE i.id = $1
   `, [req.params.id]);
@@ -73,7 +73,7 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
   const invoice = result.rows[0];
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
   // Candidates can only see their own invoices
-  if (req.user.role === 'candidate' && invoice.candidate_id !== req.user.candidateId) {
+  if (req.user.role === 'candidate' && invoice.candidate_id !== req.user.employeeId) {
     return res.status(403).json({ error: 'Access denied' });
   }
   // Clients can only see invoices belonging to their client account
@@ -89,19 +89,19 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
 router.get('/:id/pdf', authenticate, injectTenantDb, async (req, res) => {
   const result = await req.db.query(`
     SELECT i.*,
-           c.name  AS candidate_name, c.email AS candidate_email, c.role AS candidate_role,
+           c.name  AS employee_name, c.email AS employee_email, c.role AS candidate_role,
            c.hourly_rate AS candidate_rate,
            cl.name AS client_name, cl.contact_email AS client_email,
            cl.address AS client_address
     FROM invoices i
-    JOIN candidates c  ON i.candidate_id = c.id
+    JOIN employees c  ON i.candidate_id = c.id
     LEFT JOIN clients cl ON i.client_id = cl.id
     WHERE i.id = $1
   `, [req.params.id]);
 
   const invoice = result.rows[0];
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
-  if (req.user.role === 'candidate' && invoice.candidate_id !== req.user.candidateId) {
+  if (req.user.role === 'candidate' && invoice.candidate_id !== req.user.employeeId) {
     return res.status(403).json({ error: 'Access denied' });
   }
   if (req.user.role === 'client' && invoice.client_id !== req.user.clientId) {
@@ -160,7 +160,7 @@ router.get('/:id/pdf', authenticate, injectTenantDb, async (req, res) => {
 
   let metaY = 165;
   metaLabel('Bill To',     invoice.client_name || 'N/A',          50,    metaY);
-  metaLabel('Employee',    invoice.candidate_name,                 col2X, metaY);
+  metaLabel('Employee',    invoice.employee_name,                 col2X, metaY);
   metaY += 38;
   metaLabel('Period',      `${invoice.period_start} → ${invoice.period_end}`, 50, metaY);
   metaLabel('Role',        invoice.candidate_role || '—',          col2X, metaY);
@@ -251,16 +251,16 @@ router.get('/:id/pdf', authenticate, injectTenantDb, async (req, res) => {
 });
 
 // ── Helper: generate one invoice for a single candidate ──────────────────────
-async function generateOneInvoice(db, candidateId, period_start, period_end, due_date, notes) {
-  const candResult = await db.query('SELECT * FROM candidates WHERE id = $1', [candidateId]);
+async function generateOneInvoice(db, employeeId, period_start, period_end, due_date, notes) {
+  const candResult = await db.query('SELECT * FROM employees WHERE id = $1', [employeeId]);
   const candidate = candResult.rows[0];
-  if (!candidate) return { skipped: true, reason: `Candidate ${candidateId} not found` };
+  if (!candidate) return { skipped: true, reason: `Candidate ${employeeId} not found` };
 
   const entriesResult = await db.query(`
     SELECT * FROM time_entries
     WHERE candidate_id = $1 AND date >= $2 AND date <= $3 AND status = 'approved'
     ORDER BY date
-  `, [candidateId, period_start, period_end]);
+  `, [employeeId, period_start, period_end]);
   const entries = entriesResult.rows;
 
   if (entries.length === 0) {
@@ -280,7 +280,7 @@ async function generateOneInvoice(db, candidateId, period_start, period_end, due
                             total_hours, hourly_rate, total_amount, status, due_date, notes)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10)
       RETURNING id
-    `, [invoiceNumber, candidateId, candidate.client_id,
+    `, [invoiceNumber, employeeId, candidate.client_id,
         period_start, period_end, totalHours,
         candidate.hourly_rate, totalAmount, due_date || null, notes || null]);
 
@@ -299,15 +299,15 @@ async function generateOneInvoice(db, candidateId, period_start, period_end, due
   })();
 
   const invoiceResult = await db.query(`
-    SELECT i.*, c.name AS candidate_name, cl.name AS client_name
+    SELECT i.*, c.name AS employee_name, cl.name AS client_name
     FROM invoices i
-    JOIN candidates c ON i.candidate_id = c.id
+    JOIN employees c ON i.candidate_id = c.id
     LEFT JOIN clients cl ON i.client_id = cl.id
     WHERE i.id = $1
   `, [invoiceId]);
   const invoice = invoiceResult.rows[0];
 
-  return { success: true, invoice, candidate_name: candidate.name };
+  return { success: true, invoice, employee_name: candidate.name };
 }
 
 // POST /api/invoices/generate — Admin: Generate invoice(s) from approved time entries
@@ -328,7 +328,7 @@ router.post('/generate', authenticate, requireAdmin, injectTenantDb, async (req,
   if (client_id) {
     // All active candidates belonging to this client
     const clientCandidatesResult = await req.db.query(
-      'SELECT id FROM candidates WHERE client_id = $1 AND status = $2',
+      'SELECT id FROM employees WHERE client_id = $1 AND status = $2',
       [client_id, 'active']
     );
     ids = clientCandidatesResult.rows.map(c => c.id);
@@ -370,7 +370,7 @@ router.post('/generate', authenticate, requireAdmin, injectTenantDb, async (req,
         skipped++;
       } else {
         results.push({ candidate_id: cid, status: 'generated',
-                       candidate_name: result.candidate_name,
+                       employee_name: result.employee_name,
                        invoice_number: result.invoice.invoice_number,
                        total_amount:   result.invoice.total_amount,
                        total_hours:    result.invoice.total_hours });
@@ -393,7 +393,7 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
   }
 
   const invoiceNumber = await generateInvoiceNumber(req.db);
-  const candResult = await req.db.query('SELECT * FROM candidates WHERE id = $1', [candidate_id]);
+  const candResult = await req.db.query('SELECT * FROM employees WHERE id = $1', [candidate_id]);
   const candidate = candResult.rows[0];
   const rate = hourly_rate || (candidate ? candidate.hourly_rate : 0);
   const hours = total_hours || 0;
@@ -407,7 +407,7 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
   `, [invoiceNumber, candidate_id, candidate?.client_id || null, period_start, period_end, hours, rate, amount, status || 'draft', due_date || null, notes || null]);
 
   const newId = result.rows[0].id;
-  const invoiceResult = await req.db.query('SELECT i.*, c.name as candidate_name, cl.name as client_name FROM invoices i JOIN candidates c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id WHERE i.id = $1', [newId]);
+  const invoiceResult = await req.db.query('SELECT i.*, c.name as employee_name, cl.name as client_name FROM invoices i JOIN employees c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id WHERE i.id = $1', [newId]);
   res.status(201).json(invoiceResult.rows[0]);
 });
 
@@ -428,7 +428,7 @@ router.put('/:id', authenticate, requireAdmin, injectTenantDb, async (req, res) 
     WHERE id = $4
   `, [status || null, due_date || null, notes !== undefined ? notes : null, id]);
 
-  const updatedResult = await req.db.query('SELECT i.*, c.name as candidate_name, cl.name as client_name FROM invoices i JOIN candidates c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id WHERE i.id = $1', [id]);
+  const updatedResult = await req.db.query('SELECT i.*, c.name as employee_name, cl.name as client_name FROM invoices i JOIN employees c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id WHERE i.id = $1', [id]);
   res.json(updatedResult.rows[0]);
 });
 
@@ -450,8 +450,8 @@ router.get('/summary/stats', authenticate, requireAdmin, injectTenantDb, async (
   const overdueCountResult = await req.db.query("SELECT COUNT(*) as count FROM invoices WHERE status = 'overdue'");
   const byStatusResult = await req.db.query("SELECT status, COUNT(*) as count, COALESCE(SUM(total_amount), 0) as total FROM invoices GROUP BY status");
   const recentInvoicesResult = await req.db.query(`
-    SELECT i.*, c.name as candidate_name, cl.name as client_name
-    FROM invoices i JOIN candidates c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id
+    SELECT i.*, c.name as employee_name, cl.name as client_name
+    FROM invoices i JOIN employees c ON i.candidate_id = c.id LEFT JOIN clients cl ON i.client_id = cl.id
     ORDER BY i.created_at DESC LIMIT 5
   `);
 

@@ -249,7 +249,7 @@ router.post('/calculate', authenticate, injectTenantDb, async (req, res) => {
       SELECT c.*, pr.*,
              pr.id AS rule_id, pr.name AS rule_name,
              c.hourly_rate AS pay_rate
-      FROM candidates c
+      FROM employees c
       LEFT JOIN pay_rules pr ON pr.id = COALESCE(c.pay_rule_id,
         (SELECT id FROM pay_rules WHERE is_default = TRUE LIMIT 1))
       WHERE c.id = $1

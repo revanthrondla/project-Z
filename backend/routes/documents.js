@@ -96,7 +96,7 @@ async function recalcDocumentStatus(db, documentId) {
 /** Check if current user is allowed to access a document */
 function canAccess(user, doc) {
   if (user.role === 'admin') return true;
-  if (user.role === 'candidate' && doc.candidate_id === user.candidateId) return true;
+  if (user.role === 'candidate' && doc.candidate_id === user.employeeId) return true;
   if (user.role === 'client' && doc.client_id === user.clientId) return true;
   return false;
 }
@@ -109,7 +109,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
   let sql = `
     SELECT d.*,
       u.name  AS uploaded_by_name,
-      c.name  AS candidate_name,
+      c.name  AS employee_name,
       cl.name AS client_name,
       (SELECT COUNT(*) FROM document_signatures ds
         WHERE ds.document_id = d.id AND ds.status = 'signed') AS signed_count,
@@ -117,7 +117,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
         WHERE ds.document_id = d.id) AS total_signers
     FROM documents d
     LEFT JOIN users      u  ON u.id  = d.uploaded_by
-    LEFT JOIN candidates c  ON c.id  = d.candidate_id
+    LEFT JOIN employees c  ON c.id  = d.candidate_id
     LEFT JOIN clients    cl ON cl.id = d.client_id
     WHERE 1=1
   `;
@@ -126,7 +126,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
 
   // Scope by role
   if (user.role === 'candidate') {
-    sql += ` AND d.candidate_id = $${paramIndex}`; params.push(user.candidateId); paramIndex++;
+    sql += ` AND d.candidate_id = $${paramIndex}`; params.push(user.employeeId); paramIndex++;
   } else if (user.role === 'client') {
     sql += ` AND d.client_id = $${paramIndex}`; params.push(user.clientId); paramIndex++;
   } else {
@@ -174,7 +174,7 @@ router.post('/', authenticate, injectTenantDb, upload.single('file'), async (req
   let resolvedClientId    = client_id    || null;
 
   if (user.role === 'candidate') {
-    resolvedCandidateId = user.candidateId;
+    resolvedCandidateId = user.employeeId;
     resolvedClientId    = null;
   }
 
@@ -244,11 +244,11 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
   const docResult = await req.db.query(`
     SELECT d.*,
       u.name  AS uploaded_by_name,
-      c.name  AS candidate_name, c.email AS candidate_email,
+      c.name  AS employee_name, c.email AS employee_email,
       cl.name AS client_name,   cl.contact_email AS client_email
     FROM documents d
     LEFT JOIN users      u  ON u.id  = d.uploaded_by
-    LEFT JOIN candidates c  ON c.id  = d.candidate_id
+    LEFT JOIN employees c  ON c.id  = d.candidate_id
     LEFT JOIN clients    cl ON cl.id = d.client_id
     WHERE d.id = $1
   `, [req.params.id]);

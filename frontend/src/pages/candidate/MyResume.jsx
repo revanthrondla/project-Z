@@ -93,7 +93,7 @@ export default function MyResume() {
   const [saving, setSaving]   = useState(false);
   const [msg, setMsg]         = useState('');
 
-  // Determine candidate ID — the API uses the auth token's candidateId
+  // Determine candidate ID — the API uses the auth token's employeeId
   useEffect(() => {
     api.get('/api/resumes/me')
       .then(r => setResume(r.data))

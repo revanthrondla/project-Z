@@ -84,7 +84,7 @@ router.post('/verify', async (req, res) => {
       return res.status(401).json({ error: 'Token is not mfa_pending type' });
     }
 
-    const { userId, tenantSlug, email, name, role, candidateId, clientId, tenantName, mustChangePw } = decoded;
+    const { userId, tenantSlug, email, name, role, employeeId, clientId, tenantName, mustChangePw } = decoded;
 
     // ── Get user's MFA data ───────────────────────────────────────────────────
     let mfaSecret, backupCodes, isSuperAdmin;
@@ -131,7 +131,7 @@ router.post('/verify', async (req, res) => {
     if (totpValid) {
       // TOTP verified, issue full JWT
       const token = jwt.sign(
-        { id: userId, email, name, role, candidateId, clientId, tenantSlug, tenantName, mustChangePw },
+        { id: userId, email, name, role, employeeId, clientId, tenantSlug, tenantName, mustChangePw },
         JWT_SECRET,
         { expiresIn: '8h' }
       );
@@ -139,7 +139,7 @@ router.post('/verify', async (req, res) => {
       res.cookie(COOKIE_NAME, token, cookieOptions());
       return res.json({
         token,
-        user: { id: userId, name, email, role, candidateId, clientId, tenantSlug, tenantName, mustChangePw },
+        user: { id: userId, name, email, role, employeeId, clientId, tenantSlug, tenantName, mustChangePw },
       });
     }
 
@@ -180,7 +180,7 @@ router.post('/verify', async (req, res) => {
 
       // Issue full JWT
       const token = jwt.sign(
-        { id: userId, email, name, role, candidateId, clientId, tenantSlug, tenantName, mustChangePw },
+        { id: userId, email, name, role, employeeId, clientId, tenantSlug, tenantName, mustChangePw },
         JWT_SECRET,
         { expiresIn: '8h' }
       );
@@ -188,7 +188,7 @@ router.post('/verify', async (req, res) => {
       res.cookie(COOKIE_NAME, token, cookieOptions());
       return res.json({
         token,
-        user: { id: userId, name, email, role, candidateId, clientId, tenantSlug, tenantName, mustChangePw },
+        user: { id: userId, name, email, role, employeeId, clientId, tenantSlug, tenantName, mustChangePw },
       });
     }
 
@@ -528,7 +528,7 @@ router.post('/email-otp/verify', async (req, res) => {
   }
   if (decoded.type !== 'mfa_pending') return res.status(401).json({ error: 'Invalid token type' });
 
-  const { userId, tenantSlug, email, name, role, candidateId, clientId, tenantName, mustChangePw } = decoded;
+  const { userId, tenantSlug, email, name, role, employeeId, clientId, tenantName, mustChangePw } = decoded;
 
   try {
     const { wrapper: tenantDb, release } = await getTenantDb(tenantSlug);
@@ -552,7 +552,7 @@ router.post('/email-otp/verify', async (req, res) => {
     if (!valid) return res.status(401).json({ error: 'Invalid or expired code' });
 
     // Issue full session JWT
-    const payload = { id: userId, email, name, role, candidateId, clientId, tenantSlug, tenantName, mustChangePw };
+    const payload = { id: userId, email, name, role, employeeId, clientId, tenantSlug, tenantName, mustChangePw };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '8h' });
     res.cookie(COOKIE_NAME, token, cookieOptions());
     res.json({ token, user: payload });

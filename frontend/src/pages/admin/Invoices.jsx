@@ -395,7 +395,7 @@ function InvoiceDetail({ invoice: initialInvoice, onClose, onStatusChange }) {
   );
 }
 
-function GenerateModal({ candidates, clients, onClose, onGenerated }) {
+function GenerateModal({ employees, clients, onClose, onGenerated }) {
   const [mode, setMode]                 = useState('employee'); // 'employee' | 'client'
   const [selectedIds, setSelectedIds]   = useState([]);         // candidate IDs checked
   const [selectedClient, setSelectedClient] = useState('');
@@ -415,7 +415,7 @@ function GenerateModal({ candidates, clients, onClose, onGenerated }) {
         .map(c => c.id);
       setSelectedIds(ids);
     }
-  }, [selectedClient, mode, candidates]);
+  }, [selectedClient, mode, employees]);
 
   // When switching modes, reset selection
   useEffect(() => {
@@ -424,7 +424,7 @@ function GenerateModal({ candidates, clients, onClose, onGenerated }) {
     setSearch('');
   }, [mode]);
 
-  // Visible candidates list
+  // Visible employees list
   const visibleCandidates = candidates.filter(c => {
     const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase());
     if (mode === 'client' && selectedClient) {
@@ -638,7 +638,7 @@ function GenerateModal({ candidates, clients, onClose, onGenerated }) {
 
 export default function AdminInvoices() {
   const [invoices, setInvoices]     = useState([]);
-  const [candidates, setCandidates] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [clients, setClients]       = useState([]);
   const [loading, setLoading]       = useState(true);
   const [filters, setFilters]       = useState({ status: '', candidate_id: '' });
@@ -656,7 +656,7 @@ export default function AdminInvoices() {
   };
 
   useEffect(() => {
-    api.get('/api/candidates').then(r => setCandidates(Array.isArray(r.data) ? r.data : []));
+    api.get('/api/employees').then(r => setEmployees(Array.isArray(r.data) ? r.data : []));
     api.get('/api/clients').then(r => setClients(Array.isArray(r.data) ? r.data : []));
   }, []);
   useEffect(() => { load(); }, [filters]);
@@ -755,7 +755,7 @@ export default function AdminInvoices() {
         <InvoiceDetail invoice={invoiceDetail} onClose={() => setInvoiceDetail(null)} onStatusChange={load} />
       )}
       {showGenerate && (
-        <GenerateModal candidates={candidates} clients={clients} onClose={() => setShowGenerate(false)} onGenerated={load} />
+        <GenerateModal candidates={employees} clients={clients} onClose={() => setShowGenerate(false)} onGenerated={load} />
       )}
     </div>
   );

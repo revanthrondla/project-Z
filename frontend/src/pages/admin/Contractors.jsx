@@ -43,7 +43,7 @@ function ContractorDrawer({ contractor, onClose, onSaved }) {
   const save = async () => {
     setSaving(true); setErr('');
     try {
-      await api.put(`/api/candidates/${contractor.id}`, form);
+      await api.put(`/api/employees/${contractor.id}`, form);
       onSaved();
     } catch (e) {
       setErr(e.response?.data?.error || 'Save failed');
@@ -224,7 +224,7 @@ export default function Contractors() {
   const [selected,    setSelected]    = useState(null);
 
   const load = useCallback(() => {
-    return api.get('/api/candidates', { params: { contract_type: 'contractor' } })
+    return api.get('/api/employees', { params: { contract_type: 'contractor' } })
       .then(r => {
         const list = Array.isArray(r.data) ? r.data : [];
         setContractors(list);

@@ -263,7 +263,7 @@ export default function SuperAdminDashboard() {
             <KPI label="Active"           value={stats?.active}          color="green"  />
             <KPI label="Trial"            value={stats?.trial}           color="amber"  />
             <KPI label="Suspended"        value={stats?.suspended}       color="red"    />
-            <KPI label="Total Candidates" value={stats?.totalCandidates} color="purple" />
+            <KPI label="Total Employees" value={stats?.totalCandidates} color="purple" />
             <KPI label="Total Clients"    value={stats?.totalClients}    color="blue"   sub="across all tenants" />
           </div>
 

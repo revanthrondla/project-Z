@@ -234,11 +234,11 @@ router.patch('/reorder', requireAdmin, async (req, res) => {
   }
 });
 
-// ── GET /api/custom-fields/candidate/:candidateId/values ─────────────────────
-router.get('/candidate/:candidateId/values', async (req, res) => {
+// ── GET /api/custom-fields/candidate/:employeeId/values ─────────────────────
+router.get('/candidate/:employeeId/values', async (req, res) => {
   try {
-    const candidateId = parseInt(req.params.candidateId);
-    if (req.user.role !== 'admin' && req.user.candidateId !== candidateId)
+    const employeeId = parseInt(req.params.employeeId);
+    if (req.user.role !== 'admin' && req.user.employeeId !== employeeId)
       return res.status(403).json({ error: 'Access denied' });
 
     const result = await req.db.query(
@@ -249,7 +249,7 @@ router.get('/candidate/:candidateId/values', async (req, res) => {
        JOIN   employee_custom_field_defs   d ON d.field_key = v.field_key
        WHERE  v.candidate_id = $1 AND d.is_active = TRUE
        ORDER  BY d.display_order ASC, d.id ASC`,
-      [candidateId]
+      [employeeId]
     );
     res.json(result.rows);
   } catch (err) {
@@ -257,11 +257,11 @@ router.get('/candidate/:candidateId/values', async (req, res) => {
   }
 });
 
-// ── PUT /api/custom-fields/candidate/:candidateId/values — upsert values ─────
-router.put('/candidate/:candidateId/values', async (req, res) => {
+// ── PUT /api/custom-fields/candidate/:employeeId/values — upsert values ─────
+router.put('/candidate/:employeeId/values', async (req, res) => {
   try {
-    const candidateId = parseInt(req.params.candidateId);
-    if (req.user.role !== 'admin' && req.user.candidateId !== candidateId)
+    const employeeId = parseInt(req.params.employeeId);
+    if (req.user.role !== 'admin' && req.user.employeeId !== employeeId)
       return res.status(403).json({ error: 'Access denied' });
 
     const { values } = req.body; // [{ field_key, value }]
@@ -269,7 +269,7 @@ router.put('/candidate/:candidateId/values', async (req, res) => {
       return res.status(400).json({ error: 'values must be an array of { field_key, value }' });
 
     // Verify candidate belongs to this tenant
-    const candCheck = await req.db.query('SELECT id FROM candidates WHERE id = $1', [candidateId]);
+    const candCheck = await req.db.query('SELECT id FROM employees WHERE id = $1', [employeeId]);
     if (!candCheck.rows[0]) return res.status(404).json({ error: 'Candidate not found' });
 
     // Load active field defs for validation
@@ -292,7 +292,7 @@ router.put('/candidate/:candidateId/values', async (req, res) => {
                value_json = EXCLUDED.value_json,
                updated_at  = NOW()`,
         [
-          candidateId,
+          employeeId,
           field_key,
           isJson ? null : (value == null ? null : String(value)),
           isJson ? (value == null ? null : JSON.stringify(value)) : null,

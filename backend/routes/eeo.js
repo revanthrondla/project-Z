@@ -9,9 +9,9 @@
  *
  * GET    /api/eeo/profile                     — fetch org-level EEO configuration
  * PUT    /api/eeo/profile                     — update org-level EEO configuration
- * GET    /api/eeo/candidates                  — list candidates with EEO fields (admin)
- * GET    /api/eeo/candidates/:id              — get single candidate EEO fields
- * PUT    /api/eeo/candidates/:id              — update candidate EEO fields
+ * GET    /api/eeo/employees                  — list candidates with EEO fields (admin)
+ * GET    /api/eeo/employees/:id              — get single candidate EEO fields
+ * PUT    /api/eeo/employees/:id              — update candidate EEO fields
  * POST   /api/eeo/reports/generate            — generate + store EEO-1 snapshot
  * GET    /api/eeo/reports                     — list historical EEO snapshots
  * GET    /api/eeo/reports/:year/summary       — pivot table for a specific year
@@ -154,8 +154,8 @@ router.put('/profile', authenticate, requireAdmin, injectTenantDb, auditLog('org
   }
 });
 
-// ─── GET /api/eeo/candidates — paginated list with EEO completeness flag ──────
-router.get('/candidates', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
+// ─── GET /api/eeo/employees — paginated list with EEO completeness flag ──────
+router.get('/employees', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   try {
     const { page = 1, limit = 50, missing_only } = req.query;
     const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
@@ -178,14 +178,14 @@ router.get('/candidates', authenticate, requireAdmin, injectTenantDb, async (req
         (c.eeo_race_ethnicity IS NOT NULL AND c.eeo_gender IS NOT NULL AND c.eeo_job_category IS NOT NULL) AS eeo_complete,
         (c.veteran_status IS NOT NULL) AS vevraa_complete,
         (c.disability_status IS NOT NULL) AS ada_complete
-      FROM candidates c
+      FROM employees c
       ${where}
       ORDER BY c.name
       LIMIT $1 OFFSET $2
     `, [parseInt(limit, 10), offset]);
 
     const countResult = await req.db.query(
-      `SELECT COUNT(*) FROM candidates c ${where}`
+      `SELECT COUNT(*) FROM employees c ${where}`
     );
 
     res.json({
@@ -195,18 +195,18 @@ router.get('/candidates', authenticate, requireAdmin, injectTenantDb, async (req
       limit: parseInt(limit, 10),
     });
   } catch (err) {
-    console.error('[eeo GET /candidates]', err.message);
+    console.error('[eeo GET /employees]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── GET /api/eeo/candidates/:id ─────────────────────────────────────────────
-router.get('/candidates/:id', authenticate, injectTenantDb, async (req, res) => {
+// ─── GET /api/eeo/employees/:id ─────────────────────────────────────────────
+router.get('/employees/:id', authenticate, injectTenantDb, async (req, res) => {
   try {
     const cid = parseInt(req.params.id, 10);
 
     // Candidates may only view their own record
-    if (req.user.role === 'candidate' && req.user.candidateId !== cid) {
+    if (req.user.role === 'candidate' && req.user.employeeId !== cid) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -219,7 +219,7 @@ router.get('/candidates/:id', authenticate, injectTenantDb, async (req, res) => 
         veteran_status, veteran_self_identified,
         disability_status, disability_self_identified,
         eeo_self_id_date, eeo_data_source
-      FROM candidates
+      FROM employees
       WHERE id = $1 AND deleted_at IS NULL
     `, [cid]);
 
@@ -230,18 +230,18 @@ router.get('/candidates/:id', authenticate, injectTenantDb, async (req, res) => 
       _labels: { RACE_LABELS, JOB_CATEGORY_LABELS, VETERAN_LABELS, DISABILITY_LABELS },
     });
   } catch (err) {
-    console.error('[eeo GET /candidates/:id]', err.message);
+    console.error('[eeo GET /employees/:id]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── PUT /api/eeo/candidates/:id ─────────────────────────────────────────────
-router.put('/candidates/:id', authenticate, injectTenantDb, auditLog('candidates'), async (req, res) => {
+// ─── PUT /api/eeo/employees/:id ─────────────────────────────────────────────
+router.put('/employees/:id', authenticate, injectTenantDb, auditLog('employees'), async (req, res) => {
   try {
     const cid = parseInt(req.params.id, 10);
 
     // Candidates may only update their own record; admins can update anyone
-    if (req.user.role === 'candidate' && req.user.candidateId !== cid) {
+    if (req.user.role === 'candidate' && req.user.employeeId !== cid) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -276,7 +276,7 @@ router.put('/candidates/:id', authenticate, injectTenantDb, auditLog('candidates
       return res.status(400).json({ error: `Invalid eeo_data_source. Valid values: ${validSrc.join(', ')}` });
 
     const result = await req.db.query(`
-      UPDATE candidates SET
+      UPDATE employees SET
         eeo_race_ethnicity        = COALESCE($1,  eeo_race_ethnicity),
         eeo_race_self_identified  = COALESCE($2,  eeo_race_self_identified),
         eeo_gender                = COALESCE($3,  eeo_gender),
@@ -314,7 +314,7 @@ router.put('/candidates/:id', authenticate, injectTenantDb, auditLog('candidates
     if (!result.rows[0]) return res.status(404).json({ error: 'Candidate not found' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[eeo PUT /candidates/:id]', err.message);
+    console.error('[eeo PUT /employees/:id]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -332,7 +332,7 @@ router.post('/reports/generate', authenticate, requireAdmin, injectTenantDb, asy
         COALESCE(eeo_race_ethnicity, 'prefer_not_to_say') AS race_ethnicity,
         COALESCE(eeo_gender, 'prefer_not_to_say')         AS gender,
         COUNT(*)::INTEGER                                  AS headcount
-      FROM candidates
+      FROM employees
       WHERE status = 'active' AND deleted_at IS NULL
       GROUP BY 1, 2, 3
       ORDER BY 1, 2, 3
@@ -439,23 +439,23 @@ router.get('/workforce-stats', authenticate, requireAdmin, injectTenantDb, async
     const [byRace, byGender, byJobCat, byVeteran, byDisability, completeness] = await Promise.all([
       req.db.query(`
         SELECT COALESCE(eeo_race_ethnicity,'not_collected') AS value, COUNT(*)::INTEGER AS count
-        FROM candidates WHERE status='active' AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
+        FROM employees WHERE status='active' AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
       `),
       req.db.query(`
         SELECT COALESCE(eeo_gender,'not_collected') AS value, COUNT(*)::INTEGER AS count
-        FROM candidates WHERE status='active' AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
+        FROM employees WHERE status='active' AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
       `),
       req.db.query(`
         SELECT COALESCE(eeo_job_category,'not_assigned') AS value, COUNT(*)::INTEGER AS count
-        FROM candidates WHERE status='active' AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
+        FROM employees WHERE status='active' AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
       `),
       req.db.query(`
         SELECT COALESCE(veteran_status,'not_collected') AS value, COUNT(*)::INTEGER AS count
-        FROM candidates WHERE status='active' AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
+        FROM employees WHERE status='active' AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
       `),
       req.db.query(`
         SELECT COALESCE(disability_status,'not_collected') AS value, COUNT(*)::INTEGER AS count
-        FROM candidates WHERE status='active' AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
+        FROM employees WHERE status='active' AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
       `),
       req.db.query(`
         SELECT
@@ -464,7 +464,7 @@ router.get('/workforce-stats', authenticate, requireAdmin, injectTenantDb, async
                    THEN 1 ELSE 0 END)::INTEGER AS eeo1_complete,
           SUM(CASE WHEN veteran_status IS NOT NULL THEN 1 ELSE 0 END)::INTEGER   AS vevraa_complete,
           SUM(CASE WHEN disability_status IS NOT NULL THEN 1 ELSE 0 END)::INTEGER AS ada_complete
-        FROM candidates WHERE status='active' AND deleted_at IS NULL
+        FROM employees WHERE status='active' AND deleted_at IS NULL
       `),
     ]);
 

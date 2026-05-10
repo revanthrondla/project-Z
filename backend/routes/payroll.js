@@ -50,12 +50,12 @@ async function payrollPaymentView(req, res, from, to) {
     const hoursResult = await req.db.query(`
       SELECT
         c.id                                               AS candidate_id,
-        c.name                                             AS candidate_name,
+        c.name                                             AS employee_name,
         c.hourly_rate::float                               AS hourly_rate,
         COUNT(te.id)::int                                  AS entry_count,
         COALESCE(SUM(te.hours), 0)::float                  AS total_hours,
         COALESCE(SUM(te.hours * c.hourly_rate), 0)::float  AS expected_pay
-      FROM candidates c
+      FROM employees c
       LEFT JOIN time_entries te
         ON te.candidate_id = c.id AND te.status = 'approved' ${dateFilter}
       GROUP BY c.id, c.name, c.hourly_rate
@@ -133,7 +133,7 @@ async function timesheetDiscrepancyView(req, res, from, to) {
     const result = await req.db.query(`
       SELECT
         c.id                 AS candidate_id,
-        c.name               AS candidate_name,
+        c.name               AS employee_name,
         c.hourly_rate::float AS hourly_rate,
 
         -- All submitted entries (pending + approved + rejected)
@@ -176,7 +176,7 @@ async function timesheetDiscrepancyView(req, res, from, to) {
         -- Admin-rejected
         COUNT(te.id) FILTER (WHERE te.status = 'rejected')::int                         AS admin_rejected_entries
 
-      FROM candidates c
+      FROM employees c
       LEFT JOIN time_entries te
         ON te.candidate_id = c.id ${dateFilter}
       GROUP BY c.id, c.name, c.hourly_rate
@@ -243,21 +243,21 @@ async function timesheetDiscrepancyView(req, res, from, to) {
   }
 }
 
-// ── GET /api/payroll/timesheet-detail/:candidateId ─────────────────────────
+// ── GET /api/payroll/timesheet-detail/:employeeId ─────────────────────────
 // Drilldown: all time entries for a candidate, with both approval statuses
-router.get('/timesheet-detail/:candidateId', async (req, res) => {
+router.get('/timesheet-detail/:employeeId', async (req, res) => {
   try {
-    const { candidateId } = req.params;
+    const { employeeId } = req.params;
     const { from, to } = req.query;
 
     const candidateResult = await req.db.query(
-      'SELECT id, name, hourly_rate::float AS hourly_rate FROM candidates WHERE id = $1',
-      [candidateId]
+      'SELECT id, name, hourly_rate::float AS hourly_rate FROM employees WHERE id = $1',
+      [employeeId]
     );
     const candidate = candidateResult.rows[0];
     if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
 
-    const p = [candidateId];
+    const p = [employeeId];
     const dateFilter = buildDateFilter('te', from, to, p);
 
     const entriesResult = await req.db.query(`
@@ -273,7 +273,7 @@ router.get('/timesheet-detail/:candidateId', async (req, res) => {
         te.client_approved_at,
         (te.hours * c.hourly_rate)::float AS amount
       FROM time_entries te
-      JOIN candidates c ON c.id = te.candidate_id
+      JOIN employees c ON c.id = te.candidate_id
       WHERE te.candidate_id = $1 ${dateFilter}
       ORDER BY te.date DESC
     `, p);

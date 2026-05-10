@@ -119,7 +119,7 @@ function SkillsEditor({ skills, onUpdate }) {
 
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function ResumeBuilder() {
-  const [candidates, setCandidates] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [selected, setSelected]     = useState(null);
   const [resume, setResume]         = useState(null);
@@ -129,7 +129,7 @@ export default function ResumeBuilder() {
 
   useEffect(() => {
     api.get('/api/candidates?status=active')
-      .then(r => setCandidates(Array.isArray(r.data) ? r.data : r.data.candidates || []))
+      .then(r => setEmployees(Array.isArray(r.data) ? r.data : r.data.candidates || []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -202,7 +202,7 @@ export default function ResumeBuilder() {
                 <p className="text-xs text-gray-400 truncate">{c.email}</p>
               </button>
             ))}
-            {filtered.length === 0 && <p className="text-center text-sm text-gray-400 py-8">No candidates found</p>}
+            {filtered.length === 0 && <p className="text-center text-sm text-gray-400 py-8">No employees found</p>}
           </div>
         )}
       </div>

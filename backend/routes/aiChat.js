@@ -62,7 +62,7 @@ async function buildDataContext(db) {
   try {
     const employeesResult = await db.query(`
       SELECT name, role AS job_title, hourly_rate, status
-      FROM candidates WHERE deleted_at IS NULL LIMIT 20
+      FROM employees WHERE deleted_at IS NULL LIMIT 20
     `);
     const employees = employeesResult.rows;
 
@@ -213,14 +213,14 @@ async function executeTool(db, toolName, input, userId) {
   try {
     switch (toolName) {
       case 'get_headcount': {
-        const totalResult = await db.query("SELECT COUNT(*) as c FROM candidates WHERE deleted_at IS NULL");
+        const totalResult = await db.query("SELECT COUNT(*) as c FROM employees WHERE deleted_at IS NULL");
         const total = totalResult.rows[0];
 
-        const activeResult = await db.query("SELECT COUNT(*) as c FROM candidates WHERE deleted_at IS NULL AND status=$1", ['active']);
+        const activeResult = await db.query("SELECT COUNT(*) as c FROM employees WHERE deleted_at IS NULL AND status=$1", ['active']);
         const active = activeResult.rows[0];
 
         const byTitleResult = await db.query(`
-          SELECT role AS job_title, COUNT(*) as count FROM candidates
+          SELECT role AS job_title, COUNT(*) as count FROM employees
           WHERE deleted_at IS NULL AND role IS NOT NULL AND role != ''
           GROUP BY role ORDER BY count DESC LIMIT 8
         `);
@@ -231,7 +231,7 @@ async function executeTool(db, toolName, input, userId) {
 
       case 'list_employees': {
         const { status, job_title, limit = 10 } = input;
-        let sql = `SELECT name, email, role AS job_title, hourly_rate, status, phone FROM candidates WHERE deleted_at IS NULL`;
+        let sql = `SELECT name, email, role AS job_title, hourly_rate, status, phone FROM employees WHERE deleted_at IS NULL`;
         const params = [];
         let paramIndex = 1;
         if (status) { sql += ` AND status = $${paramIndex}`; params.push(status); paramIndex++; }
@@ -256,7 +256,7 @@ async function executeTool(db, toolName, input, userId) {
         const month = new Date().toISOString().slice(0, 7);
         let pendingSql = `
           SELECT te.id, c.name as employee, te.date, te.hours, te.status, te.project
-          FROM time_entries te JOIN candidates c ON te.candidate_id = c.id
+          FROM time_entries te JOIN employees c ON te.candidate_id = c.id
           WHERE te.status = 'pending'
         `;
         const pendingParams = [];
@@ -271,7 +271,7 @@ async function executeTool(db, toolName, input, userId) {
         `;
         const monthlyParams = [month];
         let monthlyParamIndex = 2;
-        if (employee_name) { monthlySql += ' JOIN candidates c ON te.candidate_id=c.id'; }
+        if (employee_name) { monthlySql += ' JOIN employees c ON te.candidate_id=c.id'; }
         monthlySql += ` WHERE TO_CHAR(te.date, 'YYYY-MM') = $1 AND te.status != 'rejected'`;
         if (employee_name) { monthlySql += ` AND c.name ILIKE $${monthlyParamIndex}`; monthlyParams.push(`%${employee_name}%`); }
 
@@ -285,7 +285,7 @@ async function executeTool(db, toolName, input, userId) {
         const { employee_name, status = 'all' } = input;
         let sql = `
           SELECT a.id, c.name as employee, a.type, a.start_date, a.end_date, a.status, a.reason
-          FROM absences a JOIN candidates c ON a.candidate_id = c.id
+          FROM absences a JOIN employees c ON a.candidate_id = c.id
           WHERE 1=1
         `;
         const params = [];
@@ -325,7 +325,7 @@ async function executeTool(db, toolName, input, userId) {
         const { name, email, hourly_rate, job_title = '', phone = '', start_date = null } = input;
 
         // Check duplicate email
-        const existingResult = await db.query('SELECT id FROM candidates WHERE email = $1', [email]);
+        const existingResult = await db.query('SELECT id FROM employees WHERE email = $1', [email]);
         const existing = existingResult.rows[0];
         if (existing) return { success: false, error: `An employee with email ${email} already exists.` };
 
@@ -345,7 +345,7 @@ async function executeTool(db, toolName, input, userId) {
         indexUserEmail(email, req.user.tenantSlug).catch(() => {});
 
         await db.query(`
-          INSERT INTO candidates (user_id, name, email, phone, role, hourly_rate, status, start_date)
+          INSERT INTO employees (user_id, name, email, phone, role, hourly_rate, status, start_date)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `, [newUserId, name, email, phone, job_title, hourly_rate, 'active', start_date]);
 

@@ -288,7 +288,7 @@ export default function AdminImport() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Bulk Import</h1>
         <p className="text-gray-500 mt-1">
-          Upload CSV files to import candidates, timesheets, absences, or job postings in bulk.
+          Upload CSV files to import employees, timesheets, absences, or job postings in bulk.
           Download a template first to see the required column format with sample data.
         </p>
       </div>

@@ -52,7 +52,7 @@ export default function Reports() {
     client_id:    '',
   });
   const [tab,        setTab]        = useState('Hours');
-  const [candidates, setCandidates] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [clients,    setClients]    = useState([]);
 
   const [hoursData,   setHoursData]   = useState(null);
@@ -64,7 +64,7 @@ export default function Reports() {
 
   // Load candidates + clients once
   useEffect(() => {
-    api.get('/api/candidates').then(r => setCandidates(Array.isArray(r.data) ? r.data : []));
+    api.get('/api/employees').then(r => setEmployees(Array.isArray(r.data) ? r.data : []));
     api.get('/api/clients').then(r => setClients(Array.isArray(r.data) ? r.data : []));
   }, []);
 

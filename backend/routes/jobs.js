@@ -37,10 +37,10 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
   // Attach applications for admin
   if (req.user.role === 'admin') {
     const appResult = await req.db.query(`
-      SELECT ja.*, c.name as candidate_name, c.email as candidate_email,
+      SELECT ja.*, c.name as employee_name, c.email as employee_email,
         c.role as candidate_role, c.hourly_rate
       FROM job_applications ja
-      JOIN candidates c ON ja.candidate_id = c.id
+      JOIN employees c ON ja.candidate_id = c.id
       WHERE ja.job_id = $1
       ORDER BY ja.applied_at DESC
     `, [id]);
@@ -51,7 +51,7 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
   if (req.user.role === 'candidate') {
     const myResult = await req.db.query(`
       SELECT * FROM job_applications WHERE job_id = $1 AND candidate_id = $2
-    `, [id, req.user.candidateId]);
+    `, [id, req.user.employeeId]);
     job.my_application = myResult.rows[0] || null;
   }
 
@@ -155,7 +155,7 @@ router.post('/:id/apply', authenticate, injectTenantDb, async (req, res) => {
   const job = jobResult.rows[0];
   if (!job) return res.status(404).json({ error: 'Job not found or not open' });
 
-  const existingResult = await req.db.query('SELECT id FROM job_applications WHERE job_id = $1 AND candidate_id = $2', [jobId, req.user.candidateId]);
+  const existingResult = await req.db.query('SELECT id FROM job_applications WHERE job_id = $1 AND candidate_id = $2', [jobId, req.user.employeeId]);
   const existing = existingResult.rows[0];
   if (existing) return res.status(409).json({ error: 'You have already applied to this job' });
 
@@ -163,14 +163,14 @@ router.post('/:id/apply', authenticate, injectTenantDb, async (req, res) => {
     INSERT INTO job_applications (job_id, candidate_id, status, cover_letter)
     VALUES ($1, $2, 'applied', $3)
     RETURNING id
-  `, [jobId, req.user.candidateId, cover_letter || null]);
+  `, [jobId, req.user.employeeId, cover_letter || null]);
 
   const applicationId = insertResult.rows[0].id;
 
   // Notify admin(s) of new application
   const adminsResult = await req.db.query("SELECT id FROM users WHERE role = 'admin'");
   const admins = adminsResult.rows;
-  const candidateResult = await req.db.query('SELECT name FROM candidates WHERE id = $1', [req.user.candidateId]);
+  const candidateResult = await req.db.query('SELECT name FROM employees WHERE id = $1', [req.user.employeeId]);
   const candidate = candidateResult.rows[0];
   for (const admin of admins) {
     createNotification(
@@ -199,9 +199,9 @@ router.put('/:id/applications/:appId', authenticate, requireAdmin, injectTenantD
   }
 
   const appResult = await req.db.query(`
-    SELECT ja.*, c.user_id, c.name as candidate_name, jp.title as job_title
+    SELECT ja.*, c.user_id, c.name as employee_name, jp.title as job_title
     FROM job_applications ja
-    JOIN candidates c ON ja.candidate_id = c.id
+    JOIN employees c ON ja.candidate_id = c.id
     JOIN job_postings jp ON ja.job_id = jp.id
     WHERE ja.id = $1
   `, [appId]);
@@ -246,7 +246,7 @@ router.get('/my/applications', authenticate, injectTenantDb, async (req, res) =>
     LEFT JOIN clients cl ON jp.client_id = cl.id
     WHERE ja.candidate_id = $1
     ORDER BY ja.applied_at DESC
-  `, [req.user.candidateId]);
+  `, [req.user.employeeId]);
   const applications = result.rows;
   res.json(applications);
 });

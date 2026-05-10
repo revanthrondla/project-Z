@@ -26,11 +26,11 @@ export default function CandidateDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user?.candidateId) return;
+    if (!user?.employeeId) return;
     Promise.all([
-      api.get(`/api/candidates/${user.candidateId}/stats`),
-      api.get(`/api/candidates/${user.candidateId}`),
-      api.get('/api/time-entries', { params: { candidate_id: user.candidateId } })
+      api.get(`/api/employees/${user.employeeId}/stats`),
+      api.get(`/api/employees/${user.employeeId}`),
+      api.get('/api/time-entries', { params: { candidate_id: user.employeeId } })
     ]).then(([s, c, te]) => {
       setStats(s.data);
       setCandidate(c.data);

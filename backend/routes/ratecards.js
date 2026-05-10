@@ -34,11 +34,11 @@ router.get('/', authenticate, requireAdmin, injectTenantDb, async (req, res) => 
     const { client_id, project_id, candidate_id } = req.query;
     let sql = `
       SELECT rc.*,
-             ca.name  AS candidate_name,
+             ca.name  AS employee_name,
              cl.name  AS client_name,
              pr.name  AS project_name
       FROM rate_cards rc
-      LEFT JOIN candidates ca ON ca.id = rc.candidate_id
+      LEFT JOIN employees ca ON ca.id = rc.candidate_id
       LEFT JOIN clients    cl ON cl.id = rc.client_id
       LEFT JOIN projects   pr ON pr.id = rc.project_id
       WHERE 1=1
@@ -69,7 +69,7 @@ router.get('/resolve', authenticate, injectTenantDb, async (req, res) => {
 
     // Get candidate's client_id and role for fallback
     const candResult = await req.db.query(
-      'SELECT client_id, role, hourly_rate FROM candidates WHERE id = $1',
+      'SELECT client_id, role, hourly_rate FROM employees WHERE id = $1',
       [cid]
     );
     const candidate = candResult.rows[0];

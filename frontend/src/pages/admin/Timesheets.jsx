@@ -6,7 +6,7 @@ function StatusBadge({ status }) {
 }
 
 // ─── Entry Modal (Admin can add/edit entries) ────────────────────────────────
-function EntryModal({ entry, candidates, projects, onClose, onSaved }) {
+function EntryModal({ entry, employees, projects, onClose, onSaved }) {
   const isEdit = !!entry?.id;
   const [form, setForm] = useState({
     candidate_id: entry?.candidate_id || '',
@@ -181,7 +181,7 @@ function RejectModal({ entryId, onClose, onRejected }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function AdminTimesheets() {
   const [entries,    setEntries]    = useState([]);
-  const [candidates, setCandidates] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [projects,   setProjects]   = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [filters,    setFilters]    = useState({ candidate_id: '', project_id: '', status: '', month: '' });
@@ -205,7 +205,7 @@ export default function AdminTimesheets() {
 
   useEffect(() => {
     Promise.all([
-      api.get('/api/candidates').then(r => setCandidates(Array.isArray(r.data) ? r.data : [])),
+      api.get('/api/employees').then(r => setEmployees(Array.isArray(r.data) ? r.data : [])),
       api.get('/api/projects').then(r => setProjects(Array.isArray(r.data?.projects ?? r.data) ? (r.data?.projects ?? r.data) : [])),
     ]);
   }, []);
@@ -426,7 +426,7 @@ export default function AdminTimesheets() {
       {modal?.type === 'entry' && (
         <EntryModal
           entry={modal.entry}
-          candidates={candidates}
+          candidates={employees}
           projects={projects}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); }}

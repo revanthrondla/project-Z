@@ -463,7 +463,7 @@ export default function Tenants() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Organisation</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Code</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 hidden lg:table-cell">Plan</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Candidates</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Employees</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Clients</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Status</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Provisioned</th>

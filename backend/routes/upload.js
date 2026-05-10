@@ -113,23 +113,23 @@ john@example.com,2026-02-20,AWS Solutions Architect,Cloud architecture and servi
 `,
 
   timesheets: `# Flow Timesheet Import Template
-# Required columns: candidate_email, date, hours
+# Required columns: employee_email, date, hours
 # Optional columns: description, project, status
 # status values: pending | approved | rejected
 # date format: YYYY-MM-DD
-candidate_email,date,hours,description,project,status
+employee_email,date,hours,description,project,status
 alice@hireiq.com,2026-03-25,8,API development work,Backend API,pending
 alice@hireiq.com,2026-03-26,7.5,Code review and testing,Backend API,pending
 bob@hireiq.com,2026-03-25,8,UI component work,Design System,pending
 `,
 
   absences: `# Flow Absence Import Template
-# Required columns: candidate_email, start_date, end_date, type
+# Required columns: employee_email, start_date, end_date, type
 # Optional columns: status, notes
 # type values: vacation | sick | personal | public_holiday | other
 # status values: pending | approved | rejected
 # date format: YYYY-MM-DD
-candidate_email,start_date,end_date,type,status,notes
+employee_email,start_date,end_date,type,status,notes
 alice@hireiq.com,2026-04-01,2026-04-03,vacation,pending,Easter break
 bob@hireiq.com,2026-04-10,2026-04-10,sick,pending,Doctor appointment
 `,
@@ -152,7 +152,7 @@ router.get('/template/:type', authenticate, requireAdmin, injectTenantDb, async 
   let csv = TEMPLATES[type];
 
   // For the candidates template, append tenant-specific custom field columns
-  if (type === 'candidates') {
+  if (type === 'employees') {
     try {
       const cfResult = await req.db.query(
         'SELECT field_key, label, field_type, options FROM employee_custom_field_defs WHERE is_active = TRUE ORDER BY display_order ASC, id ASC'
@@ -208,7 +208,7 @@ router.get('/template/:type', authenticate, requireAdmin, injectTenantDb, async 
 // CANDIDATES UPLOAD
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.single('file'), async (req, res) => {
+router.post('/employees', authenticate, requireAdmin, injectTenantDb, upload.single('file'), async (req, res) => {
   try {
     const rows = parseCSV(req.file.buffer);
     const imported = [], failed = [];
@@ -273,7 +273,7 @@ router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.si
 
         const userId = userResult.rows[0].id;
         await req.db.query(
-          `INSERT INTO candidates (user_id, name, email, phone, role, hourly_rate, client_id, start_date, end_date, status, contract_type)
+          `INSERT INTO employees (user_id, name, email, phone, role, hourly_rate, client_id, start_date, end_date, status, contract_type)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [
             userId,
@@ -290,7 +290,7 @@ router.post('/candidates', authenticate, requireAdmin, injectTenantDb, upload.si
           ]
         );
 
-        const candResult = await req.db.query('SELECT id FROM candidates WHERE email = $1', [r.email.trim().toLowerCase()]);
+        const candResult = await req.db.query('SELECT id FROM employees WHERE email = $1', [r.email.trim().toLowerCase()]);
         const candRow = candResult.rows[0];
 
         // Insert extended contact info if any extended fields provided
@@ -370,7 +370,7 @@ router.post('/timesheets', authenticate, requireAdmin, injectTenantDb, upload.si
     const imported = [], failed = [];
 
     // Build email → candidate_id map
-    const candidateMapResult = await req.db.query('SELECT id, email FROM candidates');
+    const candidateMapResult = await req.db.query('SELECT id, email FROM employees');
     const candidateMap = {};
     candidateMapResult.rows.forEach(c => {
       candidateMap[c.email.toLowerCase()] = c.id;
@@ -380,15 +380,15 @@ router.post('/timesheets', authenticate, requireAdmin, injectTenantDb, upload.si
       const r = rows[i];
       const rowNum = i + 2;
       try {
-        if (!r.candidate_email?.trim()) throw new Error('candidate_email is required');
-        if (!isValidEmail(r.candidate_email)) throw new Error('invalid candidate_email');
+        if (!r.employee_email?.trim()) throw new Error('employee_email is required');
+        if (!isValidEmail(r.employee_email)) throw new Error('invalid employee_email');
         if (!r.date?.trim()) throw new Error('date is required');
         if (!isValidDate(r.date)) throw new Error('date must be YYYY-MM-DD');
         const hours = parseFloat(r.hours);
         if (isNaN(hours) || hours <= 0 || hours > 24) throw new Error('hours must be between 0 and 24');
 
-        const candidateId = candidateMap[r.candidate_email.trim().toLowerCase()];
-        if (!candidateId) throw new Error(`candidate "${r.candidate_email}" not found`);
+        const employeeId = candidateMap[r.employee_email.trim().toLowerCase()];
+        if (!employeeId) throw new Error(`candidate "${r.employee_email}" not found`);
 
         const validStatuses = ['pending', 'approved', 'rejected'];
         const status = r.status?.trim() || 'pending';
@@ -396,10 +396,10 @@ router.post('/timesheets', authenticate, requireAdmin, injectTenantDb, upload.si
 
         await req.db.query(
           'INSERT INTO time_entries (candidate_id, date, hours, description, project, status) VALUES ($1, $2, $3, $4, $5, $6)',
-          [candidateId, r.date.trim(), hours, r.description?.trim() || null, r.project?.trim() || null, status]
+          [employeeId, r.date.trim(), hours, r.description?.trim() || null, r.project?.trim() || null, status]
         );
 
-        imported.push({ row: rowNum, candidate: r.candidate_email, date: r.date, hours });
+        imported.push({ row: rowNum, candidate: r.employee_email, date: r.date, hours });
       } catch (err) {
         failed.push({ row: rowNum, data: r, error: err.message });
       }
@@ -420,7 +420,7 @@ router.post('/absences', authenticate, requireAdmin, injectTenantDb, upload.sing
     const rows = parseCSV(req.file.buffer);
     const imported = [], failed = [];
 
-    const candidateMapResult = await req.db.query('SELECT id, email FROM candidates');
+    const candidateMapResult = await req.db.query('SELECT id, email FROM employees');
     const candidateMap = {};
     candidateMapResult.rows.forEach(c => {
       candidateMap[c.email.toLowerCase()] = c.id;
@@ -430,7 +430,7 @@ router.post('/absences', authenticate, requireAdmin, injectTenantDb, upload.sing
       const r = rows[i];
       const rowNum = i + 2;
       try {
-        if (!r.candidate_email?.trim()) throw new Error('candidate_email is required');
+        if (!r.employee_email?.trim()) throw new Error('employee_email is required');
         if (!r.start_date?.trim() || !isValidDate(r.start_date)) throw new Error('start_date must be YYYY-MM-DD');
         if (!r.end_date?.trim() || !isValidDate(r.end_date)) throw new Error('end_date must be YYYY-MM-DD');
         if (r.end_date < r.start_date) throw new Error('end_date cannot be before start_date');
@@ -443,15 +443,15 @@ router.post('/absences', authenticate, requireAdmin, injectTenantDb, upload.sing
         const status = r.status?.trim() || 'pending';
         if (!validStatuses.includes(status)) throw new Error(`status must be one of: ${validStatuses.join(', ')}`);
 
-        const candidateId = candidateMap[r.candidate_email.trim().toLowerCase()];
-        if (!candidateId) throw new Error(`candidate "${r.candidate_email}" not found`);
+        const employeeId = candidateMap[r.employee_email.trim().toLowerCase()];
+        if (!employeeId) throw new Error(`candidate "${r.employee_email}" not found`);
 
         await req.db.query(
           'INSERT INTO absences (candidate_id, start_date, end_date, type, status, notes) VALUES ($1, $2, $3, $4, $5, $6)',
-          [candidateId, r.start_date.trim(), r.end_date.trim(), type, status, r.notes?.trim() || null]
+          [employeeId, r.start_date.trim(), r.end_date.trim(), type, status, r.notes?.trim() || null]
         );
 
-        imported.push({ row: rowNum, candidate: r.candidate_email, start_date: r.start_date, type });
+        imported.push({ row: rowNum, candidate: r.employee_email, start_date: r.start_date, type });
       } catch (err) {
         failed.push({ row: rowNum, data: r, error: err.message });
       }
@@ -552,7 +552,7 @@ router.post('/emergency-contacts', authenticate, requireAdmin, injectTenantDb, u
         if (!r.name) throw new Error('name is required');
         if (!r.phone1) throw new Error('phone1 is required');
 
-        const candResult = await db.query('SELECT id FROM candidates WHERE email = $1 AND deleted_at IS NULL', [r.employee_email.trim()]);
+        const candResult = await db.query('SELECT id FROM employees WHERE email = $1 AND deleted_at IS NULL', [r.employee_email.trim()]);
         const cand = candResult.rows[0];
         if (!cand) throw new Error(`No employee found with email: ${r.employee_email}`);
 
@@ -589,7 +589,7 @@ router.post('/employment-history', authenticate, requireAdmin, injectTenantDb, u
         if (!r.position_title) throw new Error('position_title is required');
         if (!r.start_date) throw new Error('start_date is required');
 
-        const candResult = await db.query('SELECT id FROM candidates WHERE email = $1 AND deleted_at IS NULL', [r.employee_email.trim()]);
+        const candResult = await db.query('SELECT id FROM employees WHERE email = $1 AND deleted_at IS NULL', [r.employee_email.trim()]);
         const cand = candResult.rows[0];
         if (!cand) throw new Error(`No employee found with email: ${r.employee_email}`);
 
@@ -639,7 +639,7 @@ router.post('/training-records', authenticate, requireAdmin, injectTenantDb, upl
         if (!r.training_date)  throw new Error('training_date is required');
         if (!r.name)           throw new Error('name (training name) is required');
 
-        const candResult = await db.query('SELECT id FROM candidates WHERE email = $1 AND deleted_at IS NULL', [r.employee_email.trim()]);
+        const candResult = await db.query('SELECT id FROM employees WHERE email = $1 AND deleted_at IS NULL', [r.employee_email.trim()]);
         const cand = candResult.rows[0];
         if (!cand) throw new Error(`No employee found with email: ${r.employee_email}`);
 

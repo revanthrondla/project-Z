@@ -37,7 +37,7 @@ function SignerBadge({ sig }) {
 }
 
 /* ── Upload Modal ── */
-function UploadModal({ candidates, clients, onClose, onUploaded }) {
+function UploadModal({ employees, clients, onClose, onUploaded }) {
   const [form, setForm] = useState({
     title: '', description: '',
     signature_type: 'none',
@@ -346,7 +346,7 @@ function DetailModal({ doc, onClose, onRefresh }) {
 /* ── Main Page ── */
 export default function AdminDocuments() {
   const [docs, setDocs]           = useState([]);
-  const [candidates, setCandidates] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [clients, setClients]     = useState([]);
   const [loading, setLoading]     = useState(true);
   const [showUpload, setShowUpload] = useState(false);
@@ -358,11 +358,11 @@ export default function AdminDocuments() {
     try {
       const [d, c, cl] = await Promise.all([
         api.get('/api/documents'),
-        api.get('/api/candidates'),
+        api.get('/api/employees'),
         api.get('/api/clients'),
       ]);
       setDocs(Array.isArray(d.data) ? d.data : []);
-      setCandidates(Array.isArray(c.data) ? c.data : []);
+      setEmployees(Array.isArray(c.data) ? c.data : []);
       setClients(Array.isArray(cl.data) ? cl.data : []);
     } finally { setLoading(false); }
   };
@@ -510,7 +510,7 @@ export default function AdminDocuments() {
 
       {showUpload && (
         <UploadModal
-          candidates={candidates}
+          candidates={employees}
           clients={clients}
           onClose={() => setShowUpload(false)}
           onUploaded={load}

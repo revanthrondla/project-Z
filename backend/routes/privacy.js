@@ -3,9 +3,9 @@
  * GET    /api/privacy/requests                   — list data requests (admin)
  * POST   /api/privacy/requests                   — submit a data request
  * PUT    /api/privacy/requests/:id               — update request status (admin)
- * GET    /api/privacy/export/:candidateId        — export all personal data as JSON
- * DELETE /api/privacy/delete/:candidateId        — soft-delete candidate (with legal-hold check)
- * PUT    /api/privacy/correct/:candidateId       — apply correction to candidate record
+ * GET    /api/privacy/export/:employeeId        — export all personal data as JSON
+ * DELETE /api/privacy/delete/:employeeId        — soft-delete candidate (with legal-hold check)
+ * PUT    /api/privacy/correct/:employeeId       — apply correction to candidate record
  */
 const express = require('express');
 const router  = express.Router();
@@ -20,10 +20,10 @@ router.get('/requests', authenticate, requireAdmin, injectTenantDb, async (req, 
     if (status) { params.push(status); where.push(`dr.status = $${params.length}`); }
 
     const result = await req.db.query(`
-      SELECT dr.*, ca.name AS candidate_name, ca.email AS candidate_email,
+      SELECT dr.*, ca.name AS employee_name, ca.email AS employee_email,
              u.name AS processed_by_name
       FROM data_requests dr
-      JOIN candidates ca ON ca.id = dr.candidate_id
+      JOIN employees ca ON ca.id = dr.candidate_id
       LEFT JOIN users u ON u.id = dr.processed_by
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY dr.created_at DESC
@@ -44,7 +44,7 @@ router.post('/requests', authenticate, injectTenantDb, auditLog('data_requests')
     }
 
     // Admin can create on behalf of anyone; candidates can only submit for themselves
-    if (req.user.role === 'candidate' && req.user.candidateId !== parseInt(candidate_id, 10)) {
+    if (req.user.role === 'candidate' && req.user.employeeId !== parseInt(candidate_id, 10)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -85,12 +85,12 @@ router.put('/requests/:id', authenticate, requireAdmin, injectTenantDb, auditLog
 });
 
 // ── Export all personal data ──────────────────────────────────────────────────
-router.get('/export/:candidateId', authenticate, injectTenantDb, async (req, res) => {
+router.get('/export/:employeeId', authenticate, injectTenantDb, async (req, res) => {
   try {
-    const cid = parseInt(req.params.candidateId, 10);
+    const cid = parseInt(req.params.employeeId, 10);
 
     // Authorization: admin can export anyone; candidate can only export themselves
-    if (req.user.role === 'candidate' && req.user.candidateId !== cid) {
+    if (req.user.role === 'candidate' && req.user.employeeId !== cid) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -98,7 +98,7 @@ router.get('/export/:candidateId', authenticate, injectTenantDb, async (req, res
       candidate, timeEntries, absences, documents, invoices,
       expenses, emergencyContacts, bankAccounts,
     ] = await Promise.all([
-      req.db.query(`SELECT * FROM candidates WHERE id = $1`, [cid]),
+      req.db.query(`SELECT * FROM employees WHERE id = $1`, [cid]),
       req.db.query(`SELECT * FROM time_entries WHERE candidate_id = $1 ORDER BY date`, [cid]),
       req.db.query(`SELECT * FROM absences WHERE candidate_id = $1 ORDER BY start_date`, [cid]),
       req.db.query(`SELECT id, title, document_type, created_at, expires_at FROM documents WHERE candidate_id = $1`, [cid]),
@@ -132,7 +132,7 @@ router.get('/export/:candidateId', authenticate, injectTenantDb, async (req, res
     // Log the export
     await req.db.query(`
       INSERT INTO audit_logs (table_name, record_id, action, changed_by, new_values, ip_address)
-      VALUES ('candidates', $1, 'data_export', $2, $3, $4)
+      VALUES ('employees', $1, 'data_export', $2, $3, $4)
     `, [String(cid), req.user.id, JSON.stringify({ type: 'CCPA_export' }), req.ip || null])
     .catch(() => {});
 
@@ -146,11 +146,11 @@ router.get('/export/:candidateId', authenticate, injectTenantDb, async (req, res
 });
 
 // ── Soft-delete (Right to Erasure) ───────────────────────────────────────────
-router.delete('/delete/:candidateId', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
+router.delete('/delete/:employeeId', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   try {
-    const cid = parseInt(req.params.candidateId, 10);
+    const cid = parseInt(req.params.employeeId, 10);
 
-    const cand = await req.db.query(`SELECT * FROM candidates WHERE id = $1`, [cid]);
+    const cand = await req.db.query(`SELECT * FROM employees WHERE id = $1`, [cid]);
     if (!cand.rows.length) return res.status(404).json({ error: 'Not found' });
 
     if (cand.rows[0].legal_hold) {
@@ -159,7 +159,7 @@ router.delete('/delete/:candidateId', authenticate, requireAdmin, injectTenantDb
 
     // Soft delete: set deleted_at, anonymize PII
     await req.db.query(`
-      UPDATE candidates SET
+      UPDATE employees SET
         deleted_at  = NOW(),
         name        = '[DELETED]',
         email       = 'deleted_' || id || '@redacted.invalid',
@@ -170,7 +170,7 @@ router.delete('/delete/:candidateId', authenticate, requireAdmin, injectTenantDb
     `, [cid]);
 
     // Cascade: anonymize user account
-    const user = await req.db.query(`SELECT user_id FROM candidates WHERE id = $1`, [cid]);
+    const user = await req.db.query(`SELECT user_id FROM employees WHERE id = $1`, [cid]);
     if (user.rows[0]?.user_id) {
       await req.db.query(`
         UPDATE users SET
@@ -184,7 +184,7 @@ router.delete('/delete/:candidateId', authenticate, requireAdmin, injectTenantDb
     // Audit log
     await req.db.query(`
       INSERT INTO audit_logs (table_name, record_id, action, changed_by, new_values, ip_address)
-      VALUES ('candidates', $1, 'erasure_request', $2, $3, $4)
+      VALUES ('employees', $1, 'erasure_request', $2, $3, $4)
     `, [String(cid), req.user.id, JSON.stringify({ legal_basis: req.body.legal_basis || 'CCPA Right to Erasure' }), req.ip || null])
     .catch(() => {});
 
@@ -196,9 +196,9 @@ router.delete('/delete/:candidateId', authenticate, requireAdmin, injectTenantDb
 });
 
 // ── Correct personal data ─────────────────────────────────────────────────────
-router.put('/correct/:candidateId', authenticate, requireAdmin, injectTenantDb, auditLog('candidates'), async (req, res) => {
+router.put('/correct/:employeeId', authenticate, requireAdmin, injectTenantDb, auditLog('employees'), async (req, res) => {
   try {
-    const cid = parseInt(req.params.candidateId, 10);
+    const cid = parseInt(req.params.employeeId, 10);
     const { name, email, phone, notes } = req.body;
 
     const sets = []; const params = [];
@@ -211,7 +211,7 @@ router.put('/correct/:candidateId', authenticate, requireAdmin, injectTenantDb, 
     params.push(cid);
 
     const result = await req.db.query(
-      `UPDATE candidates SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id, name, email, phone`,
+      `UPDATE employees SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id, name, email, phone`,
       params
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
@@ -219,7 +219,7 @@ router.put('/correct/:candidateId', authenticate, requireAdmin, injectTenantDb, 
     // Audit log
     await req.db.query(`
       INSERT INTO audit_logs (table_name, record_id, action, changed_by, new_values, ip_address)
-      VALUES ('candidates', $1, 'data_correction', $2, $3, $4)
+      VALUES ('employees', $1, 'data_correction', $2, $3, $4)
     `, [String(cid), req.user.id, JSON.stringify({ corrected: req.body, legal_basis: 'CCPA Right to Correct' }), req.ip || null])
     .catch(() => {});
 

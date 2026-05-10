@@ -184,7 +184,7 @@ const PUBLISH_STATUS = {
 };
 
 // Drilldown modal for a candidate
-function CandidateDetailModal({ candidateId, candidateName, period, onClose }) {
+function CandidateDetailModal({ employeeId, candidateName, period, onClose }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -192,11 +192,11 @@ function CandidateDetailModal({ candidateId, candidateName, period, onClose }) {
     const params = new URLSearchParams();
     if (period?.from) params.set('from', period.from);
     if (period?.to)   params.set('to', period.to);
-    api.get(`/api/payroll/timesheet-detail/${candidateId}?${params}`)
+    api.get(`/api/payroll/timesheet-detail/${employeeId}?${params}`)
       .then(r => setDetail(r.data))
       .catch(() => setDetail(null))
       .finally(() => setLoading(false));
-  }, [candidateId, period]);
+  }, [employeeId, period]);
 
   const adminStatusColor = s =>
     s === 'approved' ? 'bg-green-100 text-green-700' :
@@ -464,7 +464,7 @@ function TimesheetDiscrepancyView({ data, loading }) {
 
       {drilldown && (
         <CandidateDetailModal
-          candidateId={drilldown.id}
+          employeeId={drilldown.id}
           candidateName={drilldown.name}
           period={data?.period}
           onClose={() => setDrilldown(null)}

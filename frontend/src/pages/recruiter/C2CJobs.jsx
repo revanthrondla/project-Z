@@ -98,7 +98,7 @@ export default function RecruiterC2CJobs() {
         <div className="flex gap-6">
           {/* Candidate tabs — left sidebar */}
           <div className="w-56 shrink-0">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Candidates</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Employees</p>
             <div className="space-y-1">
               {data.results.map(({ candidate, count }) => (
                 <button

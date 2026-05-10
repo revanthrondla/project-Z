@@ -29,7 +29,7 @@ function fmtAmt(exp) {
 }
 
 // ─── Expense Modal ──────────────────────────────────────────────────────────
-function ExpenseModal({ expense, candidates, clients, projects, onSave, onClose, isAdmin }) {
+function ExpenseModal({ expense, employees, clients, projects, onSave, onClose, isAdmin }) {
   const isEdit = !!expense?.id;
   const [form, setForm] = useState({
     candidate_id: expense?.candidate_id || '',
@@ -202,7 +202,7 @@ function RejectModal({ onConfirm, onClose }) {
 // ─── Main Expenses Page ─────────────────────────────────────────────────────
 export default function Expenses() {
   const [expenses, setExpenses] = useState([]);
-  const [candidates, setCandidates] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [clients, setClients] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -221,12 +221,12 @@ export default function Expenses() {
 
     const [eRes, candRes, cRes, pRes] = await Promise.all([
       fetch(`${API}/api/expenses`, { headers: { Authorization: `Bearer ${token}` } }),
-      user.role === 'admin' ? fetch(`${API}/api/candidates`, { headers: { Authorization: `Bearer ${token}` } }) : Promise.resolve(null),
+      user.role === 'admin' ? fetch(`${API}/api/employees`, { headers: { Authorization: `Bearer ${token}` } }) : Promise.resolve(null),
       fetch(`${API}/api/clients`, { headers: { Authorization: `Bearer ${token}` } }),
       fetch(`${API}/api/projects`, { headers: { Authorization: `Bearer ${token}` } }),
     ]);
     if (eRes.ok) setExpenses(await eRes.json());
-    if (candRes?.ok) setCandidates(await candRes.json());
+    if (candRes?.ok) setEmployees(await candRes.json());
     if (cRes.ok) setClients(await cRes.json());
     if (pRes.ok) setProjects(await pRes.json());
     setLoading(false);
@@ -421,7 +421,7 @@ export default function Expenses() {
       {showModal && (
         <ExpenseModal
           expense={editExpense}
-          candidates={candidates}
+          candidates={employees}
           clients={clients}
           projects={projects}
           isAdmin={isAdmin}

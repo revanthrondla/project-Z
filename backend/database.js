@@ -60,10 +60,10 @@ const TENANT_DDL = `
   );
 
   -- ═══════════════════════════════════════════════════════════════════════════
-  -- CANDIDATES (EMPLOYEES)
+  -- EMPLOYEES
   -- ═══════════════════════════════════════════════════════════════════════════
 
-  CREATE TABLE IF NOT EXISTS candidates (
+  CREATE TABLE IF NOT EXISTS employees (
     id            BIGSERIAL PRIMARY KEY,
     user_id       BIGINT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     name          TEXT NOT NULL,
@@ -82,10 +82,10 @@ const TENANT_DDL = `
     updated_at    TIMESTAMPTZ DEFAULT NOW()
   );
 
-  -- Resume builder (one per candidate, JSON arrays for sections)
+  -- Resume builder (one per employee, JSON arrays for sections)
   CREATE TABLE IF NOT EXISTS candidate_resumes (
     id             BIGSERIAL PRIMARY KEY,
-    candidate_id   BIGINT UNIQUE NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id   BIGINT UNIQUE NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     headline       TEXT,
     summary        TEXT,
     experience     JSONB DEFAULT '[]',
@@ -103,7 +103,7 @@ const TENANT_DDL = `
 
   CREATE TABLE IF NOT EXISTS time_entries (
     id            BIGSERIAL PRIMARY KEY,
-    candidate_id  BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id  BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     date          DATE NOT NULL,
     hours         NUMERIC(5,2) NOT NULL CHECK(hours > 0 AND hours <= 24),
     description   TEXT,
@@ -121,7 +121,7 @@ const TENANT_DDL = `
 
   CREATE TABLE IF NOT EXISTS absences (
     id            BIGSERIAL PRIMARY KEY,
-    candidate_id  BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id  BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     start_date    DATE NOT NULL,
     end_date      DATE NOT NULL,
     type          TEXT NOT NULL
@@ -141,7 +141,7 @@ const TENANT_DDL = `
   CREATE TABLE IF NOT EXISTS invoices (
     id             BIGSERIAL PRIMARY KEY,
     invoice_number TEXT UNIQUE NOT NULL,
-    candidate_id   BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id   BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     client_id      BIGINT REFERENCES clients(id) ON DELETE SET NULL,
     period_start   DATE NOT NULL,
     period_end     DATE NOT NULL,
@@ -204,7 +204,7 @@ const TENANT_DDL = `
   CREATE TABLE IF NOT EXISTS job_applications (
     id           BIGSERIAL PRIMARY KEY,
     job_id       BIGINT NOT NULL REFERENCES job_postings(id) ON DELETE CASCADE,
-    candidate_id BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     status       TEXT DEFAULT 'applied'
                  CHECK(status IN ('applied','reviewing','shortlisted','rejected','hired')),
     cover_letter TEXT,
@@ -249,7 +249,7 @@ const TENANT_DDL = `
     status           TEXT DEFAULT 'pending'
                      CHECK(status IN ('pending','partial','completed','voided')),
     uploaded_by      BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    candidate_id     BIGINT REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id     BIGINT REFERENCES employees(id) ON DELETE CASCADE,
     client_id        BIGINT REFERENCES clients(id) ON DELETE CASCADE,
     notes            TEXT,
     created_at       TIMESTAMPTZ DEFAULT NOW(),
@@ -372,7 +372,7 @@ const TENANT_DDL = `
   CREATE TABLE IF NOT EXISTS payroll_items (
     id               BIGSERIAL PRIMARY KEY,
     payroll_run_id   BIGINT NOT NULL REFERENCES payroll_runs(id) ON DELETE CASCADE,
-    candidate_id     BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id     BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     hours_worked     NUMERIC(8,2) DEFAULT 0,
     hourly_rate      NUMERIC(10,2) DEFAULT 0,
     gross_pay        NUMERIC(12,2) DEFAULT 0,
@@ -388,7 +388,7 @@ const TENANT_DDL = `
 
   CREATE TABLE IF NOT EXISTS employee_contact_ext (
     id               BIGSERIAL PRIMARY KEY,
-    candidate_id     BIGINT UNIQUE NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id     BIGINT UNIQUE NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     alt_phone        TEXT,
     personal_email   TEXT,
     home_street      TEXT,
@@ -408,7 +408,7 @@ const TENANT_DDL = `
   -- phone1/phone2 match what the routes actually insert/update
   CREATE TABLE IF NOT EXISTS emergency_contacts (
     id               BIGSERIAL PRIMARY KEY,
-    candidate_id     BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id     BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     name             TEXT NOT NULL,
     relationship     TEXT,
     phone1           TEXT NOT NULL,   -- was: phone
@@ -427,7 +427,7 @@ const TENANT_DDL = `
   -- position_title / start_date / end_date match the route column names
   CREATE TABLE IF NOT EXISTS employment_history (
     id              BIGSERIAL PRIMARY KEY,
-    candidate_id    BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id    BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     position_title  TEXT NOT NULL,    -- was: job_title
     department      TEXT,
     employment_type TEXT DEFAULT 'full_time'
@@ -457,7 +457,7 @@ const TENANT_DDL = `
 
   CREATE TABLE IF NOT EXISTS bank_accounts (
     id               BIGSERIAL PRIMARY KEY,
-    candidate_id     BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id     BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     bank_name        TEXT NOT NULL,
     account_name     TEXT NOT NULL,
     account_number   TEXT NOT NULL,   -- stored in full; API responses mask all but last 4
@@ -476,7 +476,7 @@ const TENANT_DDL = `
 
   CREATE TABLE IF NOT EXISTS leave_balances (
     id               BIGSERIAL PRIMARY KEY,
-    candidate_id     BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id     BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     leave_type       TEXT NOT NULL,
     entitlement_days NUMERIC(5,1) DEFAULT 0,   -- was: entitled_days
     used_days        NUMERIC(5,1) DEFAULT 0,
@@ -494,7 +494,7 @@ const TENANT_DDL = `
 
   CREATE TABLE IF NOT EXISTS employee_assets (
     id            BIGSERIAL PRIMARY KEY,
-    candidate_id  BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id  BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     category      TEXT NOT NULL DEFAULT 'other', -- was: asset_type
     description   TEXT NOT NULL,
     serial_number TEXT,
@@ -514,7 +514,7 @@ const TENANT_DDL = `
 
   CREATE TABLE IF NOT EXISTS employee_benefits (
     id             BIGSERIAL PRIMARY KEY,
-    candidate_id   BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id   BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     benefit_type   TEXT NOT NULL,
     provider       TEXT,
     value          NUMERIC(12,2),
@@ -533,7 +533,7 @@ const TENANT_DDL = `
 
   CREATE TABLE IF NOT EXISTS performance_reviews (
     id            BIGSERIAL PRIMARY KEY,
-    candidate_id  BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id  BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     review_date   DATE NOT NULL,
     reviewer_id   BIGINT REFERENCES users(id) ON DELETE SET NULL,
     reviewer_name TEXT,
@@ -551,7 +551,7 @@ const TENANT_DDL = `
 
   CREATE TABLE IF NOT EXISTS training_records (
     id              BIGSERIAL PRIMARY KEY,
-    candidate_id    BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id    BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     training_date   DATE,            -- was: completion_date
     name            TEXT NOT NULL,   -- was: training_name
     content         TEXT,            -- course content / description
@@ -571,7 +571,7 @@ const TENANT_DDL = `
 
   CREATE TABLE IF NOT EXISTS employee_licenses (
     id                   BIGSERIAL PRIMARY KEY,
-    candidate_id         BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id         BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     document_type        TEXT NOT NULL,   -- licence type / name
     license_number       TEXT,
     issuing_authority    TEXT,
@@ -748,9 +748,9 @@ const TENANT_DDL = `
   -- INDEXES
   -- ═══════════════════════════════════════════════════════════════════════════
 
-  CREATE INDEX IF NOT EXISTS idx_candidates_user_id      ON candidates(user_id);
-  CREATE INDEX IF NOT EXISTS idx_candidates_client_id    ON candidates(client_id);
-  CREATE INDEX IF NOT EXISTS idx_candidates_status       ON candidates(status);
+  CREATE INDEX IF NOT EXISTS idx_employees_user_id      ON employees(user_id);
+  CREATE INDEX IF NOT EXISTS idx_employees_client_id    ON employees(client_id);
+  CREATE INDEX IF NOT EXISTS idx_employees_status       ON employees(status);
   CREATE INDEX IF NOT EXISTS idx_time_entries_candidate  ON time_entries(candidate_id);
   CREATE INDEX IF NOT EXISTS idx_time_entries_date       ON time_entries(date);
   CREATE INDEX IF NOT EXISTS idx_time_entries_status     ON time_entries(status);
@@ -798,7 +798,7 @@ const TENANT_DDL = `
   CREATE TABLE IF NOT EXISTS recruiter_assignments (
     id           BIGSERIAL PRIMARY KEY,
     recruiter_id BIGINT NOT NULL REFERENCES recruiters(id) ON DELETE CASCADE,
-    candidate_id BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     notes        TEXT,
     assigned_at  TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(recruiter_id, candidate_id)
@@ -863,10 +863,10 @@ async function createTenantSchema(slug) {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_mfa_otp_user ON mfa_otp_codes(user_id, expires_at)`);
 
     // ── Recruiter & Market Status migrations ────────────────────────────────────
-    // 1. Add market_status + available_date + market_notes to candidates
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS market_status TEXT DEFAULT 'employed' CHECK(market_status IN ('employed','in_market','about_to_be_in_market'))`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS available_date DATE`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS market_notes TEXT`);
+    // 1. Add market_status + available_date + market_notes to employees
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS market_status TEXT DEFAULT 'employed' CHECK(market_status IN ('employed','in_market','about_to_be_in_market'))`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS available_date DATE`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS market_notes TEXT`);
 
     // 2. Expand users.role to include 'recruiter'
     await client.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
@@ -890,7 +890,7 @@ async function createTenantSchema(slug) {
       CREATE TABLE IF NOT EXISTS recruiter_assignments (
         id           BIGSERIAL PRIMARY KEY,
         recruiter_id BIGINT NOT NULL REFERENCES recruiters(id) ON DELETE CASCADE,
-        candidate_id BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+        candidate_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
         notes        TEXT,
         assigned_at  TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(recruiter_id, candidate_id)
@@ -937,7 +937,7 @@ async function createTenantSchema(slug) {
     // 7. Per-candidate custom field values
     await client.query(`
       CREATE TABLE IF NOT EXISTS employee_custom_field_values (
-        candidate_id  BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+        candidate_id  BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
         field_key     TEXT NOT NULL,
         value_text    TEXT,
         value_json    JSONB,
@@ -1040,9 +1040,9 @@ async function createTenantSchema(slug) {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_org_departments_active ON org_departments(is_active)`);
 
-    // Add department_id to candidates if not exists (migration-safe)
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS department_id BIGINT REFERENCES org_departments(id) ON DELETE SET NULL`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS location_id   BIGINT REFERENCES org_locations(id)   ON DELETE SET NULL`);
+    // Add department_id to employees if not exists (migration-safe)
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS department_id BIGINT REFERENCES org_departments(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_id   BIGINT REFERENCES org_locations(id)   ON DELETE SET NULL`);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSULTING / PROFESSIONAL SERVICES SCHEMA
@@ -1098,7 +1098,7 @@ async function createTenantSchema(slug) {
         name               TEXT NOT NULL,
         rate_type          TEXT NOT NULL
                            CHECK(rate_type IN ('person','role','project','client_default')),
-        candidate_id       BIGINT REFERENCES candidates(id) ON DELETE CASCADE,
+        candidate_id       BIGINT REFERENCES employees(id) ON DELETE CASCADE,
         client_id          BIGINT REFERENCES clients(id) ON DELETE CASCADE,
         project_id         BIGINT REFERENCES projects(id) ON DELETE CASCADE,
         role_name          TEXT,
@@ -1118,7 +1118,7 @@ async function createTenantSchema(slug) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS expenses (
         id              BIGSERIAL PRIMARY KEY,
-        candidate_id    BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+        candidate_id    BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
         client_id       BIGINT REFERENCES clients(id) ON DELETE SET NULL,
         project_id      BIGINT REFERENCES projects(id) ON DELETE SET NULL,
         task_id         BIGINT REFERENCES project_tasks(id) ON DELETE SET NULL,
@@ -1185,12 +1185,12 @@ async function createTenantSchema(slug) {
     await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax_rate          NUMERIC(5,4) DEFAULT 0`);
     await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS discount_amount   NUMERIC(12,2) DEFAULT 0`);
 
-    // candidates: contractor management fields + utilization target
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS w9_collected          BOOLEAN DEFAULT FALSE`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS classification_status TEXT DEFAULT 'employee' CHECK(classification_status IN ('employee','contractor','pending_review'))`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS classification_notes  TEXT`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS sow_url               TEXT`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS target_utilization    NUMERIC(5,2) DEFAULT 80`);
+    // employees: contractor management fields + utilization target
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS w9_collected          BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS classification_status TEXT DEFAULT 'employee' CHECK(classification_status IN ('employee','contractor','pending_review'))`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS classification_notes  TEXT`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS sow_url               TEXT`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS target_utilization    NUMERIC(5,2) DEFAULT 80`);
 
     // ══════════════════════════════════════════════════════════════════════════
     // PAY RULES ENGINE  (FLSA overtime, minimum wage, rounding, breaks)
@@ -1228,7 +1228,7 @@ async function createTenantSchema(slug) {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_pay_rules_default ON pay_rules(is_default) WHERE is_default = TRUE`);
 
     // Candidate-to-rule assignment (override default)
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS pay_rule_id BIGINT REFERENCES pay_rules(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_rule_id BIGINT REFERENCES pay_rules(id) ON DELETE SET NULL`);
 
     // ── Seed one FLSA-compliant default rule ─────────────────────────────────
     await client.query(`
@@ -1243,7 +1243,7 @@ async function createTenantSchema(slug) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS data_requests (
         id             BIGSERIAL PRIMARY KEY,
-        candidate_id   BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+        candidate_id   BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
         request_type   TEXT NOT NULL CHECK(request_type IN ('export','delete','correct','opt_out')),
         status         TEXT NOT NULL DEFAULT 'pending'
                        CHECK(status IN ('pending','in_progress','completed','rejected')),
@@ -1260,10 +1260,10 @@ async function createTenantSchema(slug) {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_data_requests_candidate ON data_requests(candidate_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_data_requests_status    ON data_requests(status)`);
 
-    // Legal hold flag on candidates + soft delete
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS legal_hold     BOOLEAN DEFAULT FALSE`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS legal_hold_reason TEXT`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS deleted_at     TIMESTAMPTZ`);
+    // Legal hold flag on employees + soft delete
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS legal_hold     BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS legal_hold_reason TEXT`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS deleted_at     TIMESTAMPTZ`);
 
     // ══════════════════════════════════════════════════════════════════════════
     // WEBHOOK & TENANT API KEY TABLE
@@ -1323,20 +1323,20 @@ async function createTenantSchema(slug) {
     // --- Candidate / employee-level EEO fields ---
 
     // Race / ethnicity (EEO-1 required, 7 EEOC categories + prefer_not_to_say)
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_race_ethnicity TEXT
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS eeo_race_ethnicity TEXT
       CHECK(eeo_race_ethnicity IN (
         'hispanic_latino','white','black_african_american',
         'native_hawaiian_pacific_islander','asian',
         'american_indian_alaska_native','two_or_more_races','prefer_not_to_say'
       ))`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_race_self_identified BOOLEAN DEFAULT TRUE`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS eeo_race_self_identified BOOLEAN DEFAULT TRUE`);
 
     // Sex / gender (EEO-1 required; nonbinary included for EEOC proposed expansion)
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_gender TEXT
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS eeo_gender TEXT
       CHECK(eeo_gender IN ('male','female','nonbinary','prefer_not_to_say'))`);
 
     // EEO-1 job category (9 EEOC occupational groups)
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_job_category TEXT
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS eeo_job_category TEXT
       CHECK(eeo_job_category IN (
         'exec_senior_mgr','first_mid_mgr','professional','technician',
         'sales','admin_support','craft','operative',
@@ -1344,22 +1344,22 @@ async function createTenantSchema(slug) {
       ))`);
 
     // Veteran status (VEVRAA — required for federal contractors)
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS veteran_status TEXT
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS veteran_status TEXT
       CHECK(veteran_status IN (
         'not_veteran','disabled_veteran','recently_separated_veteran',
         'active_duty_wartime_badge_veteran','armed_forces_service_medal_veteran',
         'prefer_not_to_say'
       ))`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS veteran_self_identified BOOLEAN DEFAULT TRUE`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS veteran_self_identified BOOLEAN DEFAULT TRUE`);
 
     // Disability status (Section 503 / ADA)
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS disability_status TEXT
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS disability_status TEXT
       CHECK(disability_status IN ('yes_disability','no_disability','prefer_not_to_say'))`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS disability_self_identified BOOLEAN DEFAULT TRUE`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS disability_self_identified BOOLEAN DEFAULT TRUE`);
 
     // Self-ID audit trail
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_self_id_date DATE`);
-    await client.query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS eeo_data_source  TEXT DEFAULT 'not_collected'
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS eeo_self_id_date DATE`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS eeo_data_source  TEXT DEFAULT 'not_collected'
       CHECK(eeo_data_source IN ('self_identified','visual_observation','payroll_records','not_collected'))`);
 
     // --- EEO-1 snapshot/reporting table ---
@@ -1379,6 +1379,36 @@ async function createTenantSchema(slug) {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_eeo_reports_year         ON eeo_reports(report_year)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_eeo_reports_snapshot     ON eeo_reports(snapshot_date)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_eeo_reports_job_category ON eeo_reports(job_category)`);
+
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // IDEMPOTENT TABLE RENAME: candidates → employees
+    // Runs once on existing DBs; no-op on fresh DBs (table is created as employees)
+    // ══════════════════════════════════════════════════════════════════════════
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT FROM pg_tables
+          WHERE schemaname = current_schema() AND tablename = 'candidates'
+        ) AND NOT EXISTS (
+          SELECT FROM pg_tables
+          WHERE schemaname = current_schema() AND tablename = 'employees'
+        ) THEN
+          ALTER TABLE candidates RENAME TO employees;
+          -- Update index names to match
+          IF EXISTS (SELECT FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'idx_candidates_user_id') THEN
+            ALTER INDEX idx_candidates_user_id   RENAME TO idx_employees_user_id;
+          END IF;
+          IF EXISTS (SELECT FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'idx_candidates_client_id') THEN
+            ALTER INDEX idx_candidates_client_id RENAME TO idx_employees_client_id;
+          END IF;
+          IF EXISTS (SELECT FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'idx_candidates_status') THEN
+            ALTER INDEX idx_candidates_status    RENAME TO idx_employees_status;
+          END IF;
+        END IF;
+      END $$
+    `);
 
     console.log(`✅ Schema ready: ${schema}`);
   } finally {
@@ -1414,7 +1444,7 @@ async function seedTenantAdmin(slug, adminName, adminEmail, adminPassword) {
 
 /**
  * Seed default admin + demo data for a brand-new tenant.
- * Production: only the admin account, no demo candidates.
+ * Production: only the admin account, no demo employees.
  */
 async function initializeTenantData(slug) {
   const { wrapper, release } = await createScopedWrapper(pool, `tenant_${slug}`);
@@ -1451,7 +1481,7 @@ async function initializeTenantData(slug) {
       ).run('Alice Johnson', 'alice@hireiq.com', pwHash, 'candidate', true);
 
       const a1 = await wrapper.prepare(
-        'INSERT INTO candidates (user_id, name, email, phone, role, hourly_rate, client_id, start_date, status, contract_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)'
+        'INSERT INTO employees (user_id, name, email, phone, role, hourly_rate, client_id, start_date, status, contract_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)'
       ).run(u1.lastInsertRowid, 'Alice Johnson', 'alice@hireiq.com', '+1-555-0101', 'Senior Developer', 95, c1.lastInsertRowid, '2025-01-15', 'active', 'contractor');
 
       const u2 = await wrapper.prepare(
@@ -1459,7 +1489,7 @@ async function initializeTenantData(slug) {
       ).run('Bob Williams', 'bob@hireiq.com', pwHash, 'candidate', true);
 
       await wrapper.prepare(
-        'INSERT INTO candidates (user_id, name, email, phone, role, hourly_rate, client_id, start_date, status, contract_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)'
+        'INSERT INTO employees (user_id, name, email, phone, role, hourly_rate, client_id, start_date, status, contract_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)'
       ).run(u2.lastInsertRowid, 'Bob Williams', 'bob@hireiq.com', '+1-555-0102', 'UX Designer', 75, c2.lastInsertRowid, '2025-02-01', 'active', 'contractor');
 
       const aliceId = a1.lastInsertRowid;

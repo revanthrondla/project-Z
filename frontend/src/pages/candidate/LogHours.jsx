@@ -152,12 +152,12 @@ export default function LogHours() {
   }, [form.project_id]);
 
   const load = useCallback(() => {
-    const params = { candidate_id: user.candidateId };
+    const params = { candidate_id: user.employeeId };
     if (filterMonth) params.month = filterMonth;
     return api.get('/api/time-entries', { params })
       .then(r => setEntries(Array.isArray(r.data) ? r.data : []))
       .finally(() => setLoading(false));
-  }, [filterMonth, user.candidateId]);
+  }, [filterMonth, user.employeeId]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -80,7 +80,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
         INNER JOIN time_entries te ON te.project_id = p.id AND te.candidate_id = $1
         WHERE p.status = 'active'
         ORDER BY p.name
-      `, [req.user.candidateId]);
+      `, [req.user.employeeId]);
       rows = result.rows;
     }
     res.json(rows);
@@ -365,7 +365,7 @@ router.get('/:id/utilization', authenticate, injectTenantDb, async (req, res) =>
              COALESCE(SUM(te.hours) FILTER (WHERE te.is_billable = TRUE AND te.status = 'approved'), 0) AS billable_hours,
              COALESCE(SUM(te.hours) FILTER (WHERE te.status = 'approved'), 0) AS approved_hours
       FROM time_entries te
-      JOIN candidates ca ON ca.id = te.candidate_id
+      JOIN employees ca ON ca.id = te.candidate_id
       WHERE te.project_id = $1
       GROUP BY ca.id, ca.name, ca.role, ca.target_utilization
       ORDER BY billable_hours DESC
@@ -471,10 +471,10 @@ router.get('/:id/unbilled', authenticate, injectTenantDb, async (req, res) => {
 
     // Time entries approved but not yet invoiced
     const timeResult = await req.db.query(`
-      SELECT te.*, ca.name AS candidate_name, ca.role AS candidate_role,
+      SELECT te.*, ca.name AS employee_name, ca.role AS candidate_role,
              pt.name AS task_name
       FROM time_entries te
-      JOIN candidates ca ON ca.id = te.candidate_id
+      JOIN employees ca ON ca.id = te.candidate_id
       LEFT JOIN project_tasks pt ON pt.id = te.task_id
       WHERE te.project_id = $1
         AND te.status = 'approved'
@@ -491,9 +491,9 @@ router.get('/:id/unbilled', authenticate, injectTenantDb, async (req, res) => {
 
     // Approved expenses not yet invoiced
     const expResult = await req.db.query(`
-      SELECT e.*, ca.name AS candidate_name
+      SELECT e.*, ca.name AS employee_name
       FROM expenses e
-      JOIN candidates ca ON ca.id = e.candidate_id
+      JOIN employees ca ON ca.id = e.candidate_id
       WHERE e.project_id = $1
         AND e.is_billable = TRUE
         AND e.status = 'approved'

@@ -10,7 +10,7 @@
  *
  * GET    /api/recruiters/:id/assignments    — admin or own: list assigned candidates
  * POST   /api/recruiters/:id/assignments    — admin: assign candidate
- * DELETE /api/recruiters/:id/assignments/:candidateId  — admin: remove assignment
+ * DELETE /api/recruiters/:id/assignments/:employeeId  — admin: remove assignment
  */
 const express = require('express');
 const bcrypt  = require('bcryptjs');
@@ -193,7 +193,7 @@ router.get('/:id/assignments', async (req, res) => {
              ra.assigned_at, ra.notes as assignment_notes,
              CASE WHEN cr.id IS NOT NULL THEN true ELSE false END as has_resume
       FROM recruiter_assignments ra
-      JOIN candidates c ON ra.candidate_id = c.id
+      JOIN employees c ON ra.candidate_id = c.id
       LEFT JOIN candidate_resumes cr ON cr.candidate_id = c.id
       WHERE ra.recruiter_id = $1
       ORDER BY c.name
@@ -209,15 +209,15 @@ router.get('/:id/assignments', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/:id/assignments', requireAdmin, async (req, res) => {
   try {
-    const { candidateId, notes } = req.body;
-    if (!candidateId) return res.status(400).json({ error: 'candidateId required' });
+    const { employeeId, notes } = req.body;
+    if (!employeeId) return res.status(400).json({ error: 'employeeId required' });
 
     // Verify recruiter exists
     const recCheck = await req.db.query('SELECT id FROM recruiters WHERE id = $1', [req.params.id]);
     if (!recCheck.rows[0]) return res.status(404).json({ error: 'Recruiter not found' });
 
     // Verify candidate exists
-    const candCheck = await req.db.query('SELECT id, name FROM candidates WHERE id = $1', [candidateId]);
+    const candCheck = await req.db.query('SELECT id, name FROM employees WHERE id = $1', [employeeId]);
     if (!candCheck.rows[0]) return res.status(404).json({ error: 'Candidate not found' });
 
     const result = await req.db.query(
@@ -225,7 +225,7 @@ router.post('/:id/assignments', requireAdmin, async (req, res) => {
        VALUES ($1, $2, $3, NOW())
        ON CONFLICT (recruiter_id, candidate_id) DO UPDATE SET notes = EXCLUDED.notes
        RETURNING *`,
-      [req.params.id, candidateId, notes || null]
+      [req.params.id, employeeId, notes || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -234,13 +234,13 @@ router.post('/:id/assignments', requireAdmin, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/recruiters/:id/assignments/:candidateId — admin: remove assignment
+// DELETE /api/recruiters/:id/assignments/:employeeId — admin: remove assignment
 // ─────────────────────────────────────────────────────────────────────────────
-router.delete('/:id/assignments/:candidateId', requireAdmin, async (req, res) => {
+router.delete('/:id/assignments/:employeeId', requireAdmin, async (req, res) => {
   try {
     await req.db.query(
       'DELETE FROM recruiter_assignments WHERE recruiter_id = $1 AND candidate_id = $2',
-      [req.params.id, req.params.candidateId]
+      [req.params.id, req.params.employeeId]
     );
     res.json({ message: 'Assignment removed' });
   } catch (err) {

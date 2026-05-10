@@ -11,7 +11,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
       const result = await req.db.query(`
         SELECT c.*, COUNT(ca.id) as candidate_count
         FROM clients c
-        LEFT JOIN candidates ca ON ca.client_id = c.id AND ca.status = 'active'
+        LEFT JOIN employees ca ON ca.client_id = c.id AND ca.status = 'active'
         GROUP BY c.id
         ORDER BY c.name
       `);
@@ -22,7 +22,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
       const result = await req.db.query(`
         SELECT c.*, COUNT(ca.id) as candidate_count
         FROM clients c
-        LEFT JOIN candidates ca ON ca.client_id = c.id AND ca.status = 'active'
+        LEFT JOIN employees ca ON ca.client_id = c.id AND ca.status = 'active'
         WHERE c.id = $1
         GROUP BY c.id
       `, [req.user.clientId]);
@@ -32,7 +32,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
 
     // Candidate: only their assigned client
     if (req.user.role === 'candidate') {
-      const candResult = await req.db.query('SELECT client_id FROM candidates WHERE id = $1', [req.user.candidateId]);
+      const candResult = await req.db.query('SELECT client_id FROM employees WHERE id = $1', [req.user.employeeId]);
       const cand = candResult.rows[0];
       if (!cand || !cand.client_id) return res.json([]);
       const clientResult = await req.db.query('SELECT id, name, contact_name, contact_email FROM clients WHERE id = $1', [cand.client_id]);
@@ -57,7 +57,7 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     if (req.user.role === 'candidate') {
-      const candResult = await req.db.query('SELECT client_id FROM candidates WHERE id = $1', [req.user.candidateId]);
+      const candResult = await req.db.query('SELECT client_id FROM employees WHERE id = $1', [req.user.employeeId]);
       const cand = candResult.rows[0];
       if (!cand || cand.client_id !== id) return res.status(403).json({ error: 'Access denied' });
     }

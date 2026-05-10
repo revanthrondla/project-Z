@@ -59,7 +59,7 @@ router.get('/hours', async (req, res) => {
     const summaryResult = await req.db.query(`
       SELECT
         c.id          AS candidate_id,
-        c.name        AS candidate_name,
+        c.name        AS employee_name,
         c.hourly_rate::float,
         c.role,
         cl.name       AS client_name,
@@ -71,7 +71,7 @@ router.get('/hours', async (req, res) => {
         ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float                       AS total_amount,
         ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS approved_amount
       FROM time_entries te
-      JOIN candidates c  ON te.candidate_id = c.id
+      JOIN employees c  ON te.candidate_id = c.id
       LEFT JOIN clients cl ON c.client_id = cl.id
       WHERE ${whereClause}
       GROUP BY c.id, c.name, c.hourly_rate, c.role, cl.name
@@ -86,7 +86,7 @@ router.get('/hours', async (req, res) => {
         ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float    AS amount,
         COUNT(te.id)::int AS entries
       FROM time_entries te
-      JOIN candidates c ON te.candidate_id = c.id
+      JOIN employees c ON te.candidate_id = c.id
       WHERE ${whereClause}
       GROUP BY te.date
       ORDER BY te.date ASC
@@ -103,7 +103,7 @@ router.get('/hours', async (req, res) => {
         ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS approved_amount,
         COUNT(te.id)::int AS entry_count
       FROM time_entries te
-      JOIN candidates c ON te.candidate_id = c.id
+      JOIN employees c ON te.candidate_id = c.id
       WHERE ${whereClause}
     `, params);
 
@@ -145,7 +145,7 @@ router.get('/absences', async (req, res) => {
     const summaryResult = await req.db.query(`
       SELECT
         c.id    AS candidate_id,
-        c.name  AS candidate_name,
+        c.name  AS employee_name,
         cl.name AS client_name,
         COUNT(a.id)::int AS absence_count,
         COALESCE(SUM(a.end_date::date - a.start_date::date + 1), 0)::int                                                          AS total_days,
@@ -157,7 +157,7 @@ router.get('/absences', async (req, res) => {
         COALESCE(SUM(CASE WHEN a.status='pending'      THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int        AS pending_days,
         COALESCE(SUM(CASE WHEN a.status='rejected'     THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int        AS rejected_days
       FROM absences a
-      JOIN candidates c  ON a.candidate_id = c.id
+      JOIN employees c  ON a.candidate_id = c.id
       LEFT JOIN clients cl ON c.client_id = cl.id
       WHERE ${whereClause}
       GROUP BY c.id, c.name, cl.name
@@ -174,9 +174,9 @@ router.get('/absences', async (req, res) => {
         a.status,
         a.notes,
         (a.end_date::date - a.start_date::date + 1)::int AS days,
-        c.name AS candidate_name
+        c.name AS employee_name
       FROM absences a
-      JOIN candidates c ON a.candidate_id = c.id
+      JOIN employees c ON a.candidate_id = c.id
       WHERE ${whereClause}
       ORDER BY a.start_date DESC
     `, params);
@@ -189,7 +189,7 @@ router.get('/absences', async (req, res) => {
         COALESCE(SUM(CASE WHEN a.status='approved' THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int    AS approved_days,
         COALESCE(SUM(CASE WHEN a.status='pending'  THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int    AS pending_days
       FROM absences a
-      JOIN candidates c ON a.candidate_id = c.id
+      JOIN employees c ON a.candidate_id = c.id
       WHERE ${whereClause}
     `, params);
 
@@ -227,7 +227,7 @@ router.get('/revenue', async (req, res) => {
     const billableResult = await req.db.query(`
       SELECT
         c.id    AS candidate_id,
-        c.name  AS candidate_name,
+        c.name  AS employee_name,
         c.hourly_rate::float,
         cl.name AS client_name,
         ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 0)::numeric, 2)::float                       AS approved_hours,
@@ -235,7 +235,7 @@ router.get('/revenue', async (req, res) => {
         ROUND(COALESCE(SUM(CASE WHEN te.status='pending'  THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float        AS pending_amount,
         ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float                                                       AS total_billable
       FROM time_entries te
-      JOIN candidates c  ON te.candidate_id = c.id
+      JOIN employees c  ON te.candidate_id = c.id
       LEFT JOIN clients cl ON c.client_id = cl.id
       WHERE ${teWhere}
       GROUP BY c.id, c.name, c.hourly_rate, cl.name
@@ -252,7 +252,7 @@ router.get('/revenue', async (req, res) => {
 
     const invoicesResult = await req.db.query(`
       SELECT
-        c.name  AS candidate_name,
+        c.name  AS employee_name,
         cl.name AS client_name,
         i.invoice_number,
         i.period_start AS issue_date,
@@ -261,7 +261,7 @@ router.get('/revenue', async (req, res) => {
         i.status,
         i.total_hours::float AS hours_billed
       FROM invoices i
-      JOIN candidates c  ON i.candidate_id = c.id
+      JOIN employees c  ON i.candidate_id = c.id
       LEFT JOIN clients cl ON c.client_id = cl.id
       WHERE ${invWhere}
       ORDER BY i.period_start DESC
@@ -275,7 +275,7 @@ router.get('/revenue', async (req, res) => {
         ROUND(COALESCE(SUM(i.total_amount), 0)::numeric, 2)::float                                             AS total,
         COUNT(i.id)::int AS invoice_count
       FROM invoices i
-      JOIN candidates c ON i.candidate_id = c.id
+      JOIN employees c ON i.candidate_id = c.id
       WHERE ${invWhere}
     `, invParams);
 
@@ -322,7 +322,7 @@ router.get('/summary', async (req, res) => {
           ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float                                                 AS total_revenue,
           COUNT(DISTINCT te.candidate_id)::int AS active_candidates
         FROM time_entries te
-        JOIN candidates c ON te.candidate_id = c.id
+        JOIN employees c ON te.candidate_id = c.id
         WHERE ${teWhere}
       `, teParams),
 
@@ -404,7 +404,7 @@ router.get('/utilization', authenticate, requireAdmin, injectTenantDb, async (re
           THEN ROUND(COALESCE(SUM(te.hours) FILTER (WHERE te.is_billable = TRUE AND te.status = 'approved'), 0)
                      / COALESCE(SUM(te.hours), 1) * 100)
           ELSE 0 END AS utilization_pct
-      FROM candidates ca
+      FROM employees ca
       INNER JOIN time_entries te ON te.candidate_id = ca.id
       ${personWhere.length ? 'WHERE ' + personWhere.join(' AND ') : ''}
       GROUP BY ca.id, ca.name, ca.role, ca.target_utilization
@@ -495,7 +495,7 @@ router.get('/overtime-risk', async (req, res) => {
           THEN 'over' WHEN COALESCE(SUM(te.hours), 0) >= COALESCE(pr.weekly_ot_threshold, 40) * 0.8
           THEN 'at_risk' ELSE 'safe' END      AS risk_level,
         pr.name AS pay_rule_name
-      FROM candidates ca
+      FROM employees ca
       LEFT JOIN pay_rules pr ON pr.id = COALESCE(ca.pay_rule_id,
         (SELECT id FROM pay_rules WHERE is_default = TRUE LIMIT 1))
       LEFT JOIN time_entries te ON te.candidate_id = ca.id
@@ -542,13 +542,13 @@ router.get('/missing-approvals', async (req, res) => {
     const result = await req.db.query(`
       SELECT
         te.id, te.date, te.hours, te.description, te.created_at, te.project_id,
-        ca.name AS candidate_name, ca.email AS candidate_email,
+        ca.name AS employee_name, ca.email AS employee_email,
         cl.name AS client_name,
         p.name  AS project_name,
         CURRENT_DATE - te.date::date AS days_old,
         NOW() - te.created_at        AS age
       FROM time_entries te
-      JOIN candidates ca ON ca.id = te.candidate_id
+      JOIN employees ca ON ca.id = te.candidate_id
       LEFT JOIN clients cl ON cl.id = ca.client_id
       LEFT JOIN projects p ON p.id = te.project_id
       WHERE te.status = 'pending'
@@ -577,7 +577,7 @@ router.get('/compliance', async (req, res) => {
     // 1. Employees missing critical records (I-9 metadata flag = w9_collected)
     const missingW9 = await req.db.query(`
       SELECT ca.id, ca.name, ca.email, ca.classification_status, ca.start_date
-      FROM candidates ca
+      FROM employees ca
       WHERE ca.classification_status = 'contractor'
         AND (ca.w9_collected = FALSE OR ca.w9_collected IS NULL)
         AND ca.deleted_at IS NULL AND ca.status = 'active'
@@ -587,7 +587,7 @@ router.get('/compliance', async (req, res) => {
     // 2. Pending contractor classification reviews
     const pendingClassification = await req.db.query(`
       SELECT ca.id, ca.name, ca.email, ca.start_date, ca.classification_notes
-      FROM candidates ca
+      FROM employees ca
       WHERE ca.classification_status = 'pending_review'
         AND ca.deleted_at IS NULL
       ORDER BY ca.start_date
@@ -603,7 +603,7 @@ router.get('/compliance', async (req, res) => {
     // 4. Employees with end dates in the past but still active
     const terminatedActive = await req.db.query(`
       SELECT ca.id, ca.name, ca.end_date, ca.status
-      FROM candidates ca
+      FROM employees ca
       WHERE ca.end_date IS NOT NULL
         AND ca.end_date < CURRENT_DATE
         AND ca.status = 'active'
@@ -614,9 +614,9 @@ router.get('/compliance', async (req, res) => {
     // 5. Data requests pending > 30 days (CCPA: 45-day response deadline)
     const overdueDataRequests = await req.db.query(`
       SELECT dr.id, dr.request_type, dr.created_at, dr.status,
-             ca.name AS candidate_name
+             ca.name AS employee_name
       FROM data_requests dr
-      JOIN candidates ca ON ca.id = dr.candidate_id
+      JOIN employees ca ON ca.id = dr.candidate_id
       WHERE dr.status IN ('pending','in_progress')
         AND dr.created_at < NOW() - INTERVAL '30 days'
       ORDER BY dr.created_at
@@ -624,9 +624,9 @@ router.get('/compliance', async (req, res) => {
 
     // 6. Documents approaching retention expiry (within 60 days)
     const expiringDocs = await req.db.query(`
-      SELECT d.id, d.title, d.document_type, d.expires_at, ca.name AS candidate_name
+      SELECT d.id, d.title, d.document_type, d.expires_at, ca.name AS employee_name
       FROM documents d
-      LEFT JOIN candidates ca ON ca.id = d.candidate_id
+      LEFT JOIN employees ca ON ca.id = d.candidate_id
       WHERE d.expires_at IS NOT NULL
         AND d.expires_at BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '60 days'
       ORDER BY d.expires_at
@@ -685,7 +685,7 @@ router.get('/export/time-entries.csv', async (req, res) => {
              te.billing_notes, ca.hourly_rate,
              ROUND(te.hours * ca.hourly_rate, 2) AS amount, te.created_at
       FROM time_entries te
-      JOIN candidates ca ON ca.id = te.candidate_id
+      JOIN employees ca ON ca.id = te.candidate_id
       LEFT JOIN clients cl ON cl.id = ca.client_id
       LEFT JOIN projects p ON p.id = te.project_id
       LEFT JOIN project_tasks pt ON pt.id = te.task_id
@@ -734,7 +734,7 @@ router.get('/export/invoices.csv', async (req, res) => {
              inv.billing_model, inv.status, inv.paid_at, inv.sent_at
       FROM invoices inv
       LEFT JOIN clients cl ON cl.id = inv.client_id
-      LEFT JOIN candidates ca ON ca.id = inv.candidate_id
+      LEFT JOIN employees ca ON ca.id = inv.candidate_id
       LEFT JOIN projects p ON p.id = inv.project_id
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY inv.invoice_date DESC
@@ -788,7 +788,7 @@ router.get('/export/payroll.csv', async (req, res) => {
             * ca.hourly_rate * COALESCE(pr.ot_multiplier, 1.5), 2
         ) AS gross_pay
       FROM time_entries te
-      JOIN candidates ca ON ca.id = te.candidate_id
+      JOIN employees ca ON ca.id = te.candidate_id
       LEFT JOIN pay_rules pr ON pr.id = COALESCE(ca.pay_rule_id,
         (SELECT id FROM pay_rules WHERE is_default = TRUE LIMIT 1))
       WHERE ${where.join(' AND ')}

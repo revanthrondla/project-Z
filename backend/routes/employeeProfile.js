@@ -22,13 +22,13 @@ async function resolveCandidate(req, res) {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: 'Invalid employee id' }); return null; }
 
-  const candResult = await db.query('SELECT * FROM candidates WHERE id = $1 AND deleted_at IS NULL', [id]);
+  const candResult = await db.query('SELECT * FROM employees WHERE id = $1 AND deleted_at IS NULL', [id]);
   const cand = candResult.rows[0];
   if (!cand) { res.status(404).json({ error: 'Employee not found' }); return null; }
 
   // Candidates can only see their own profile
   if (req.user.role === 'candidate') {
-    const selfResult = await db.query('SELECT * FROM candidates WHERE user_id = $1', [req.user.id]);
+    const selfResult = await db.query('SELECT * FROM employees WHERE user_id = $1', [req.user.id]);
     const self = selfResult.rows[0];
     if (!self || self.id !== id) { res.status(403).json({ error: 'Forbidden' }); return null; }
   }
@@ -72,7 +72,7 @@ router.put('/:id/contact', requireAdmin, async (req, res) => {
 
   // Update core candidate fields
   if (name || phone !== undefined) {
-    await db.query('UPDATE candidates SET name = COALESCE($1, name), phone = COALESCE($2, phone) WHERE id = $3',
+    await db.query('UPDATE employees SET name = COALESCE($1, name), phone = COALESCE($2, phone) WHERE id = $3',
       [name || null, phone !== undefined ? phone : null, cand.id]);
   }
 

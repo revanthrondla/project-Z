@@ -12,7 +12,7 @@ const path         = require('path');
 const authRoutes             = require('./routes/auth');
 const mfaRoutes              = require('./routes/mfa');
 const ssoRoutes              = require('./routes/sso');
-const candidateRoutes        = require('./routes/candidates');
+const employeeRoutes         = require('./routes/employees');
 const clientRoutes           = require('./routes/clients');
 const timeEntryRoutes        = require('./routes/timeEntries');
 const absenceRoutes          = require('./routes/absences');
@@ -163,7 +163,7 @@ app.use('/api/auth',              authRoutes);
 app.use('/api/auth/mfa',          mfaRoutes);
 app.use('/api/auth/sso',          ssoRoutes);
 app.use('/api/super-admin',       superAdminRoutes);
-app.use('/api/candidates',        candidateRoutes);
+app.use('/api/employees',         employeeRoutes);
 app.use('/api/clients',           clientRoutes);
 app.use('/api/time-entries',      timeEntryRoutes);
 app.use('/api/absences',          absenceRoutes);
@@ -207,7 +207,7 @@ app.get('/api/dashboard/stats', authenticate, injectTenantDb, requireAdmin, asyn
     const yearMonth = new Date().toISOString().slice(0, 7); // e.g. '2025-06'
 
     const [
-      totalCandidates,
+      totalEmployees,
       totalClients,
       pendingTimesheets,
       pendingAbsences,
@@ -215,7 +215,7 @@ app.get('/api/dashboard/stats', authenticate, injectTenantDb, requireAdmin, asyn
       revenueThisMonth,
       recentActivity,
     ] = await Promise.all([
-      db.prepare("SELECT COUNT(*)::int AS count FROM candidates WHERE status = 'active'").get(),
+      db.prepare("SELECT COUNT(*)::int AS count FROM employees WHERE status = 'active'").get(),
       db.prepare("SELECT COUNT(*)::int AS count FROM clients").get(),
       db.prepare("SELECT COUNT(*)::int AS count FROM time_entries WHERE status = 'pending'").get(),
       db.prepare("SELECT COUNT(*)::int AS count FROM absences WHERE status = 'pending'").get(),
@@ -231,13 +231,13 @@ app.get('/api/dashboard/stats', authenticate, injectTenantDb, requireAdmin, asyn
         SELECT 'timesheet' AS type, te.id, c.name AS candidate_name, te.date AS ref_date,
                te.hours || ' hrs - ' || COALESCE(te.project, 'General') AS detail,
                te.status, te.created_at
-        FROM time_entries te JOIN candidates c ON te.candidate_id = c.id
+        FROM time_entries te JOIN employees c ON te.candidate_id = c.id
         WHERE te.status = 'pending'
         UNION ALL
         SELECT 'absence' AS type, a.id, c.name AS candidate_name, a.start_date AS ref_date,
                a.type || ' (' || a.start_date || ' to ' || a.end_date || ')' AS detail,
                a.status, a.created_at
-        FROM absences a JOIN candidates c ON a.candidate_id = c.id
+        FROM absences a JOIN employees c ON a.candidate_id = c.id
         WHERE a.status = 'pending'
         ORDER BY 7 DESC LIMIT 10
       `).all(),
@@ -268,7 +268,7 @@ app.get('/api/dashboard/stats', authenticate, injectTenantDb, requireAdmin, asyn
     } catch { /* table may not exist yet on first boot */ }
 
     res.json({
-      totalCandidates:      parseInt(totalCandidates.count)     || 0,
+      totalEmployees:      parseInt(totalEmployees.count)     || 0,
       totalClients:         parseInt(totalClients.count)        || 0,
       pendingTimesheets:    parseInt(pendingTimesheets.count)   || 0,
       pendingAbsences:      parseInt(pendingAbsences.count)     || 0,
@@ -382,7 +382,7 @@ async function checkLicenceExpiry() {
       const expiring = await db.prepare(`
         SELECT el.*, c.name AS employee_name, c.id AS cand_id
         FROM employee_licenses el
-        JOIN candidates c ON c.id = el.candidate_id
+        JOIN employees c ON c.id = el.candidate_id
         WHERE el.expiry_date IS NOT NULL
           AND el.expiry_date >= $1::date
           AND el.expiry_date <= ($1::date + el.reminder_days_before * INTERVAL '1 day')
@@ -393,7 +393,7 @@ async function checkLicenceExpiry() {
       const expired = await db.prepare(`
         SELECT el.*, c.name AS employee_name, c.id AS cand_id
         FROM employee_licenses el
-        JOIN candidates c ON c.id = el.candidate_id
+        JOIN employees c ON c.id = el.candidate_id
         WHERE el.expiry_date IS NOT NULL
           AND el.expiry_date < $1::date
           AND el.status != 'expired'

@@ -130,7 +130,7 @@ router.get('/imports', async (req, res) => {
       c.name           AS invoice_candidate_name
     FROM email_payment_imports epi
     LEFT JOIN invoices   i  ON epi.matched_invoice_id = i.id
-    LEFT JOIN candidates c  ON i.candidate_id = c.id
+    LEFT JOIN employees c  ON i.candidate_id = c.id
     LEFT JOIN clients    cl ON i.client_id = cl.id
     WHERE 1=1
   `;
@@ -164,7 +164,7 @@ router.get('/imports/:id', async (req, res) => {
       c.name           AS invoice_candidate_name
     FROM email_payment_imports epi
     LEFT JOIN invoices   i  ON epi.matched_invoice_id = i.id
-    LEFT JOIN candidates c  ON i.candidate_id = c.id
+    LEFT JOIN employees c  ON i.candidate_id = c.id
     LEFT JOIN clients    cl ON i.client_id = cl.id
     WHERE epi.id = $1
   `, [req.params.id]);
@@ -236,8 +236,8 @@ router.post('/imports/:id/confirm', async (req, res) => {
   const updated = updatedResult.rows[0];
 
   const invoiceResult = await req.db.query(`
-    SELECT i.*, c.name AS candidate_name, cl.name AS client_name
-    FROM invoices i JOIN candidates c ON i.candidate_id = c.id
+    SELECT i.*, c.name AS employee_name, cl.name AS client_name
+    FROM invoices i JOIN employees c ON i.candidate_id = c.id
     LEFT JOIN clients cl ON i.client_id = cl.id
     WHERE i.id = $1
   `, [invoice_id]);

@@ -2,7 +2,7 @@
  * C2C Job Board Routes
  *
  * GET /api/c2c-jobs/me            — candidate: search jobs matching own resume
- * GET /api/c2c-jobs/:candidateId  — admin or assigned recruiter: search for a candidate
+ * GET /api/c2c-jobs/:employeeId  — admin or assigned recruiter: search for a candidate
  * GET /api/c2c-jobs/recruiter/all — recruiter: jobs for all assigned candidates
  */
 const express = require('express');
@@ -16,12 +16,12 @@ router.use(authenticate, injectTenantDb);
  * Helper: get candidate + resume, verify access
  * Returns { candidate, resume } or sends error response
  */
-async function getCandidateWithResume(req, res, candidateId) {
+async function getCandidateWithResume(req, res, employeeId) {
   const candResult = await req.db.query(
-    `SELECT c.*, u.email as user_email FROM candidates c
+    `SELECT c.*, u.email as user_email FROM employees c
      LEFT JOIN users u ON c.user_id = u.id
      WHERE c.id = $1 AND c.deleted_at IS NULL`,
-    [candidateId]
+    [employeeId]
   );
   const candidate = candResult.rows[0];
   if (!candidate) {
@@ -30,7 +30,7 @@ async function getCandidateWithResume(req, res, candidateId) {
   }
 
   // Access control: admin, or recruiter assigned to this candidate, or candidate themselves
-  if (req.user.role === 'candidate' && req.user.candidateId !== candidate.id) {
+  if (req.user.role === 'candidate' && req.user.employeeId !== candidate.id) {
     res.status(403).json({ error: 'Access denied' });
     return null;
   }
@@ -64,11 +64,11 @@ router.get('/me', async (req, res) => {
     if (req.user.role !== 'candidate') {
       return res.status(403).json({ error: 'Candidate access only' });
     }
-    if (!req.user.candidateId) {
+    if (!req.user.employeeId) {
       return res.status(404).json({ error: 'No candidate profile found' });
     }
 
-    const data = await getCandidateWithResume(req, res, req.user.candidateId);
+    const data = await getCandidateWithResume(req, res, req.user.employeeId);
     if (!data) return; // error already sent
 
     const { candidate, resume } = data;
@@ -109,7 +109,7 @@ router.get('/recruiter/all', async (req, res) => {
         SELECT c.id, c.name, c.role as job_title, c.market_status, c.available_date
         FROM recruiter_assignments ra
         JOIN recruiters r ON ra.recruiter_id = r.id
-        JOIN candidates c ON ra.candidate_id = c.id
+        JOIN employees c ON ra.candidate_id = c.id
         WHERE r.user_id = $1 AND c.deleted_at IS NULL
           AND c.market_status IN ('in_market', 'about_to_be_in_market')
         ORDER BY c.name
@@ -118,7 +118,7 @@ router.get('/recruiter/all', async (req, res) => {
       // Admin sees all in-market candidates
       assignmentsQuery = await req.db.query(`
         SELECT c.id, c.name, c.role as job_title, c.market_status, c.available_date
-        FROM candidates c
+        FROM employees c
         WHERE c.deleted_at IS NULL
           AND c.market_status IN ('in_market', 'about_to_be_in_market')
         ORDER BY c.name
@@ -129,7 +129,7 @@ router.get('/recruiter/all', async (req, res) => {
 
     // For each candidate, fetch resume + search jobs (cache makes this fast)
     const results = await Promise.all(
-      candidates.map(async (cand) => {
+      employees.map(async (cand) => {
         try {
           const resumeResult = await req.db.query(
             'SELECT * FROM candidate_resumes WHERE candidate_id = $1',
@@ -160,14 +160,14 @@ router.get('/recruiter/all', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/c2c-jobs/:candidateId — admin or assigned recruiter
+// GET /api/c2c-jobs/:employeeId — admin or assigned recruiter
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/:candidateId', async (req, res) => {
+router.get('/:employeeId', async (req, res) => {
   try {
-    const candidateId = parseInt(req.params.candidateId);
-    if (isNaN(candidateId)) return res.status(400).json({ error: 'Invalid candidateId' });
+    const employeeId = parseInt(req.params.employeeId);
+    if (isNaN(employeeId)) return res.status(400).json({ error: 'Invalid employeeId' });
 
-    const data = await getCandidateWithResume(req, res, candidateId);
+    const data = await getCandidateWithResume(req, res, employeeId);
     if (!data) return;
 
     const { candidate, resume } = data;
@@ -188,7 +188,7 @@ router.get('/:candidateId', async (req, res) => {
       jobs:      result.jobs,
     });
   } catch (err) {
-    console.error('[C2C /:candidateId]', err.message);
+    console.error('[C2C /:employeeId]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

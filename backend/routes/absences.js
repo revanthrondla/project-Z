@@ -9,16 +9,16 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
   try {
     const { candidate_id, status, year } = req.query;
     let query = `
-      SELECT a.*, c.name as candidate_name
+      SELECT a.*, c.name as employee_name
       FROM absences a
-      JOIN candidates c ON a.candidate_id = c.id
+      JOIN employees c ON a.candidate_id = c.id
       WHERE 1=1
     `;
     const params = [];
 
     if (req.user.role === 'candidate') {
       query += ' AND a.candidate_id = $' + (params.length + 1);
-      params.push(req.user.candidateId);
+      params.push(req.user.employeeId);
     } else if (candidate_id) {
       query += ' AND a.candidate_id = $' + (params.length + 1);
       params.push(candidate_id);
@@ -52,7 +52,7 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
     if (notes && notes.length > 1000) return res.status(400).json({ error: 'Notes must be 1000 characters or fewer' });
 
     let cid = candidate_id;
-    if (req.user.role === 'candidate') cid = req.user.candidateId;
+    if (req.user.role === 'candidate') cid = req.user.employeeId;
     if (!cid) return res.status(400).json({ error: 'Candidate ID required' });
 
     const insertResult = await req.db.query(`
@@ -64,8 +64,8 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
     const absenceId = insertResult.rows[0].id;
 
     const result = await req.db.query(`
-      SELECT a.*, c.name as candidate_name FROM absences a
-      JOIN candidates c ON a.candidate_id = c.id WHERE a.id = $1
+      SELECT a.*, c.name as employee_name FROM absences a
+      JOIN employees c ON a.candidate_id = c.id WHERE a.id = $1
     `, [absenceId]);
 
     res.status(201).json(result.rows[0]);
@@ -83,7 +83,7 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
     if (!absence) return res.status(404).json({ error: 'Absence not found' });
 
     if (req.user.role === 'candidate') {
-      if (absence.candidate_id !== req.user.candidateId) return res.status(403).json({ error: 'Access denied' });
+      if (absence.candidate_id !== req.user.employeeId) return res.status(403).json({ error: 'Access denied' });
       if (absence.status !== 'pending') return res.status(400).json({ error: 'Cannot edit non-pending absence' });
     }
 
@@ -95,7 +95,7 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
         [status, req.user.id, approvedAt, id]);
 
       // Notify the candidate
-      const candidateResult = await req.db.query('SELECT user_id FROM candidates WHERE id = $1', [absence.candidate_id]);
+      const candidateResult = await req.db.query('SELECT user_id FROM employees WHERE id = $1', [absence.candidate_id]);
       const candidate = candidateResult.rows[0];
       if (candidate) {
         const label = status === 'approved' ? 'approved' : 'rejected';
@@ -121,8 +121,8 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
     }
 
     const result = await req.db.query(`
-      SELECT a.*, c.name as candidate_name FROM absences a
-      JOIN candidates c ON a.candidate_id = c.id WHERE a.id = $1
+      SELECT a.*, c.name as employee_name FROM absences a
+      JOIN employees c ON a.candidate_id = c.id WHERE a.id = $1
     `, [id]);
     res.json(result.rows[0]);
   } catch (err) {
@@ -139,7 +139,7 @@ router.delete('/:id', authenticate, injectTenantDb, async (req, res) => {
     if (!absence) return res.status(404).json({ error: 'Absence not found' });
 
     if (req.user.role === 'candidate') {
-      if (absence.candidate_id !== req.user.candidateId) return res.status(403).json({ error: 'Access denied' });
+      if (absence.candidate_id !== req.user.employeeId) return res.status(403).json({ error: 'Access denied' });
       if (absence.status !== 'pending') return res.status(400).json({ error: 'Cannot delete non-pending absence' });
     }
 

@@ -45,7 +45,7 @@ function computeAmount(row) {
 router.get('/summary', authenticate, injectTenantDb, async (req, res) => {
   try {
     const isAdmin = req.user.role === 'admin';
-    const candidateFilter = isAdmin ? '' : `AND e.candidate_id = ${req.user.candidateId}`;
+    const candidateFilter = isAdmin ? '' : `AND e.candidate_id = ${req.user.employeeId}`;
 
     const result = await req.db.query(`
       SELECT
@@ -81,7 +81,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
     const conditions = [];
 
     if (!isAdmin) {
-      params.push(req.user.candidateId);
+      params.push(req.user.employeeId);
       conditions.push(`e.candidate_id = $${params.length}`);
     } else if (candidate_id) {
       params.push(parseInt(candidate_id, 10));
@@ -109,13 +109,13 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
 
     const result = await req.db.query(`
       SELECT e.*,
-             ca.name  AS candidate_name,
+             ca.name  AS employee_name,
              cl.name  AS client_name,
              pr.name  AS project_name,
              pt.name  AS task_name,
              u.name   AS approved_by_name
       FROM expenses e
-      LEFT JOIN candidates ca ON ca.id = e.candidate_id
+      LEFT JOIN employees ca ON ca.id = e.candidate_id
       LEFT JOIN clients    cl ON cl.id = e.client_id
       LEFT JOIN projects   pr ON pr.id = e.project_id
       LEFT JOIN project_tasks pt ON pt.id = e.task_id
@@ -139,13 +139,13 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
 
     const result = await req.db.query(`
       SELECT e.*,
-             ca.name AS candidate_name,
+             ca.name AS employee_name,
              cl.name AS client_name,
              pr.name AS project_name,
              pt.name AS task_name,
              u.name  AS approved_by_name
       FROM expenses e
-      LEFT JOIN candidates ca ON ca.id = e.candidate_id
+      LEFT JOIN employees ca ON ca.id = e.candidate_id
       LEFT JOIN clients    cl ON cl.id = e.client_id
       LEFT JOIN projects   pr ON pr.id = e.project_id
       LEFT JOIN project_tasks pt ON pt.id = e.task_id
@@ -156,7 +156,7 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
     const expense = result.rows[0];
     if (!expense) return res.status(404).json({ error: 'Expense not found' });
 
-    if (req.user.role !== 'admin' && expense.candidate_id !== req.user.candidateId) {
+    if (req.user.role !== 'admin' && expense.candidate_id !== req.user.employeeId) {
       return res.status(403).json({ error: 'Access denied' });
     }
     res.json(expense);
@@ -176,13 +176,13 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
     } = req.body;
 
     // Determine candidate: admins can specify, others only themselves
-    let candidateId;
+    let employeeId;
     if (req.user.role === 'admin') {
-      candidateId = cleanInt(candidate_id);
-      if (!candidateId) return res.status(400).json({ error: 'candidate_id is required' });
+      employeeId = cleanInt(candidate_id);
+      if (!employeeId) return res.status(400).json({ error: 'candidate_id is required' });
     } else {
-      candidateId = req.user.candidateId;
-      if (!candidateId) return res.status(403).json({ error: 'No candidate profile found' });
+      employeeId = req.user.employeeId;
+      if (!employeeId) return res.status(403).json({ error: 'No candidate profile found' });
     }
 
     if (!expense_date) return res.status(400).json({ error: 'expense_date is required' });
@@ -205,7 +205,7 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
       RETURNING *
     `, [
-      candidateId, cleanInt(client_id), cleanInt(project_id), cleanInt(task_id),
+      employeeId, cleanInt(client_id), cleanInt(project_id), cleanInt(task_id),
       expense_date, category, description.trim(), cleanNum(amount),
       cleanNum(mileage_miles), cleanNum(mileage_rate) || 0.67,
       currency || 'USD',
@@ -230,7 +230,7 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
     if (!existing.rows[0]) return res.status(404).json({ error: 'Expense not found' });
     const exp = existing.rows[0];
 
-    if (req.user.role !== 'admin' && exp.candidate_id !== req.user.candidateId) {
+    if (req.user.role !== 'admin' && exp.candidate_id !== req.user.employeeId) {
       return res.status(403).json({ error: 'Access denied' });
     }
     if (exp.status !== 'pending') {
@@ -288,7 +288,7 @@ router.delete('/:id', authenticate, injectTenantDb, async (req, res) => {
     const existing = await req.db.query('SELECT * FROM expenses WHERE id = $1', [id]);
     if (!existing.rows[0]) return res.status(404).json({ error: 'Expense not found' });
 
-    if (req.user.role !== 'admin' && existing.rows[0].candidate_id !== req.user.candidateId) {
+    if (req.user.role !== 'admin' && existing.rows[0].candidate_id !== req.user.employeeId) {
       return res.status(403).json({ error: 'Access denied' });
     }
     if (existing.rows[0].status !== 'pending') {

@@ -10,7 +10,7 @@ function daysBetween(start, end) {
 
 export default function AdminAbsences() {
   const [absences, setAbsences] = useState([]);
-  const [candidates, setCandidates] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ candidate_id: '', status: '', year: '' });
 
@@ -28,7 +28,7 @@ export default function AdminAbsences() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { api.get('/api/candidates').then(r => setCandidates(Array.isArray(r.data) ? r.data : [])); }, []);
+  useEffect(() => { api.get('/api/employees').then(r => setEmployees(Array.isArray(r.data) ? r.data : [])); }, []);
   useEffect(() => { load(); }, [filters]);
 
   const approve = async (id) => { await api.put(`/api/absences/${id}`, { status: 'approved' }); load(); };

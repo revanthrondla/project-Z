@@ -362,12 +362,12 @@ router.get('/callback', async (req, res) => {
         indexUserEmail(email.toLowerCase(), tenant.slug).catch(() => {});
       }
 
-      // Get candidateId if applicable
-      let candidateId = null;
+      // Get employeeId if applicable
+      let employeeId = null;
       if (user.role === 'candidate') {
-        const candResult = await tenantDb.query('SELECT id FROM candidates WHERE user_id = $1', [user.id]);
+        const candResult = await tenantDb.query('SELECT id FROM employees WHERE user_id = $1', [user.id]);
         const cand = candResult.rows[0];
-        if (cand) candidateId = cand.id;
+        if (cand) employeeId = cand.id;
       }
 
       // Get clientId if applicable
@@ -385,7 +385,7 @@ router.get('/callback', async (req, res) => {
           email: user.email,
           name: user.name,
           role: user.role,
-          candidateId,
+          employeeId,
           clientId,
           tenantSlug: tenant.slug,
           tenantName: tenant.company_name || tenant.slug,

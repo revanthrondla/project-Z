@@ -48,7 +48,7 @@ export default function ClientDashboard() {
     </div>
   );
 
-  const { client, candidates, recentTimesheets, kpis } = data;
+  const { client, employees, recentTimesheets, kpis } = data;
 
   const TABS = [
     { key: 'overview',  label: '📊 Overview' },
@@ -180,7 +180,7 @@ export default function ClientDashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          { label: 'Active Candidates', value: kpis.total_candidates, icon: '👥', color: 'text-emerald-600 bg-emerald-50' },
+          { label: 'Active Employees', value: kpis.total_candidates, icon: '👥', color: 'text-emerald-600 bg-emerald-50' },
           { label: 'Approved Hours', value: `${Number(kpis.total_approved_hours || 0).toFixed(1)}h`, icon: '✅', color: 'text-green-600 bg-green-50' },
           { label: 'Pending Hours', value: `${Number(kpis.total_pending_hours || 0).toFixed(1)}h`, icon: '⏳', color: 'text-yellow-600 bg-yellow-50' },
           { label: 'Total Cost', value: `$${Number(kpis.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, icon: '💰', color: 'text-purple-600 bg-purple-50' },
@@ -203,7 +203,7 @@ export default function ClientDashboard() {
           </div>
           <div className="divide-y divide-gray-50">
             {candidates.length === 0 ? (
-              <p className="px-5 py-8 text-center text-gray-400 text-sm">No candidates assigned to your account yet.</p>
+              <p className="px-5 py-8 text-center text-gray-400 text-sm">No employees assigned to your account yet.</p>
             ) : (
               candidates.map(c => (
                 <div key={c.id} className="px-5 py-4 hover:bg-gray-50 transition-colors">
