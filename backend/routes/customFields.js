@@ -234,8 +234,9 @@ router.patch('/reorder', requireAdmin, async (req, res) => {
   }
 });
 
-// ── GET /api/custom-fields/candidate/:employeeId/values ─────────────────────
-router.get('/candidate/:employeeId/values', async (req, res) => {
+// ── GET /api/custom-fields/employee/:employeeId/values ──────────────────────
+// Legacy alias: /candidate/:employeeId/values still works for backward compat
+router.get(['/employee/:employeeId/values', '/candidate/:employeeId/values'], async (req, res) => {
   try {
     const employeeId = parseInt(req.params.employeeId);
     if (req.user.role !== 'admin' && req.user.employeeId !== employeeId)
@@ -257,8 +258,9 @@ router.get('/candidate/:employeeId/values', async (req, res) => {
   }
 });
 
-// ── PUT /api/custom-fields/candidate/:employeeId/values — upsert values ─────
-router.put('/candidate/:employeeId/values', async (req, res) => {
+// ── PUT /api/custom-fields/employee/:employeeId/values — upsert values ──────
+// Legacy alias: /candidate/:employeeId/values still works for backward compat
+router.put(['/employee/:employeeId/values', '/candidate/:employeeId/values'], async (req, res) => {
   try {
     const employeeId = parseInt(req.params.employeeId);
     if (req.user.role !== 'admin' && req.user.employeeId !== employeeId)

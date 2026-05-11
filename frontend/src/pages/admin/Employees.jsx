@@ -74,9 +74,9 @@ export default function AdminCandidates() {
     setCustomFieldValues({});
     setCfErrors({});
     setError('');
-    // Load existing custom field values for this candidate
+    // Load existing custom field values for this employee
     try {
-      const valRes = await api.get(`/api/custom-fields/candidate/${c.id}/values`);
+      const valRes = await api.get(`/api/custom-fields/employee/${c.id}/values`);
       const vals = {};
       for (const v of (valRes.data || [])) {
         const isJson = ['select','radio','checkbox','multi_checkbox'].includes(v.field_type);
@@ -122,7 +122,7 @@ export default function AdminCandidates() {
           .filter(f => f.is_active && !f.formula)
           .map(f => ({ field_key: f.field_key, value: customFieldValues[f.field_key] ?? null }));
         if (values.length > 0) {
-          await api.put(`/api/custom-fields/candidate/${employeeId}/values`, { values }).catch(() => {});
+          await api.put(`/api/custom-fields/employee/${employeeId}/values`, { values }).catch(() => {});
         }
       }
 
@@ -134,7 +134,7 @@ export default function AdminCandidates() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this candidate? This cannot be undone.')) return;
+    if (!confirm('Delete this employee? This cannot be undone.')) return;
     try {
       await api.delete(`/api/employees/${id}`);
       load();
@@ -143,7 +143,7 @@ export default function AdminCandidates() {
     }
   };
 
-  const filtered = candidates.filter(c => {
+  const filtered = employees.filter(c => {
     const matchSearch = !search ||
       (c.name  || '').toLowerCase().includes(search.toLowerCase()) ||
       (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -157,7 +157,7 @@ export default function AdminCandidates() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Employees</h1>
-          <p className="text-gray-500 mt-1">{candidates.length} total employees</p>
+          <p className="text-gray-500 mt-1">{employees.length} total employees</p>
         </div>
         <button onClick={openCreate} className="btn-primary">+ Add Employee</button>
       </div>
