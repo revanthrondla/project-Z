@@ -310,10 +310,15 @@ function WorkforceStatsTab() {
 
   if (loading) return <div className="text-gray-400 text-sm py-8 text-center">Loading workforce data…</div>;
   if (err)     return <div className="text-red-500 text-sm py-4">{err}</div>;
-  if (!stats)  return null;
+  if (!stats)  return <div className="text-gray-400 text-sm py-8 text-center">No data available.</div>;
 
-  const { completeness, by_race_ethnicity, by_gender, by_job_category, by_veteran_status, by_disability } = stats;
-  const total = completeness.total;
+  const completeness      = stats.completeness      ?? { total: 0, eeo1_complete: 0, vevraa_complete: 0, ada_complete: 0, eeo1_pct: 0 };
+  const by_race_ethnicity = stats.by_race_ethnicity ?? [];
+  const by_gender         = stats.by_gender         ?? [];
+  const by_job_category   = stats.by_job_category   ?? [];
+  const by_veteran_status = stats.by_veteran_status ?? [];
+  const by_disability     = stats.by_disability     ?? [];
+  const total             = completeness.total ?? 0;
 
   const COLORS = ['bg-green-500','bg-blue-500','bg-purple-500','bg-amber-500','bg-rose-500','bg-teal-500','bg-indigo-500','bg-orange-500'];
 
@@ -322,16 +327,22 @@ function WorkforceStatsTab() {
       {/* Completeness cards */}
       <div>
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Self-ID Completeness ({total} active employees)</h3>
+        {total === 0 && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-4 py-3 text-sm mb-4">
+            ℹ️ No active employees found. Add employees and set their status to "active" to see EEO statistics.
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <CompletenessCard label="EEO-1 Complete (Race + Gender + Job Category)" complete={completeness.eeo1_complete} total={total} color="bg-green-500" />
-          <CompletenessCard label="VEVRAA Complete (Veteran Status)" complete={completeness.vevraa_complete} total={total} color="bg-blue-500" />
-          <CompletenessCard label="Section 503 / ADA Complete (Disability Status)" complete={completeness.ada_complete} total={total} color="bg-purple-500" />
+          <CompletenessCard label="EEO-1 Complete (Race + Gender + Job Category)" complete={completeness.eeo1_complete ?? 0} total={total} color="bg-green-500" />
+          <CompletenessCard label="VEVRAA Complete (Veteran Status)" complete={completeness.vevraa_complete ?? 0} total={total} color="bg-blue-500" />
+          <CompletenessCard label="Section 503 / ADA Complete (Disability Status)" complete={completeness.ada_complete ?? 0} total={total} color="bg-purple-500" />
         </div>
-        {completeness.eeo1_pct < 80 && (
+        {total > 0 && (completeness.eeo1_pct ?? 0) < 80 && (
           <div className="mt-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-3 text-sm">
             ⚠️ EEO-1 self-ID completeness is below 80%. EEOC recommends collecting data for all employees before filing. Use the Workforce Table tab to identify and invite missing responses.
           </div>
         )}
+
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -402,7 +413,7 @@ function ReportsTab() {
     setLoading(true);
     try {
       const r = await api.get('/eeo/reports');
-      setReports(r.data);
+      setReports(Array.isArray(r.data) ? r.data : []);
     } catch (e) {
       setErr(e.response?.data?.error || e.message);
     } finally {
@@ -548,14 +559,14 @@ function ReportsTab() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {summary.rows.map((r, i) => {
+                {(summary.rows ?? []).map((r, i) => {
                   const key = `${r.job_category}|${r.race_ethnicity}`;
                   const rowMap = {};
                   summary.rows.filter(x => x.job_category === r.job_category && x.race_ethnicity === r.race_ethnicity)
                     .forEach(x => { rowMap[x.gender] = x.headcount; });
                   const rowTotal = Object.values(rowMap).reduce((a, b) => a + b, 0);
                   // Only render once per (job_category, race_ethnicity) pair
-                  const seen = summary.rows.slice(0, i).find(x => x.job_category === r.job_category && x.race_ethnicity === r.race_ethnicity);
+                  const seen = (summary.rows ?? []).slice(0, i).find(x => x.job_category === r.job_category && x.race_ethnicity === r.race_ethnicity);
                   if (seen) return null;
                   return (
                     <tr key={key} className="hover:bg-gray-50">
@@ -595,9 +606,9 @@ function WorkforceTableTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get('/eeo/candidates', { params: { page, limit: LIMIT, missing_only: missingOnly } });
-      setData(r.data.data);
-      setTotal(r.data.total);
+      const r = await api.get('/eeo/employees', { params: { page, limit: LIMIT, missing_only: missingOnly } });
+      setData(Array.isArray(r.data?.data) ? r.data.data : []);
+      setTotal(r.data?.total ?? 0);
     } catch (e) {
       setErr(e.response?.data?.error || e.message);
     } finally {
@@ -624,7 +635,7 @@ function WorkforceTableTab() {
     try {
       const body = {};
       Object.entries(editForm).forEach(([k, v]) => { if (v) body[k] = v; });
-      await api.put(`/eeo/candidates/${editId}`, body);
+      await api.put(`/eeo/employees/${editId}`, body);
       setEditId(null);
       await load();
     } catch (e) {
