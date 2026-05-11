@@ -255,17 +255,13 @@ export default function AIChatWidget() {
   const messagesEndRef                = useRef(null);
   const inputRef                      = useRef(null);
 
-  if (!hasModule('ai_assistant')) return null;
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // ── All hooks must be called unconditionally before any early return ──────────
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => { if (open) scrollToBottom(); }, [messages, loading, open, scrollToBottom]);
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (!open) return;
     api.get('/api/ai-chat/config').then(r => setConfigured(r.data.configured)).catch(() => setConfigured(false));
@@ -273,10 +269,12 @@ export default function AIChatWidget() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (open && messages.length === 0 && !convId) inputRef.current?.focus();
   }, [open, messages.length, convId]);
+
+  // Guard: module not enabled — must come AFTER all hooks
+  if (!hasModule('ai_assistant')) return null;
 
   function loadConversations() {
     api.get('/api/ai-chat/conversations').then(r => setConvList(Array.isArray(r.data) ? r.data : [])).catch(() => {});
