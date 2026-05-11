@@ -421,7 +421,7 @@ export default function Expenses() {
       {showModal && (
         <ExpenseModal
           expense={editExpense}
-          candidates={employees}
+          employees={employees}
           clients={clients}
           projects={projects}
           isAdmin={isAdmin}

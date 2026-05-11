@@ -426,7 +426,7 @@ export default function AdminTimesheets() {
       {modal?.type === 'entry' && (
         <EntryModal
           entry={modal.entry}
-          candidates={employees}
+          employees={employees}
           projects={projects}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); }}

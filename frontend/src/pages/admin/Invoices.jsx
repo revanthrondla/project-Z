@@ -755,7 +755,7 @@ export default function AdminInvoices() {
         <InvoiceDetail invoice={invoiceDetail} onClose={() => setInvoiceDetail(null)} onStatusChange={load} />
       )}
       {showGenerate && (
-        <GenerateModal candidates={employees} clients={clients} onClose={() => setShowGenerate(false)} onGenerated={load} />
+        <GenerateModal employees={employees} clients={clients} onClose={() => setShowGenerate(false)} onGenerated={load} />
       )}
     </div>
   );

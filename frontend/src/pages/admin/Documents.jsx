@@ -510,7 +510,7 @@ export default function AdminDocuments() {
 
       {showUpload && (
         <UploadModal
-          candidates={employees}
+          employees={employees}
           clients={clients}
           onClose={() => setShowUpload(false)}
           onUploaded={load}
