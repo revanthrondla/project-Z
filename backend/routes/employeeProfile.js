@@ -14,33 +14,49 @@ const { authenticate, requireAdmin, injectTenantDb } = require('../middleware/au
 
 router.use(authenticate, injectTenantDb);
 
+// ─── Async error wrapper (Express 4 doesn't catch async throws automatically) ─
+const wrap = fn => async (req, res, next) => {
+  try { await fn(req, res, next); }
+  catch (err) {
+    console.error(`[EmployeeProfile] ${req.method} ${req.path}:`, err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+};
+
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Resolve candidate — admins can access any, candidates can only access their own */
 async function resolveCandidate(req, res) {
-  const db = req.db;
-  const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) { res.status(400).json({ error: 'Invalid employee id' }); return null; }
+  try {
+    const db = req.db;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: 'Invalid employee id' }); return null; }
 
-  const candResult = await db.query('SELECT * FROM employees WHERE id = $1 AND deleted_at IS NULL', [id]);
-  const cand = candResult.rows[0];
-  if (!cand) { res.status(404).json({ error: 'Employee not found' }); return null; }
+    const candResult = await db.query('SELECT * FROM employees WHERE id = $1 AND deleted_at IS NULL', [id]);
+    const cand = candResult.rows[0];
+    if (!cand) { res.status(404).json({ error: 'Employee not found' }); return null; }
 
-  // Candidates can only see their own profile
-  if (req.user.role === 'candidate') {
-    const selfResult = await db.query('SELECT * FROM employees WHERE user_id = $1', [req.user.id]);
-    const self = selfResult.rows[0];
-    if (!self || self.id !== id) { res.status(403).json({ error: 'Forbidden' }); return null; }
+    // Candidates can only see their own profile
+    if (req.user.role === 'candidate') {
+      const selfResult = await db.query('SELECT * FROM employees WHERE user_id = $1', [req.user.id]);
+      const self = selfResult.rows[0];
+      if (!self || self.id !== id) { res.status(403).json({ error: 'Forbidden' }); return null; }
+    }
+
+    return cand;
+  } catch (err) {
+    console.error('[resolveCandidate]', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
+    return null;
   }
-
-  return cand;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 1. CONTACT (extended)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/contact', async (req, res) => {
+router.get('/:id/contact', wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -61,9 +77,9 @@ router.get('/:id/contact', async (req, res) => {
     home_postcode:  ext.home_postcode  || '',
     home_country:   ext.home_country   || '',
   });
-});
+  }));
 
-router.put('/:id/contact', requireAdmin, async (req, res) => {
+router.put('/:id/contact', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -95,21 +111,21 @@ router.put('/:id/contact', requireAdmin, async (req, res) => {
   }
 
   res.json({ message: 'Contact information updated' });
-});
+  }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 2. EMERGENCY CONTACTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/emergency-contacts', async (req, res) => {
+router.get('/:id/emergency-contacts', wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
   const result = await db.query('SELECT * FROM emergency_contacts WHERE candidate_id = $1 ORDER BY id', [cand.id]);
   res.json(result.rows);
-});
+  }));
 
-router.post('/:id/emergency-contacts', requireAdmin, async (req, res) => {
+router.post('/:id/emergency-contacts', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -123,9 +139,9 @@ router.post('/:id/emergency-contacts', requireAdmin, async (req, res) => {
   );
 
   res.status(201).json({ id: result.rows[0].id, message: 'Emergency contact added' });
-});
+  }));
 
-router.put('/:id/emergency-contacts/:ecId', requireAdmin, async (req, res) => {
+router.put('/:id/emergency-contacts/:ecId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -145,9 +161,9 @@ router.put('/:id/emergency-contacts/:ecId', requireAdmin, async (req, res) => {
   `, [name || null, relationship || null, phone1 || null, phone2 || null, ecId]);
 
   res.json({ message: 'Emergency contact updated' });
-});
+  }));
 
-router.delete('/:id/emergency-contacts/:ecId', requireAdmin, async (req, res) => {
+router.delete('/:id/emergency-contacts/:ecId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -156,21 +172,21 @@ router.delete('/:id/emergency-contacts/:ecId', requireAdmin, async (req, res) =>
   const result = await db.query('DELETE FROM emergency_contacts WHERE id = $1 AND candidate_id = $2', [ecId, cand.id]);
   if (result.rowCount === 0) return res.status(404).json({ error: 'Emergency contact not found' });
   res.json({ message: 'Emergency contact deleted' });
-});
+  }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 3. EMPLOYMENT HISTORY
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/employment-history', async (req, res) => {
+router.get('/:id/employment-history', wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
   const result = await db.query('SELECT * FROM employment_history WHERE candidate_id = $1 ORDER BY start_date DESC', [cand.id]);
   res.json(result.rows);
-});
+  }));
 
-router.post('/:id/employment-history', requireAdmin, async (req, res) => {
+router.post('/:id/employment-history', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -185,9 +201,9 @@ router.post('/:id/employment-history', requireAdmin, async (req, res) => {
   `, [cand.id, position_title, start_date, end_date || null, remuneration || null, currency || 'USD', frequency || 'annual', notes || null]);
 
   res.status(201).json({ id: result.rows[0].id, message: 'Employment record added' });
-});
+  }));
 
-router.put('/:id/employment-history/:ehId', requireAdmin, async (req, res) => {
+router.put('/:id/employment-history/:ehId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -208,9 +224,9 @@ router.put('/:id/employment-history/:ehId', requireAdmin, async (req, res) => {
   `, [position_title || null, start_date || null, end_date || null, remuneration || null, currency || null, frequency || null, notes || null, ehId]);
 
   res.json({ message: 'Employment record updated' });
-});
+  }));
 
-router.delete('/:id/employment-history/:ehId', requireAdmin, async (req, res) => {
+router.delete('/:id/employment-history/:ehId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -219,13 +235,13 @@ router.delete('/:id/employment-history/:ehId', requireAdmin, async (req, res) =>
   const result = await db.query('DELETE FROM employment_history WHERE id = $1 AND candidate_id = $2', [ehId, cand.id]);
   if (result.rowCount === 0) return res.status(404).json({ error: 'Employment record not found' });
   res.json({ message: 'Employment record deleted' });
-});
+  }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 4. BANK ACCOUNTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/bank-accounts', requireAdmin, async (req, res) => {
+router.get('/:id/bank-accounts', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -240,9 +256,9 @@ router.get('/:id/bank-accounts', requireAdmin, async (req, res) => {
     _has_swift: !!a.swift_code,
   }));
   res.json(masked);
-});
+  }));
 
-router.post('/:id/bank-accounts', requireAdmin, async (req, res) => {
+router.post('/:id/bank-accounts', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -264,9 +280,9 @@ router.post('/:id/bank-accounts', requireAdmin, async (req, res) => {
   `, [cand.id, account_name, bank_name, account_number, routing_number || null, swift_code || null, country || 'US', is_primary ? true : false]);
 
   res.status(201).json({ id: result.rows[0].id, message: 'Bank account added' });
-});
+  }));
 
-router.put('/:id/bank-accounts/:baId', requireAdmin, async (req, res) => {
+router.put('/:id/bank-accounts/:baId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -292,9 +308,9 @@ router.put('/:id/bank-accounts/:baId', requireAdmin, async (req, res) => {
   `, [account_name || null, bank_name || null, account_number || null, routing_number || null, swift_code || null, country || null, is_primary !== undefined ? (is_primary ? true : false) : null, baId]);
 
   res.json({ message: 'Bank account updated' });
-});
+  }));
 
-router.delete('/:id/bank-accounts/:baId', requireAdmin, async (req, res) => {
+router.delete('/:id/bank-accounts/:baId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -303,7 +319,7 @@ router.delete('/:id/bank-accounts/:baId', requireAdmin, async (req, res) => {
   const result = await db.query('DELETE FROM bank_accounts WHERE id = $1 AND candidate_id = $2', [baId, cand.id]);
   if (result.rowCount === 0) return res.status(404).json({ error: 'Bank account not found' });
   res.json({ message: 'Bank account deleted' });
-});
+  }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 5. LEAVE BALANCES
@@ -311,7 +327,7 @@ router.delete('/:id/bank-accounts/:baId', requireAdmin, async (req, res) => {
 
 const LEAVE_TYPES = ['vacation', 'sick', 'personal', 'public_holiday', 'other'];
 
-router.get('/:id/leave-balances', async (req, res) => {
+router.get('/:id/leave-balances', wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -350,9 +366,9 @@ router.get('/:id/leave-balances', async (req, res) => {
   });
 
   res.json({ year, balances });
-});
+  }));
 
-router.put('/:id/leave-balances', requireAdmin, async (req, res) => {
+router.put('/:id/leave-balances', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -373,21 +389,21 @@ router.put('/:id/leave-balances', requireAdmin, async (req, res) => {
   `, [cand.id, leave_type, yr, entitlement_days || 0, carry_over_days || 0]);
 
   res.json({ message: 'Leave balance updated' });
-});
+  }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 6. ASSETS ON LOAN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/assets', async (req, res) => {
+router.get('/:id/assets', wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
   const result = await db.query('SELECT * FROM employee_assets WHERE candidate_id = $1 ORDER BY checkout_date DESC', [cand.id]);
   res.json(result.rows);
-});
+  }));
 
-router.post('/:id/assets', requireAdmin, async (req, res) => {
+router.post('/:id/assets', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -402,9 +418,9 @@ router.post('/:id/assets', requireAdmin, async (req, res) => {
   `, [cand.id, serial_number || null, description, category || 'other', checkout_date, checkin_date || null, status || 'on_loan', photo_url || null, notes || null]);
 
   res.status(201).json({ id: result.rows[0].id, message: 'Asset recorded' });
-});
+  }));
 
-router.put('/:id/assets/:asId', requireAdmin, async (req, res) => {
+router.put('/:id/assets/:asId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -425,9 +441,9 @@ router.put('/:id/assets/:asId', requireAdmin, async (req, res) => {
   `, [serial_number || null, description || null, category || null, checkout_date || null, checkin_date || null, status || null, photo_url || null, notes || null, asId]);
 
   res.json({ message: 'Asset updated' });
-});
+  }));
 
-router.delete('/:id/assets/:asId', requireAdmin, async (req, res) => {
+router.delete('/:id/assets/:asId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -436,21 +452,21 @@ router.delete('/:id/assets/:asId', requireAdmin, async (req, res) => {
   const result = await db.query('DELETE FROM employee_assets WHERE id = $1 AND candidate_id = $2', [asId, cand.id]);
   if (result.rowCount === 0) return res.status(404).json({ error: 'Asset not found' });
   res.json({ message: 'Asset deleted' });
-});
+  }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 7. BENEFITS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/benefits', async (req, res) => {
+router.get('/:id/benefits', wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
   const result = await db.query('SELECT * FROM employee_benefits WHERE candidate_id = $1 ORDER BY id', [cand.id]);
   res.json(result.rows);
-});
+  }));
 
-router.post('/:id/benefits', requireAdmin, async (req, res) => {
+router.post('/:id/benefits', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -465,9 +481,9 @@ router.post('/:id/benefits', requireAdmin, async (req, res) => {
   `, [cand.id, benefit_type, provider || null, value || null, currency || 'USD', access_details || null, notes || null, effective_date || null, end_date || null]);
 
   res.status(201).json({ id: result.rows[0].id, message: 'Benefit added' });
-});
+  }));
 
-router.put('/:id/benefits/:bId', requireAdmin, async (req, res) => {
+router.put('/:id/benefits/:bId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -487,9 +503,9 @@ router.put('/:id/benefits/:bId', requireAdmin, async (req, res) => {
   `, [benefit_type || null, provider || null, value || null, currency || null, access_details || null, notes || null, effective_date || null, end_date || null, bId]);
 
   res.json({ message: 'Benefit updated' });
-});
+  }));
 
-router.delete('/:id/benefits/:bId', requireAdmin, async (req, res) => {
+router.delete('/:id/benefits/:bId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -498,21 +514,21 @@ router.delete('/:id/benefits/:bId', requireAdmin, async (req, res) => {
   const result = await db.query('DELETE FROM employee_benefits WHERE id = $1 AND candidate_id = $2', [bId, cand.id]);
   if (result.rowCount === 0) return res.status(404).json({ error: 'Benefit not found' });
   res.json({ message: 'Benefit deleted' });
-});
+  }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 8. PERFORMANCE REVIEWS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/performance-reviews', async (req, res) => {
+router.get('/:id/performance-reviews', wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
   const result = await db.query('SELECT * FROM performance_reviews WHERE candidate_id = $1 ORDER BY review_date DESC', [cand.id]);
   res.json(result.rows);
-});
+  }));
 
-router.post('/:id/performance-reviews', requireAdmin, async (req, res) => {
+router.post('/:id/performance-reviews', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -530,9 +546,9 @@ router.post('/:id/performance-reviews', requireAdmin, async (req, res) => {
   `, [cand.id, review_date, req.user.id, reviewer_name || req.user.name || req.user.email, overall_score || null, evaluation || null, next_steps || null]);
 
   res.status(201).json({ id: result.rows[0].id, message: 'Performance review added' });
-});
+  }));
 
-router.put('/:id/performance-reviews/:prId', requireAdmin, async (req, res) => {
+router.put('/:id/performance-reviews/:prId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -556,9 +572,9 @@ router.put('/:id/performance-reviews/:prId', requireAdmin, async (req, res) => {
   `, [review_date || null, reviewer_name || null, overall_score || null, evaluation || null, next_steps || null, prId]);
 
   res.json({ message: 'Review updated' });
-});
+  }));
 
-router.delete('/:id/performance-reviews/:prId', requireAdmin, async (req, res) => {
+router.delete('/:id/performance-reviews/:prId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -567,21 +583,21 @@ router.delete('/:id/performance-reviews/:prId', requireAdmin, async (req, res) =
   const result = await db.query('DELETE FROM performance_reviews WHERE id = $1 AND candidate_id = $2', [prId, cand.id]);
   if (result.rowCount === 0) return res.status(404).json({ error: 'Review not found' });
   res.json({ message: 'Review deleted' });
-});
+  }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 9. TRAINING RECORDS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/training', async (req, res) => {
+router.get('/:id/training', wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
   const result = await db.query('SELECT * FROM training_records WHERE candidate_id = $1 ORDER BY training_date DESC', [cand.id]);
   res.json(result.rows);
-});
+  }));
 
-router.post('/:id/training', requireAdmin, async (req, res) => {
+router.post('/:id/training', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -596,9 +612,9 @@ router.post('/:id/training', requireAdmin, async (req, res) => {
   `, [cand.id, training_date, name, content || null, results || null, certificate_url || null]);
 
   res.status(201).json({ id: result.rows[0].id, message: 'Training record added' });
-});
+  }));
 
-router.put('/:id/training/:trId', requireAdmin, async (req, res) => {
+router.put('/:id/training/:trId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -618,9 +634,9 @@ router.put('/:id/training/:trId', requireAdmin, async (req, res) => {
   `, [training_date || null, name || null, content || null, results || null, certificate_url || null, trId]);
 
   res.json({ message: 'Training record updated' });
-});
+  }));
 
-router.delete('/:id/training/:trId', requireAdmin, async (req, res) => {
+router.delete('/:id/training/:trId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -629,13 +645,13 @@ router.delete('/:id/training/:trId', requireAdmin, async (req, res) => {
   const result = await db.query('DELETE FROM training_records WHERE id = $1 AND candidate_id = $2', [trId, cand.id]);
   if (result.rowCount === 0) return res.status(404).json({ error: 'Training record not found' });
   res.json({ message: 'Training record deleted' });
-});
+  }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 10. LICENCES, PERMITS & INSURANCE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/licenses', async (req, res) => {
+router.get('/:id/licenses', wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -656,9 +672,9 @@ router.get('/:id/licenses', async (req, res) => {
   });
 
   res.json(enriched);
-});
+  }));
 
-router.post('/:id/licenses', requireAdmin, async (req, res) => {
+router.post('/:id/licenses', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -678,9 +694,9 @@ router.post('/:id/licenses', requireAdmin, async (req, res) => {
   `, [cand.id, document_type, document_url || null, issue_date || null, expiry_date || null, reminder_days_before || 30, status, notes || null]);
 
   res.status(201).json({ id: result.rows[0].id, message: 'License record added' });
-});
+  }));
 
-router.put('/:id/licenses/:licId', requireAdmin, async (req, res) => {
+router.put('/:id/licenses/:licId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -709,9 +725,9 @@ router.put('/:id/licenses/:licId', requireAdmin, async (req, res) => {
   `, [document_type || null, document_url || null, issue_date || null, expiry_date || null, reminder_days_before || null, computedStatus || null, notes || null, licId]);
 
   res.json({ message: 'License updated' });
-});
+  }));
 
-router.delete('/:id/licenses/:licId', requireAdmin, async (req, res) => {
+router.delete('/:id/licenses/:licId', requireAdmin, wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -720,13 +736,13 @@ router.delete('/:id/licenses/:licId', requireAdmin, async (req, res) => {
   const result = await db.query('DELETE FROM employee_licenses WHERE id = $1 AND candidate_id = $2', [licId, cand.id]);
   if (result.rowCount === 0) return res.status(404).json({ error: 'License not found' });
   res.json({ message: 'License deleted' });
-});
+  }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SUMMARY — quick overview for profile header
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/summary', async (req, res) => {
+router.get('/:id/summary', wrap(async (req, res) => {
   const db = req.db;
   const cand = await resolveCandidate(req, res);
   if (!cand) return;
@@ -783,6 +799,68 @@ router.get('/:id/summary', async (req, res) => {
       ...(expiringLicenses > 0 ? [`${expiringLicenses} licence(s) expiring soon`] : []),
     ],
   });
-});
+  }));
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HISTORY — audit trail for all profile section changes
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/:id/history', wrap(async (req, res) => {
+  const db = req.db;
+  const cand = await resolveCandidate(req, res);
+  if (!cand) return;
+
+  const limit  = Math.min(parseInt(req.query.limit, 10)  || 100, 500);
+  const offset = parseInt(req.query.offset, 10) || 0;
+  const table  = req.query.table || null; // optional filter by section
+
+  const params = [cand.id, limit, offset];
+  const tableFilter = table ? `AND al.table_name = $4` : '';
+  if (table) params.push(table);
+
+  // Query audit_logs; fall back gracefully if the column names differ
+  const result = await db.query(`
+    SELECT
+      al.id,
+      al.table_name,
+      al.action,
+      al.record_id,
+      al.changed_by,
+      al.changed_at,
+      al.old_data,
+      al.new_data,
+      u.name  AS changed_by_name,
+      u.email AS changed_by_email
+    FROM audit_logs al
+    LEFT JOIN users u ON u.id = al.changed_by
+    WHERE al.row_id::text = $1::text
+      ${tableFilter}
+    ORDER BY al.changed_at DESC
+    LIMIT $2 OFFSET $3
+  `, params).catch(() =>
+    // If audit_logs doesn't have row_id col, try record_id fallback
+    db.query(`
+      SELECT
+        al.id,
+        al.table_name,
+        al.action,
+        al.record_id,
+        al.changed_by,
+        al.changed_at,
+        al.old_data,
+        al.new_data,
+        u.name  AS changed_by_name,
+        u.email AS changed_by_email
+      FROM audit_logs al
+      LEFT JOIN users u ON u.id = al.changed_by
+      WHERE al.record_id::text = $1::text
+        ${tableFilter}
+      ORDER BY al.changed_at DESC
+      LIMIT $2 OFFSET $3
+    `, params)
+  );
+
+  res.json(result.rows);
+}));
 
 module.exports = router;

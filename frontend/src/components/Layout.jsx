@@ -41,6 +41,7 @@ const adminNav = [
   { to: '/contractors',            icon: '🤝', label: 'Contractors',      section: 'Compliance' },
   { to: '/compliance',             icon: '⚖️', label: 'Compliance Center' },
   { to: '/eeo',                    icon: '🏛️', label: 'EEO Reporting' },
+  { to: '/privacy',                icon: '🔒', label: 'Privacy Center' },
   { to: '/import',                icon: '📥', label: 'Import',                 moduleKey: 'hr_import' },
   // ── Payroll & Tools ─────────────────────────────────────────────────────────
   { to: '/payroll-reconciliation', icon: '💰', label: 'Payroll',        section: 'Payroll & Tools' },
@@ -48,6 +49,7 @@ const adminNav = [
   { to: '/resume-builder',         icon: '📄', label: 'Resume Builder', moduleKey: 'hr_candidates' },
   { to: '/support-admin',          icon: '🎫', label: 'Support',        section: 'Support', moduleKey: 'hr_support' },
   { to: '/ai-documents',           icon: '🧠', label: 'AI Knowledge Base', moduleKey: 'ai_assistant' },
+  { to: '/integrations',           icon: '🔌', label: 'Integrations',   section: 'Developer' },
   { to: '/settings',               icon: '⚙️', label: 'Settings' },
 ];
 

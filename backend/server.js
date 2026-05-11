@@ -45,6 +45,7 @@ const expenseRoutes          = require('./routes/expenses');
 const payRulesRoutes         = require('./routes/payRules');
 const privacyRoutes          = require('./routes/privacy');
 const eeoRoutes              = require('./routes/eeo');
+const integrationsRoutes     = require('./routes/integrations');
 const { auditLogViewer }     = require('./middleware/auditLog');
 
 const app      = express();
@@ -194,6 +195,7 @@ app.use('/api/expenses',         expenseRoutes);
 app.use('/api/pay-rules',        payRulesRoutes);
 app.use('/api/privacy',          privacyRoutes);
 app.use('/api/eeo',              eeoRoutes);
+app.use('/api/integrations',     integrationsRoutes);
 
 // ── Audit log viewer ──────────────────────────────────────────────────────────
 const { authenticate, requireAdmin, injectTenantDb } = require('./middleware/auth');

@@ -5,8 +5,17 @@ import api from '../../api';
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
 const fmt = (date) => date ? new Date(date).toLocaleDateString() : '—';
+const fmtDateTime = (date) => date ? new Date(date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 const fmtMoney = (val, currency = 'USD') =>
   val != null ? new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(val) : '—';
+
+// Small "last updated" caption shown on each record card
+function UpdatedAt({ date, label = 'Updated' }) {
+  if (!date) return null;
+  return (
+    <p className="text-xs text-gray-400 mt-1.5">{label}: {fmtDateTime(date)}</p>
+  );
+}
 
 function Badge({ text, color = 'gray' }) {
   const colors = {
@@ -136,21 +145,31 @@ function useData(url, deps = []) {
 
 function ContactTab({ empId }) {
   const { data, loading, reload } = useData(`/employees/${empId}/contact`);
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({});
+  const [editingCore, setEditingCore]       = useState(false);
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [form, setForm]     = useState({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { if (data) setForm(data); }, [data]);
 
-  const save = async () => {
+  const saveCore = async () => {
     setSaving(true);
     try {
       await api.put(`/employees/${empId}/contact`, form);
-      setEditing(false);
+      setEditingCore(false);
       reload();
-    } catch (e) {
-      alert(e.response?.data?.error || 'Save failed');
-    } finally { setSaving(false); }
+    } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
+    finally { setSaving(false); }
+  };
+
+  const saveAddress = async () => {
+    setSaving(true);
+    try {
+      await api.put(`/employees/${empId}/contact`, form);
+      setEditingAddress(false);
+      reload();
+    } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
+    finally { setSaving(false); }
   };
 
   if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
@@ -159,12 +178,16 @@ function ContactTab({ empId }) {
 
   return (
     <div className="space-y-6">
+      {/* Core Details — independently editable */}
       <SectionCard title="Core Details" icon="👤" action={
-        editing
-          ? <div className="flex gap-2"><Btn onClick={() => setEditing(false)} variant="secondary">Cancel</Btn><Btn onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Btn></div>
-          : <Btn onClick={() => setEditing(true)} variant="secondary">✏️ Edit</Btn>
+        editingCore
+          ? <div className="flex gap-2">
+              <Btn onClick={() => { setForm(data); setEditingCore(false); }} variant="secondary">Cancel</Btn>
+              <Btn onClick={saveCore} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Btn>
+            </div>
+          : <Btn onClick={() => setEditingCore(true)} variant="secondary">✏️ Edit</Btn>
       }>
-        {editing ? (
+        {editingCore ? (
           <div className="grid grid-cols-2 gap-4">
             <FormField label="Full Name" required><Input {...f('name')} required /></FormField>
             <FormField label="Work Email"><Input {...f('email')} type="email" /></FormField>
@@ -181,8 +204,16 @@ function ContactTab({ empId }) {
         )}
       </SectionCard>
 
-      <SectionCard title="Home Address" icon="🏠">
-        {editing ? (
+      {/* Home Address — independently editable */}
+      <SectionCard title="Home Address" icon="🏠" action={
+        editingAddress
+          ? <div className="flex gap-2">
+              <Btn onClick={() => { setForm(data); setEditingAddress(false); }} variant="secondary">Cancel</Btn>
+              <Btn onClick={saveAddress} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Btn>
+            </div>
+          : <Btn onClick={() => setEditingAddress(true)} variant="secondary">✏️ Edit</Btn>
+      }>
+        {editingAddress ? (
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2"><FormField label="Street Address"><Input {...f('home_street')} /></FormField></div>
             <FormField label="City"><Input {...f('home_city')} /></FormField>
@@ -198,7 +229,7 @@ function ContactTab({ empId }) {
                 <p>{[data.home_city, data.home_state, data.home_postcode].filter(Boolean).join(', ')}</p>
                 <p>{data.home_country}</p>
               </address>
-            ) : <p className="text-gray-400">No address on file</p>}
+            ) : <p className="text-gray-400 italic">No address on file — click ✏️ Edit to add one.</p>}
           </div>
         )}
       </SectionCard>
@@ -244,14 +275,15 @@ function EmergencyTab({ empId }) {
       <div className="flex justify-end mb-4">
         <Btn onClick={openNew}>+ Add Contact</Btn>
       </div>
-      {!data?.length ? <EmptyState message="No emergency contacts on file" icon="🆘" /> : (
+      {!(Array.isArray(data) && data.length) ? <EmptyState message="No emergency contacts on file" icon="🆘" /> : (
         <div className="space-y-3">
-          {data.map(ec => (
+          {(Array.isArray(data) ? data : []).map(ec => (
             <div key={ec.id} className="flex items-start justify-between p-4 border border-gray-200 rounded-xl">
               <div>
                 <p className="font-semibold text-gray-800">{ec.name}</p>
                 {ec.relationship && <p className="text-sm text-gray-500">{ec.relationship}</p>}
                 <p className="text-sm text-gray-700 mt-1">📞 {ec.phone1}{ec.phone2 ? ` · ${ec.phone2}` : ''}</p>
+                <UpdatedAt date={ec.updated_at} />
               </div>
               <div className="flex gap-2">
                 <Btn variant="secondary" onClick={() => openEdit(ec)}>Edit</Btn>
@@ -317,11 +349,11 @@ function EmploymentTab({ empId }) {
   return (
     <div>
       <div className="flex justify-end mb-4"><Btn onClick={openNew}>+ Add Record</Btn></div>
-      {!data?.length ? <EmptyState message="No employment history on file" icon="📋" /> : (
+      {!(Array.isArray(data) && data.length) ? <EmptyState message="No employment history on file" icon="📋" /> : (
         <div className="relative">
           <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-200" />
           <div className="space-y-4">
-            {data.map((eh, i) => (
+            {(Array.isArray(data) ? data : []).map((eh, i) => (
               <div key={eh.id} className="relative pl-12">
                 <div className={`absolute left-3.5 top-3 w-3 h-3 rounded-full border-2 border-white ${!eh.end_date ? 'bg-green-500' : 'bg-gray-400'}`} />
                 <div className="p-4 border border-gray-200 rounded-xl">
@@ -329,6 +361,7 @@ function EmploymentTab({ empId }) {
                     <div>
                       <p className="font-semibold text-gray-800">{eh.position_title}</p>
                       <p className="text-sm text-gray-500">{fmt(eh.start_date)} → {eh.end_date ? fmt(eh.end_date) : <Badge text="Current" color="green" />}</p>
+                      <UpdatedAt date={eh.updated_at} />
                       {eh.remuneration && (
                         <p className="text-sm text-gray-700 mt-1">{fmtMoney(eh.remuneration, eh.currency)} <span className="text-gray-400">{FREQ_LABELS[eh.frequency]}</span></p>
                       )}
@@ -413,14 +446,15 @@ function BankTab({ empId }) {
         <p className="text-xs text-gray-500">🔒 Account numbers are masked. Only the last 4 digits are shown.</p>
         <Btn onClick={() => { setForm({ account_name: '', bank_name: '', account_number: '', routing_number: '', swift_code: '', country: 'US', is_primary: false }); setShowModal(true); }}>+ Add Account</Btn>
       </div>
-      {!data?.length ? <EmptyState message="No bank accounts on file" icon="🏦" /> : (
+      {!(Array.isArray(data) && data.length) ? <EmptyState message="No bank accounts on file" icon="🏦" /> : (
         <div className="space-y-3">
-          {data.map(ba => (
+          {(Array.isArray(data) ? data : []).map(ba => (
             <div key={ba.id} className="p-4 border border-gray-200 rounded-xl">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-gray-800">{ba.bank_name}</p>
+                  <UpdatedAt date={ba.updated_at} />
                     {ba.is_primary ? <Badge text="Primary" color="green" /> : null}
                   </div>
                   <p className="text-sm text-gray-500">{ba.account_name}</p>
@@ -580,15 +614,16 @@ function AssetsTab({ empId }) {
   return (
     <div>
       <div className="flex justify-end mb-4"><Btn onClick={openNew}>+ Add Asset</Btn></div>
-      {!data?.length ? <EmptyState message="No company assets recorded" icon="📦" /> : (
+      {!(Array.isArray(data) && data.length) ? <EmptyState message="No company assets recorded" icon="📦" /> : (
         <div className="space-y-3">
-          {data.map(a => (
+          {(Array.isArray(data) ? data : []).map(a => (
             <div key={a.id} className="flex items-start justify-between p-4 border border-gray-200 rounded-xl">
               <div className="flex items-start gap-3">
                 <span className="text-2xl">{ASSET_ICONS[a.category] || '📦'}</span>
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-gray-800">{a.description}</p>
+                  <UpdatedAt date={a.updated_at} />
                     <Badge text={a.status.replace('_', ' ')} color={STATUS_COLORS[a.status]} />
                   </div>
                   {a.serial_number && <p className="text-xs text-gray-500 font-mono">S/N: {a.serial_number}</p>}
@@ -665,12 +700,13 @@ function BenefitsTab({ empId }) {
   return (
     <div>
       <div className="flex justify-end mb-4"><Btn onClick={openNew}>+ Add Benefit</Btn></div>
-      {!data?.length ? <EmptyState message="No benefits on file" icon="🎁" /> : (
+      {!(Array.isArray(data) && data.length) ? <EmptyState message="No benefits on file" icon="🎁" /> : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {data.map(b => (
+          {(Array.isArray(data) ? data : []).map(b => (
             <div key={b.id} className="p-4 border border-gray-200 rounded-xl">
               <div className="flex items-start justify-between mb-2">
                 <p className="font-semibold text-gray-800">🎁 {b.benefit_type}</p>
+                <UpdatedAt date={b.updated_at} />
                 <div className="flex gap-1">
                   <Btn variant="ghost" size="sm" onClick={() => openEdit(b)}>✏️</Btn>
                   <Btn variant="ghost" size="sm" onClick={() => del(b.id)}>🗑️</Btn>
@@ -753,13 +789,14 @@ function ReviewsTab({ empId }) {
   return (
     <div>
       <div className="flex justify-end mb-4"><Btn onClick={openNew}>+ Add Review</Btn></div>
-      {!data?.length ? <EmptyState message="No performance reviews on file" icon="📊" /> : (
+      {!(Array.isArray(data) && data.length) ? <EmptyState message="No performance reviews on file" icon="📊" /> : (
         <div className="space-y-4">
-          {data.map(r => (
+          {(Array.isArray(data) ? data : []).map(r => (
             <div key={r.id} className="p-5 border border-gray-200 rounded-xl">
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <p className="font-semibold text-gray-800">{fmt(r.review_date)}</p>
+                  <UpdatedAt date={r.updated_at} />
                   <p className="text-sm text-gray-500">Reviewed by: {r.reviewer_name}</p>
                 </div>
                 <div className="flex gap-2">
@@ -849,14 +886,15 @@ function TrainingTab({ empId }) {
   return (
     <div>
       <div className="flex justify-end mb-4"><Btn onClick={openNew}>+ Add Training</Btn></div>
-      {!data?.length ? <EmptyState message="No training records on file" icon="🎓" /> : (
+      {!(Array.isArray(data) && data.length) ? <EmptyState message="No training records on file" icon="🎓" /> : (
         <div className="space-y-3">
-          {data.map(tr => (
+          {(Array.isArray(data) ? data : []).map(tr => (
             <div key={tr.id} className="p-4 border border-gray-200 rounded-xl">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-gray-800">🎓 {tr.name}</p>
+                  <UpdatedAt date={tr.updated_at} />
                     {tr.certificate_url && <a href={tr.certificate_url} target="_blank" rel="noopener noreferrer"><Badge text="Certificate" color="green" /></a>}
                   </div>
                   <p className="text-sm text-gray-500">{fmt(tr.training_date)}</p>
@@ -932,14 +970,15 @@ function LicencesTab({ empId }) {
   return (
     <div>
       <div className="flex justify-end mb-4"><Btn onClick={openNew}>+ Add Licence</Btn></div>
-      {!data?.length ? <EmptyState message="No licences or permits on file" icon="📜" /> : (
+      {!(Array.isArray(data) && data.length) ? <EmptyState message="No licences or permits on file" icon="📜" /> : (
         <div className="space-y-3">
-          {data.map(lic => (
+          {(Array.isArray(data) ? data : []).map(lic => (
             <div key={lic.id} className={`p-4 border rounded-xl ${urgencyBg[lic.urgency]}`}>
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-gray-800">📜 {lic.document_type}</p>
+                  <UpdatedAt date={lic.updated_at} />
                     <Badge text={urgencyBadge[lic.urgency][0]} color={urgencyBadge[lic.urgency][1]} />
                   </div>
                   {lic.issue_date && <p className="text-sm text-gray-500">Issued: {fmt(lic.issue_date)}</p>}
@@ -1245,6 +1284,109 @@ function EEOTab({ empId }) {
   );
 }
 
+// ─── TAB: HISTORY ─────────────────────────────────────────────────────────────
+
+const SECTION_LABELS = {
+  employees:            'Core details',
+  employee_contact_ext: 'Contact / Address',
+  emergency_contacts:   'Emergency contacts',
+  employment_history:   'Employment history',
+  bank_accounts:        'Bank accounts',
+  leave_balances:       'Leave balances',
+  employee_assets:      'Assets',
+  employee_benefits:    'Benefits',
+  performance_reviews:  'Performance reviews',
+  training_records:     'Training',
+  employee_licenses:    'Licences',
+  eeo_data:             'EEO data',
+};
+
+const ACTION_STYLE = {
+  INSERT: { label: 'Created', bg: 'bg-green-50 border-green-200', dot: 'bg-green-500', text: 'text-green-700' },
+  UPDATE: { label: 'Updated', bg: 'bg-blue-50 border-blue-200',  dot: 'bg-blue-500',  text: 'text-blue-700'  },
+  DELETE: { label: 'Deleted', bg: 'bg-red-50 border-red-200',    dot: 'bg-red-500',   text: 'text-red-700'   },
+};
+
+function HistoryTab({ empId }) {
+  const { data, loading, error } = useData(`/employees/${empId}/history`);
+  const [expanded, setExpanded] = useState({});
+
+  const entries = Array.isArray(data) ? data : [];
+
+  if (loading) return <p className="text-sm text-gray-500">Loading history…</p>;
+  if (error)   return <p className="text-sm text-red-500">Could not load history: {error}</p>;
+
+  if (entries.length === 0) {
+    return (
+      <EmptyState
+        icon="🕐"
+        message="No change history recorded yet. History is captured automatically as data is added or edited."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-gray-400 mb-4">
+        Showing the last {entries.length} change{entries.length !== 1 ? 's' : ''} across all sections of this employee's profile.
+      </p>
+      {entries.map(entry => {
+        const style = ACTION_STYLE[entry.action] || ACTION_STYLE.UPDATE;
+        const sectionLabel = SECTION_LABELS[entry.table_name] || entry.table_name;
+        const isOpen = !!expanded[entry.id];
+        const hasDetail = entry.old_data || entry.new_data;
+
+        return (
+          <div key={entry.id} className={`border rounded-xl overflow-hidden ${style.bg}`}>
+            <div className="flex items-start gap-3 px-4 py-3">
+              <span className={`mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${style.dot}`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs font-semibold uppercase tracking-wide ${style.text}`}>{style.label}</span>
+                  <span className="text-sm font-medium text-gray-800">{sectionLabel}</span>
+                  {entry.changed_by_name && (
+                    <span className="text-xs text-gray-500">by {entry.changed_by_name}</span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">{fmtDateTime(entry.changed_at)}</p>
+              </div>
+              {hasDetail && (
+                <button
+                  onClick={() => setExpanded(p => ({ ...p, [entry.id]: !p[entry.id] }))}
+                  className="text-xs text-gray-500 hover:text-gray-700 flex-shrink-0 pt-0.5"
+                >
+                  {isOpen ? '▲ Hide' : '▼ Details'}
+                </button>
+              )}
+            </div>
+
+            {isOpen && hasDetail && (
+              <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {entry.old_data && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 mb-1">Before</p>
+                    <pre className="text-xs bg-white/60 border border-gray-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+                      {JSON.stringify(entry.old_data, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {entry.new_data && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 mb-1">After</p>
+                    <pre className="text-xs bg-white/60 border border-gray-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+                      {JSON.stringify(entry.new_data, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -1259,6 +1401,7 @@ const TABS = [
   { id: 'training',    label: '🎓 Training',    component: TrainingTab },
   { id: 'licenses',    label: '📜 Licences',    component: LicencesTab },
   { id: 'eeo',         label: '⚖️ EEO',         component: EEOTab },
+  { id: 'history',     label: '🕐 History',     component: HistoryTab },
 ];
 
 export default function EmployeeProfile() {

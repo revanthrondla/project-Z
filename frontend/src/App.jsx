@@ -158,6 +158,8 @@ const AdminExpenses         = lazy(() => import('./pages/admin/Expenses'));
 const AdminContractors      = lazy(() => import('./pages/admin/Contractors'));
 const AdminCompliance       = lazy(() => import('./pages/admin/Compliance'));
 const AdminEEO              = lazy(() => import('./pages/admin/EEO'));
+const AdminPrivacy          = lazy(() => import('./pages/admin/Privacy'));
+const AdminIntegrations     = lazy(() => import('./pages/admin/Integrations'));
 
 // Field Ops pages
 const FieldScan       = lazy(() => import('./pages/agrow/FieldScan'));
@@ -386,9 +388,11 @@ function AppRoutes() {
         <Route path="reports"     element={<ModuleRoute moduleKey="hr_reports" adminOnly><Lazy><AdminReports /></Lazy></ModuleRoute>} />
         <Route path="projects"    element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminProjects /></Lazy></ModuleRoute>} />
         <Route path="expenses"    element={<PrivateRoute><Lazy><AdminExpenses /></Lazy></PrivateRoute>} />
-        <Route path="contractors" element={<PrivateRoute adminOnly><Lazy><AdminContractors /></Lazy></PrivateRoute>} />
-        <Route path="compliance"  element={<PrivateRoute adminOnly><Lazy><AdminCompliance /></Lazy></PrivateRoute>} />
-        <Route path="eeo"         element={<PrivateRoute adminOnly><Lazy><AdminEEO /></Lazy></PrivateRoute>} />
+        <Route path="contractors"  element={<PrivateRoute adminOnly><Lazy><AdminContractors /></Lazy></PrivateRoute>} />
+        <Route path="compliance"   element={<PrivateRoute adminOnly><Lazy><AdminCompliance /></Lazy></PrivateRoute>} />
+        <Route path="eeo"          element={<PrivateRoute adminOnly><Lazy><AdminEEO /></Lazy></PrivateRoute>} />
+        <Route path="privacy"      element={<PrivateRoute adminOnly><Lazy><AdminPrivacy /></Lazy></PrivateRoute>} />
+        <Route path="integrations" element={<PrivateRoute adminOnly><Lazy><AdminIntegrations /></Lazy></PrivateRoute>} />
         <Route path="import"    element={<ModuleRoute moduleKey="hr_import"  adminOnly><Lazy><AdminImport /></Lazy></ModuleRoute>} />
         <Route path="settings" element={<PrivateRoute adminOnly><Lazy><AdminSettings /></Lazy></PrivateRoute>} />
 
