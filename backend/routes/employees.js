@@ -1,9 +1,209 @@
 const express = require('express');
-const bcrypt = require('bcryptjs');
+const bcrypt  = require('bcryptjs');
+const crypto  = require('crypto');
 const { authenticate, requireAdmin, injectTenantDb } = require('../middleware/auth');
 const { indexUserEmail } = require('../masterDatabase');
 
 const router = express.Router();
+
+// ── Utility: SHA-256 hash for SSN storage (never store plaintext) ─────────────
+function hashSSN(ssn) {
+  // normalise: digits only
+  const digits = ssn.replace(/\D/g, '');
+  return crypto.createHash('sha256').update(digits).digest('hex');
+}
+
+// ── Utility: generate the next employee number from org_profile config ────────
+async function generateEmployeeNumber(db) {
+  // Lock the org_profile row to avoid race conditions on seq increment
+  const cfgRes = await db.query(`
+    SELECT emp_num_mode, emp_num_format, emp_num_prefix, emp_num_suffix,
+           emp_num_padding, emp_num_next_seq
+    FROM org_profile LIMIT 1
+    FOR UPDATE
+  `);
+  const cfg = cfgRes.rows[0];
+  if (!cfg || cfg.emp_num_mode !== 'auto') return null;
+
+  const seq     = parseInt(cfg.emp_num_next_seq) || 1;
+  const padding = parseInt(cfg.emp_num_padding)  || 4;
+  const prefix  = cfg.emp_num_prefix || '';
+  const suffix  = cfg.emp_num_suffix || '';
+
+  let seqStr;
+  if (cfg.emp_num_format === 'alphanumeric') {
+    // Encode the sequence as base-36 (0-9, A-Z)
+    seqStr = seq.toString(36).toUpperCase().padStart(padding, '0');
+  } else {
+    // Plain numeric
+    seqStr = String(seq).padStart(padding, '0');
+  }
+
+  const empNumber = `${prefix}${seqStr}${suffix}`;
+
+  // Advance the sequence
+  await db.query(`UPDATE org_profile SET emp_num_next_seq = $1`, [seq + 1]);
+
+  return empNumber;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GET /api/employees/next-number — preview the next auto-generated number
+// ══════════════════════════════════════════════════════════════════════════════
+router.get('/next-number', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
+  try {
+    const cfgRes = await req.db.query(`
+      SELECT emp_num_mode, emp_num_format, emp_num_prefix, emp_num_suffix,
+             emp_num_padding, emp_num_next_seq
+      FROM org_profile LIMIT 1
+    `);
+    const cfg = cfgRes.rows[0] || {};
+
+    if (cfg.emp_num_mode === 'manual') {
+      return res.json({ mode: 'manual', next_number: null });
+    }
+
+    const seq     = parseInt(cfg.emp_num_next_seq) || 1;
+    const padding = parseInt(cfg.emp_num_padding)  || 4;
+    const prefix  = cfg.emp_num_prefix || '';
+    const suffix  = cfg.emp_num_suffix || '';
+
+    let seqStr;
+    if (cfg.emp_num_format === 'alphanumeric') {
+      seqStr = seq.toString(36).toUpperCase().padStart(padding, '0');
+    } else {
+      seqStr = String(seq).padStart(padding, '0');
+    }
+
+    res.json({
+      mode: 'auto',
+      next_number: `${prefix}${seqStr}${suffix}`,
+      format: cfg.emp_num_format || 'numeric',
+      seq,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// POST /api/employees/duplicate-check
+// Body: { ssn?, date_of_birth?, name? }
+// Returns: { duplicates: [...employees] }
+// ══════════════════════════════════════════════════════════════════════════════
+router.post('/duplicate-check', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
+  try {
+    const { ssn, date_of_birth, name } = req.body;
+
+    // Fetch dup-check config
+    const cfgRes = await req.db.query(`
+      SELECT dup_check_enabled, dup_check_ssn, dup_check_dob, dup_check_name
+      FROM org_profile LIMIT 1
+    `);
+    const cfg = cfgRes.rows[0] || {};
+
+    if (!cfg.dup_check_enabled) {
+      return res.json({ duplicates: [], skipped: true });
+    }
+
+    const clauses = [];
+    const values  = [];
+    let   p       = 1;
+
+    if (ssn && cfg.dup_check_ssn) {
+      const hash = hashSSN(ssn);
+      clauses.push(`ssn_hash = $${p++}`);
+      values.push(hash);
+    }
+    if (date_of_birth && cfg.dup_check_dob) {
+      clauses.push(`date_of_birth = $${p++}`);
+      values.push(date_of_birth);
+    }
+    if (name && cfg.dup_check_name) {
+      // Case-insensitive full-name match
+      clauses.push(`LOWER(name) = LOWER($${p++})`);
+      values.push(name.trim());
+    }
+
+    if (clauses.length === 0) {
+      return res.json({ duplicates: [] });
+    }
+
+    // OR across all active checks — any single match is a potential duplicate
+    const result = await req.db.query(`
+      SELECT e.id, e.name, e.email, e.employee_number, e.start_date, e.end_date,
+             e.status, e.is_rehire, e.termination_date, e.termination_reason,
+             e.ssn_last4, e.date_of_birth,
+             cl.name AS client_name
+      FROM employees e
+      LEFT JOIN clients cl ON e.client_id = cl.id
+      WHERE e.deleted_at IS NULL
+        AND (${clauses.join(' OR ')})
+      ORDER BY e.id DESC
+    `, values);
+
+    res.json({ duplicates: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// POST /api/employees/:id/rehire
+// Body: { start_date, role?, hourly_rate?, client_id? }
+// Creates a fresh "active" record linked back to the prior employee via previous_employee_id
+// ══════════════════════════════════════════════════════════════════════════════
+router.post('/:id/rehire', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
+  try {
+    const prevId = parseInt(req.params.id, 10);
+    if (isNaN(prevId)) return res.status(400).json({ error: 'Invalid employee ID' });
+
+    const prevRes = await req.db.query(
+      'SELECT * FROM employees WHERE id = $1 AND deleted_at IS NULL', [prevId]
+    );
+    const prev = prevRes.rows[0];
+    if (!prev) return res.status(404).json({ error: 'Employee not found' });
+
+    const { start_date, role, hourly_rate, client_id } = req.body;
+    if (!start_date) return res.status(400).json({ error: 'start_date is required for rehire' });
+
+    const newEmployee = await req.db.transaction(async (tx) => {
+      // Generate new employee number
+      const empNumber = await generateEmployeeNumber(tx);
+
+      const r = await tx.query(`
+        INSERT INTO employees (
+          user_id, name, email, phone, role, hourly_rate, client_id,
+          start_date, status, contract_type,
+          employee_number, ssn_hash, ssn_last4, date_of_birth,
+          is_rehire, previous_employee_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,TRUE,$15)
+        RETURNING *
+      `, [
+        prev.user_id,
+        prev.name,
+        prev.email,
+        prev.phone,
+        role           || prev.role,
+        parseFloat(hourly_rate || prev.hourly_rate),
+        client_id      !== undefined ? (client_id || null) : prev.client_id,
+        start_date,
+        'active',
+        prev.contract_type,
+        empNumber,
+        prev.ssn_hash,
+        prev.ssn_last4,
+        prev.date_of_birth,
+        prevId,
+      ]);
+      return r.rows[0];
+    });
+
+    res.status(201).json(newEmployee);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/employees — Admin: all; Candidate: own profile
 router.get('/', authenticate, injectTenantDb, async (req, res) => {
@@ -72,7 +272,12 @@ function validateCandidateInput({ name, email, hourly_rate, start_date, end_date
 // POST /api/employees — Admin only
 router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
   try {
-    const { name, email, phone, role, hourly_rate, client_id, start_date, end_date, status, contract_type, password } = req.body;
+    const {
+      name, email, phone, role, hourly_rate, client_id,
+      start_date, end_date, status, contract_type, password,
+      employee_number, ssn, date_of_birth,
+    } = req.body;
+
     if (!name || !email || !role || !hourly_rate) {
       return res.status(400).json({ error: 'Name, email, role, and hourly_rate are required' });
     }
@@ -85,24 +290,55 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
       return res.status(409).json({ error: 'A user with this email already exists' });
     }
 
-    const hash = await bcrypt.hash(password || 'candidate123', 10);
+    // SSN processing
+    let ssnHash = null;
+    let ssnLast4 = null;
+    if (ssn) {
+      const digits = ssn.replace(/\D/g, '');
+      if (digits.length < 4) return res.status(400).json({ error: 'SSN must have at least 4 digits' });
+      ssnHash  = hashSSN(ssn);
+      ssnLast4 = digits.slice(-4);
+    }
+
+    const pwHash = await bcrypt.hash(password || 'candidate123', 10);
 
     const newCandidate = await req.db.transaction(async (tx) => {
       const userResult = await tx.query(
         'INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
-        [name, email.toLowerCase().trim(), hash, 'candidate']
+        [name, email.toLowerCase().trim(), pwHash, 'candidate']
       );
       const userId = userResult.rows[0].id;
 
+      // Determine employee number
+      let empNum = employee_number ? employee_number.trim() || null : null;
+      if (!empNum) {
+        empNum = await generateEmployeeNumber(tx);
+      }
+
+      // Check uniqueness of manually provided employee_number
+      if (empNum) {
+        const numCheck = await tx.query(
+          'SELECT id FROM employees WHERE employee_number = $1', [empNum]
+        );
+        if (numCheck.rows.length > 0) {
+          throw Object.assign(new Error(`Employee number '${empNum}' is already in use`), { status: 409 });
+        }
+      }
+
       const candidateResult = await tx.query(`
-        INSERT INTO employees (user_id, name, email, phone, role, hourly_rate, client_id, start_date, end_date, status, contract_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO employees (
+          user_id, name, email, phone, role, hourly_rate, client_id,
+          start_date, end_date, status, contract_type,
+          employee_number, ssn_hash, ssn_last4, date_of_birth
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         RETURNING id
       `, [
         userId, name, email.toLowerCase().trim(), phone || null,
         role, parseFloat(hourly_rate), client_id || null,
         start_date || null, end_date || null,
-        status || 'active', contract_type || 'contractor'
+        status || 'active', contract_type || 'contractor',
+        empNum, ssnHash, ssnLast4, date_of_birth || null,
       ]);
 
       const employeeId = candidateResult.rows[0].id;
@@ -120,7 +356,8 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
 
     res.status(201).json(newCandidate);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message });
   }
 });
 

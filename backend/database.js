@@ -1410,6 +1410,39 @@ async function createTenantSchema(slug) {
       END $$
     `);
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // EMPLOYEE NUMBER GENERATION + DUPLICATE DETECTION
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // --- employees table additions ---
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS employee_number     TEXT`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS ssn_hash            TEXT`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS ssn_last4           TEXT`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS date_of_birth       DATE`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_rehire           BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS previous_employee_id BIGINT REFERENCES employees(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS termination_date    DATE`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS termination_reason  TEXT`);
+
+    // Unique index on employee_number — partial so NULLs are excluded
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_number
+        ON employees(employee_number)
+        WHERE employee_number IS NOT NULL
+    `);
+
+    // --- org_profile additions (employee number config + dup-check toggles) ---
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS emp_num_mode      TEXT    DEFAULT 'auto' CHECK(emp_num_mode IN ('auto','manual'))`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS emp_num_format    TEXT    DEFAULT 'numeric' CHECK(emp_num_format IN ('numeric','alphanumeric'))`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS emp_num_prefix    TEXT    DEFAULT ''`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS emp_num_suffix    TEXT    DEFAULT ''`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS emp_num_padding   INT     DEFAULT 4`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS emp_num_next_seq  BIGINT  DEFAULT 1`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS dup_check_enabled BOOLEAN DEFAULT TRUE`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS dup_check_ssn     BOOLEAN DEFAULT TRUE`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS dup_check_dob     BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE org_profile ADD COLUMN IF NOT EXISTS dup_check_name    BOOLEAN DEFAULT FALSE`);
+
     console.log(`✅ Schema ready: ${schema}`);
   } finally {
     client.release();

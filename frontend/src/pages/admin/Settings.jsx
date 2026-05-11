@@ -881,13 +881,14 @@ const COUNTRIES = [
 ];
 
 const ORG_SECTIONS = [
-  { key:'profile',    icon:'🏢', label:'Company Profile' },
-  { key:'legal',      icon:'⚖️', label:'Legal & Tax' },
-  { key:'locations',  icon:'📍', label:'Locations' },
-  { key:'departments',icon:'🗂️', label:'Departments' },
-  { key:'workweek',   icon:'🗓️', label:'Workweek & Time' },
-  { key:'invoicing',  icon:'🧾', label:'Invoicing' },
-  { key:'payretention',icon:'💰',label:'Pay & Retention' },
+  { key:'profile',      icon:'🏢', label:'Company Profile' },
+  { key:'legal',        icon:'⚖️', label:'Legal & Tax' },
+  { key:'locations',    icon:'📍', label:'Locations' },
+  { key:'departments',  icon:'🗂️', label:'Departments' },
+  { key:'workweek',     icon:'🗓️', label:'Workweek & Time' },
+  { key:'invoicing',    icon:'🧾', label:'Invoicing' },
+  { key:'payretention', icon:'💰', label:'Pay & Retention' },
+  { key:'empnumbers',   icon:'🔢', label:'Employee Numbers' },
 ];
 
 // ── Shared save hook for the profile singleton ─────────────────────────────
@@ -1559,6 +1560,192 @@ function PayRetentionSection() {
   );
 }
 
+// ── Employee Number & Duplicate Detection config ───────────────────────────
+function EmployeeNumberSection() {
+  const [form, setForm]     = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState('');
+  const [success, setSuccess] = useState('');
+  const [preview, setPreview] = useState('');
+
+  useEffect(() => {
+    api.get('/api/org-setup/employee-number-config')
+      .then(r => {
+        setForm({
+          emp_num_mode:      r.data.emp_num_mode      || 'auto',
+          emp_num_format:    r.data.emp_num_format    || 'numeric',
+          emp_num_prefix:    r.data.emp_num_prefix    ?? '',
+          emp_num_suffix:    r.data.emp_num_suffix    ?? '',
+          emp_num_padding:   r.data.emp_num_padding   ?? 4,
+          emp_num_next_seq:  r.data.emp_num_next_seq  ?? 1,
+          dup_check_enabled: r.data.dup_check_enabled ?? true,
+          dup_check_ssn:     r.data.dup_check_ssn     ?? true,
+          dup_check_dob:     r.data.dup_check_dob     ?? false,
+          dup_check_name:    r.data.dup_check_name    ?? false,
+        });
+        setLoading(false);
+      })
+      .catch(() => { setError('Failed to load config'); setLoading(false); });
+  }, []);
+
+  // Live preview
+  useEffect(() => {
+    if (!form) return;
+    if (form.emp_num_mode !== 'auto') { setPreview('—'); return; }
+    const seq     = parseInt(form.emp_num_next_seq) || 1;
+    const padding = parseInt(form.emp_num_padding)  || 4;
+    let seqStr;
+    if (form.emp_num_format === 'alphanumeric') {
+      seqStr = seq.toString(36).toUpperCase().padStart(padding, '0');
+    } else {
+      seqStr = String(seq).padStart(padding, '0');
+    }
+    setPreview(`${form.emp_num_prefix || ''}${seqStr}${form.emp_num_suffix || ''}`);
+  }, [form]);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true); setError(''); setSuccess('');
+    try {
+      await api.put('/api/org-setup/employee-number-config', form);
+      setSuccess('Employee number settings saved.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading || !form) return <Spinner />;
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
+      <Banner type="error"   message={error}   onClose={() => setError('')} />
+      <Banner type="success" message={success} />
+
+      {/* ── Employee Number Generation ── */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+        <div>
+          <h3 className="font-semibold text-gray-800">Employee Number Generation</h3>
+          <p className="text-sm text-gray-500 mt-1">Configure how employee IDs are assigned when a new hire is created.</p>
+        </div>
+
+        {/* Mode */}
+        <div>
+          <label className="label">Mode</label>
+          <div className="flex gap-6 mt-1">
+            {[['auto','Automatic — generated on hire'],['manual','Manual — entered by admin']].map(([v,l]) => (
+              <label key={v} className="flex items-center gap-2 cursor-pointer text-sm">
+                <input type="radio" name="emp_num_mode" value={v} checked={form.emp_num_mode === v}
+                  onChange={() => set('emp_num_mode', v)} />
+                {l}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {form.emp_num_mode === 'auto' && (
+          <>
+            {/* Format */}
+            <div>
+              <label className="label">Format</label>
+              <div className="flex gap-6 mt-1">
+                {[['numeric','Numeric (e.g. 0001)'],['alphanumeric','Alphanumeric base-36 (e.g. A001)']].map(([v,l]) => (
+                  <label key={v} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input type="radio" name="emp_num_format" value={v} checked={form.emp_num_format === v}
+                      onChange={() => set('emp_num_format', v)} />
+                    {l}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Prefix</label>
+                <input className="input font-mono" value={form.emp_num_prefix}
+                  onChange={e => set('emp_num_prefix', e.target.value.toUpperCase())}
+                  placeholder="e.g. EMP-" maxLength={10} />
+              </div>
+              <div>
+                <label className="label">Suffix</label>
+                <input className="input font-mono" value={form.emp_num_suffix}
+                  onChange={e => set('emp_num_suffix', e.target.value.toUpperCase())}
+                  placeholder="e.g. -UK" maxLength={10} />
+              </div>
+              <div>
+                <label className="label">Sequence Padding (digits)</label>
+                <select className="input" value={form.emp_num_padding}
+                  onChange={e => set('emp_num_padding', parseInt(e.target.value))}>
+                  {[2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n} digits</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Next Sequence Number</label>
+                <input type="number" min="1" className="input" value={form.emp_num_next_seq}
+                  onChange={e => set('emp_num_next_seq', parseInt(e.target.value) || 1)} />
+              </div>
+            </div>
+
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+              Next employee number: <strong className="font-mono text-base">{preview}</strong>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Duplicate Detection ── */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <div>
+          <h3 className="font-semibold text-gray-800">Duplicate Employee Detection</h3>
+          <p className="text-sm text-gray-500 mt-1">Automatically check for potential duplicate hires before a new employee record is saved.</p>
+        </div>
+
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" checked={form.dup_check_enabled}
+            onChange={e => set('dup_check_enabled', e.target.checked)}
+            className="w-4 h-4 rounded" />
+          <span className="text-sm font-medium">Enable duplicate detection</span>
+        </label>
+
+        {form.dup_check_enabled && (
+          <div className="pl-6 space-y-3 border-l-2 border-emerald-100">
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Match on any of the following:</p>
+            {[
+              ['dup_check_ssn',  'SSN (Social Security Number)', 'Stored as a secure hash — only the last 4 digits are visible'],
+              ['dup_check_dob',  'Date of Birth',                'Match on exact date of birth'],
+              ['dup_check_name', 'Full Name',                    'Case-insensitive full name match (generates more false positives)'],
+            ].map(([key, label, hint]) => (
+              <label key={key} className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={form[key]}
+                  onChange={e => set(key, e.target.checked)}
+                  className="w-4 h-4 rounded mt-0.5" />
+                <div>
+                  <span className="text-sm font-medium">{label}</span>
+                  <p className="text-xs text-gray-400">{hint}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          When a potential duplicate is detected, admins will be shown the existing employee and offered the option to continue as a new hire or <strong>rehire</strong> the existing employee.
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button type="submit" disabled={saving} className="btn-primary px-6 py-2">
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // ── Spinner helper ─────────────────────────────────────────────────────────
 function Spinner() {
   return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"/></div>;
@@ -1569,13 +1756,14 @@ function OrgSetupTab() {
   const [section, setSection] = useState('profile');
 
   const SECTION_COMPONENTS = {
-    profile:     CompanyProfileSection,
-    legal:       LegalTaxSection,
-    locations:   LocationsSection,
-    departments: DepartmentsSection,
-    workweek:    WorkweekSection,
-    invoicing:   InvoicingSection,
-    payretention:PayRetentionSection,
+    profile:      CompanyProfileSection,
+    legal:        LegalTaxSection,
+    locations:    LocationsSection,
+    departments:  DepartmentsSection,
+    workweek:     WorkweekSection,
+    invoicing:    InvoicingSection,
+    payretention: PayRetentionSection,
+    empnumbers:   EmployeeNumberSection,
   };
 
   const ActiveSection = SECTION_COMPONENTS[section] || CompanyProfileSection;

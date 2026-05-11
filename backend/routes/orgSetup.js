@@ -182,6 +182,89 @@ router.put('/profile', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+// EMPLOYEE NUMBER CONFIG  — GET/PUT /api/org-setup/employee-number-config
+// ══════════════════════════════════════════════════════════════════════════════
+
+const VALID_EMP_NUM_MODES    = ['auto', 'manual'];
+const VALID_EMP_NUM_FORMATS  = ['numeric', 'alphanumeric'];
+
+// GET /api/org-setup/employee-number-config
+router.get('/employee-number-config', async (req, res) => {
+  try {
+    const r = await req.db.query(`
+      SELECT emp_num_mode, emp_num_format, emp_num_prefix, emp_num_suffix,
+             emp_num_padding, emp_num_next_seq,
+             dup_check_enabled, dup_check_ssn, dup_check_dob, dup_check_name
+      FROM org_profile LIMIT 1
+    `);
+    res.json(r.rows[0] || {
+      emp_num_mode: 'auto', emp_num_format: 'numeric',
+      emp_num_prefix: '', emp_num_suffix: '', emp_num_padding: 4, emp_num_next_seq: 1,
+      dup_check_enabled: true, dup_check_ssn: true, dup_check_dob: false, dup_check_name: false,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/org-setup/employee-number-config
+router.put('/employee-number-config', async (req, res) => {
+  try {
+    const b = req.body;
+
+    if (b.emp_num_mode && !VALID_EMP_NUM_MODES.includes(b.emp_num_mode))
+      return res.status(400).json({ error: `emp_num_mode must be one of: ${VALID_EMP_NUM_MODES.join(', ')}` });
+    if (b.emp_num_format && !VALID_EMP_NUM_FORMATS.includes(b.emp_num_format))
+      return res.status(400).json({ error: `emp_num_format must be one of: ${VALID_EMP_NUM_FORMATS.join(', ')}` });
+    const padding = b.emp_num_padding !== undefined ? cleanInt(b.emp_num_padding) : null;
+    if (padding !== null && (padding < 1 || padding > 10))
+      return res.status(400).json({ error: 'emp_num_padding must be between 1 and 10' });
+    const nextSeq = b.emp_num_next_seq !== undefined ? cleanInt(b.emp_num_next_seq) : null;
+    if (nextSeq !== null && nextSeq < 1)
+      return res.status(400).json({ error: 'emp_num_next_seq must be >= 1' });
+
+    const existing = await req.db.query('SELECT id FROM org_profile LIMIT 1');
+    if (!existing.rows[0]) {
+      // Ensure org_profile row exists before trying to update
+      await req.db.query('INSERT INTO org_profile DEFAULT VALUES');
+    }
+
+    const result = await req.db.query(`
+      UPDATE org_profile SET
+        emp_num_mode      = COALESCE($1,  emp_num_mode),
+        emp_num_format    = COALESCE($2,  emp_num_format),
+        emp_num_prefix    = COALESCE($3,  emp_num_prefix),
+        emp_num_suffix    = COALESCE($4,  emp_num_suffix),
+        emp_num_padding   = COALESCE($5,  emp_num_padding),
+        emp_num_next_seq  = COALESCE($6,  emp_num_next_seq),
+        dup_check_enabled = COALESCE($7,  dup_check_enabled),
+        dup_check_ssn     = COALESCE($8,  dup_check_ssn),
+        dup_check_dob     = COALESCE($9,  dup_check_dob),
+        dup_check_name    = COALESCE($10, dup_check_name),
+        updated_at        = NOW()
+      RETURNING
+        emp_num_mode, emp_num_format, emp_num_prefix, emp_num_suffix,
+        emp_num_padding, emp_num_next_seq,
+        dup_check_enabled, dup_check_ssn, dup_check_dob, dup_check_name
+    `, [
+      b.emp_num_mode   != null ? cleanStr(b.emp_num_mode)   : null,
+      b.emp_num_format != null ? cleanStr(b.emp_num_format) : null,
+      b.emp_num_prefix != null ? (b.emp_num_prefix || '')   : null,
+      b.emp_num_suffix != null ? (b.emp_num_suffix || '')   : null,
+      padding,
+      nextSeq,
+      b.dup_check_enabled != null ? cleanBool(b.dup_check_enabled) : null,
+      b.dup_check_ssn     != null ? cleanBool(b.dup_check_ssn)     : null,
+      b.dup_check_dob     != null ? cleanBool(b.dup_check_dob)     : null,
+      b.dup_check_name    != null ? cleanBool(b.dup_check_name)     : null,
+    ]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // LOCATIONS
 // ══════════════════════════════════════════════════════════════════════════════
 
