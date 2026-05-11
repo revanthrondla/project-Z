@@ -74,7 +74,7 @@ function EntryModal({ entry, employees, projects, onClose, onSaved }) {
               <label className="label">Employee *</label>
               <select className="input" value={form.candidate_id} onChange={e => set('candidate_id', e.target.value)} required>
                 <option value="">Select employee…</option>
-                {candidates.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {employees.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
@@ -292,7 +292,7 @@ export default function AdminTimesheets() {
         <select className="input max-w-[200px]" value={filters.candidate_id}
           onChange={e => setFilters({...filters, candidate_id: e.target.value})}>
           <option value="">All Employees</option>
-          {candidates.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {employees.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select className="input max-w-[200px]" value={filters.project_id}
           onChange={e => setFilters({...filters, project_id: e.target.value})}>

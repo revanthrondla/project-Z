@@ -410,7 +410,7 @@ function GenerateModal({ employees, clients, onClose, onGenerated }) {
   // When client changes in client mode, pre-select all their employees
   useEffect(() => {
     if (mode === 'client' && selectedClient) {
-      const ids = candidates
+      const ids = employees
         .filter(c => String(c.client_id) === String(selectedClient))
         .map(c => c.id);
       setSelectedIds(ids);
@@ -425,7 +425,7 @@ function GenerateModal({ employees, clients, onClose, onGenerated }) {
   }, [mode]);
 
   // Visible employees list
-  const visibleCandidates = candidates.filter(c => {
+  const visibleEmployees = employees.filter(c => {
     const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase());
     if (mode === 'client' && selectedClient) {
       return String(c.client_id) === String(selectedClient) && matchesSearch;
@@ -440,7 +440,7 @@ function GenerateModal({ employees, clients, onClose, onGenerated }) {
   };
 
   const toggleAll = () => {
-    const allIds = visibleCandidates.map(c => c.id);
+    const allIds = visibleEmployees.map(c => c.id);
     const allSelected = allIds.every(id => selectedIds.includes(id));
     if (allSelected) {
       setSelectedIds(prev => prev.filter(id => !allIds.includes(id)));
@@ -523,7 +523,7 @@ function GenerateModal({ employees, clients, onClose, onGenerated }) {
     );
   }
 
-  const allVisible = visibleCandidates.length > 0 && visibleCandidates.every(c => selectedIds.includes(c.id));
+  const allVisible = visibleEmployees.length > 0 && visibleEmployees.every(c => selectedIds.includes(c.id));
 
   return (
     <Modal title="Generate Invoices" onClose={onClose} wide>
@@ -570,7 +570,7 @@ function GenerateModal({ employees, clients, onClose, onGenerated }) {
             <label className="label mb-0">
               {mode === 'client' ? 'Employees under selected client' : 'Select Employees *'}
             </label>
-            {visibleCandidates.length > 0 && (
+            {visibleEmployees.length > 0 && (
               <button type="button" onClick={toggleAll} className="text-xs text-emerald-600 hover:underline">
                 {allVisible ? 'Deselect all' : 'Select all'}
               </button>
@@ -584,11 +584,11 @@ function GenerateModal({ employees, clients, onClose, onGenerated }) {
             onChange={e => setSearch(e.target.value)}
           />
           <div className="border rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-50">
-            {visibleCandidates.length === 0 ? (
+            {visibleEmployees.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-6">
                 {mode === 'client' && !selectedClient ? 'Select a client first' : 'No employees found'}
               </p>
-            ) : visibleCandidates.map(c => (
+            ) : visibleEmployees.map(c => (
               <label key={c.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
                 <input
                   type="checkbox"
@@ -691,7 +691,7 @@ export default function AdminInvoices() {
         </select>
         <select className="input max-w-[200px]" value={filters.candidate_id} onChange={e => setFilters({...filters, candidate_id: e.target.value})}>
           <option value="">All Employees</option>
-          {candidates.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {employees.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
 

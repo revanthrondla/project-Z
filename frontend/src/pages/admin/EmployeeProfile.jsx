@@ -1077,7 +1077,7 @@ function EEOTab({ empId }) {
   const [err,     setErr]     = useState(null);
 
   useEffect(() => {
-    api.get(`/eeo/candidates/${empId}`)
+    api.get(`/eeo/employees/${empId}`)
       .then(r => setForm(r.data))
       .catch(e => setErr(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
@@ -1089,7 +1089,7 @@ function EEOTab({ empId }) {
     setSaving(true); setErr(null); setSaved(false);
     try {
       const { id, name, email, role, _labels, ...body } = form;
-      await api.put(`/eeo/candidates/${empId}`, body);
+      await api.put(`/eeo/employees/${empId}`, body);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {

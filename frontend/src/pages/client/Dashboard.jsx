@@ -199,13 +199,13 @@ export default function ClientDashboard() {
         {/* Candidates list */}
         <div className="xl:col-span-3 bg-white rounded-xl border border-gray-200">
           <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Your Team ({candidates.length})</h2>
+            <h2 className="font-semibold text-gray-900">Your Team ({employees.length})</h2>
           </div>
           <div className="divide-y divide-gray-50">
-            {candidates.length === 0 ? (
+            {employees.length === 0 ? (
               <p className="px-5 py-8 text-center text-gray-400 text-sm">No employees assigned to your account yet.</p>
             ) : (
-              candidates.map(c => (
+              employees.map(c => (
                 <div key={c.id} className="px-5 py-4 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">

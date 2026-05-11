@@ -98,7 +98,7 @@ function ExpenseModal({ expense, employees, clients, projects, onSave, onClose, 
               <Field label="Employee / Contractor *">
                 <select className={selCls} value={form.candidate_id} onChange={e => set('candidate_id', e.target.value)} required>
                   <option value="">— Select person —</option>
-                  {candidates.map(c => <option key={c.id} value={c.id}>{c.name} ({c.role})</option>)}
+                  {employees.map(c => <option key={c.id} value={c.id}>{c.name} ({c.role})</option>)}
                 </select>
               </Field>
             )}

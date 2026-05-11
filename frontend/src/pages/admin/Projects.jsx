@@ -409,7 +409,7 @@ export default function Projects() {
     if (pRes.ok) setProjects(await pRes.json());
     if (cRes.ok) setClients(await cRes.json());
     // Admin users for PM selection
-    const uRes = await fetch(`${API}/api/candidates?role=admin`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+    const uRes = await fetch(`${API}/api/employees?role=admin`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
     if (uRes?.ok) setAdminUsers(await uRes.json());
     setLoading(false);
   }, []);

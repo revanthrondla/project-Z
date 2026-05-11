@@ -129,7 +129,7 @@ function UploadModal({ employees, clients, onClose, onUploaded }) {
               <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 value={form.candidate_id} onChange={e => setForm(f => ({ ...f, candidate_id: e.target.value }))}>
                 <option value="">— None —</option>
-                {candidates.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {employees.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>

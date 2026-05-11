@@ -44,7 +44,7 @@ export default function AdminAbsences() {
       <div className="flex flex-wrap gap-3 mb-4">
         <select className="input max-w-[200px]" value={filters.candidate_id} onChange={e => setFilters({...filters, candidate_id: e.target.value})}>
           <option value="">All Employees</option>
-          {candidates.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {employees.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select className="input max-w-[160px]" value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}>
           <option value="">All Status</option>

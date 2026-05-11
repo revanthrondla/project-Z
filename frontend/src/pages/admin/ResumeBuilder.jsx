@@ -128,8 +128,8 @@ export default function ResumeBuilder() {
   const [search, setSearch]         = useState('');
 
   useEffect(() => {
-    api.get('/api/candidates?status=active')
-      .then(r => setEmployees(Array.isArray(r.data) ? r.data : r.data.candidates || []))
+    api.get('/api/employees?status=active')
+      .then(r => setEmployees(Array.isArray(r.data) ? r.data : r.data || []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -165,7 +165,7 @@ export default function ResumeBuilder() {
 
   const field = (key, val) => setResume(r => ({ ...r, [key]: val }));
 
-  const filtered = candidates.filter(c =>
+  const filtered = employees.filter(c =>
     !search || c.name.toLowerCase().includes(search.toLowerCase())
   );
 

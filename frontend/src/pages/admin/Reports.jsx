@@ -75,8 +75,8 @@ export default function Reports() {
 
   // Candidates visible in the employee dropdown — filtered by selected client
   const filteredCandidates = filters.client_id
-    ? candidates.filter(c => String(c.client_id) === String(filters.client_id))
-    : candidates;
+    ? employees.filter(c => String(c.client_id) === String(filters.client_id))
+    : employees;
 
   const fetchAll = useCallback(() => {
     const p = {};
