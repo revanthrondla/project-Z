@@ -395,7 +395,7 @@ function InvoiceDetail({ invoice: initialInvoice, onClose, onStatusChange }) {
   );
 }
 
-function GenerateModal({ employees, clients, onClose, onGenerated }) {
+function GenerateModal({ employees = [], clients = [], onClose, onGenerated }) {
   const [mode, setMode]                 = useState('employee'); // 'employee' | 'client'
   const [selectedIds, setSelectedIds]   = useState([]);         // candidate IDs checked
   const [selectedClient, setSelectedClient] = useState('');

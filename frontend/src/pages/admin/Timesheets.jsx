@@ -6,7 +6,7 @@ function StatusBadge({ status }) {
 }
 
 // ─── Entry Modal (Admin can add/edit entries) ────────────────────────────────
-function EntryModal({ entry, employees, projects, onClose, onSaved }) {
+function EntryModal({ entry, employees = [], projects = [], onClose, onSaved }) {
   const isEdit = !!entry?.id;
   const [form, setForm] = useState({
     candidate_id: entry?.candidate_id || '',

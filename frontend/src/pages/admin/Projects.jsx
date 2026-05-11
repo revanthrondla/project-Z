@@ -21,7 +21,7 @@ function fmt(n) { return n !== null && n !== undefined ? Number(n).toLocaleStrin
 function fmtCurrency(n, sym = '$') { return n !== null && n !== undefined ? `${sym}${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'; }
 
 // ─── Project Modal ──────────────────────────────────────────────────────────
-function ProjectModal({ project, clients, adminUsers, onSave, onClose }) {
+function ProjectModal({ project, clients = [], adminUsers = [], onSave, onClose }) {
   const isEdit = !!project?.id;
   const [form, setForm] = useState({
     client_id: project?.client_id || '',

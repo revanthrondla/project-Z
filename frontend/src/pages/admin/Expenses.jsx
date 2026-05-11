@@ -29,7 +29,7 @@ function fmtAmt(exp) {
 }
 
 // ─── Expense Modal ──────────────────────────────────────────────────────────
-function ExpenseModal({ expense, employees, clients, projects, onSave, onClose, isAdmin }) {
+function ExpenseModal({ expense, employees = [], clients = [], projects = [], onSave, onClose, isAdmin }) {
   const isEdit = !!expense?.id;
   const [form, setForm] = useState({
     candidate_id: expense?.candidate_id || '',

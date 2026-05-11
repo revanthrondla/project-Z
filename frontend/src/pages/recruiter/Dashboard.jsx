@@ -44,7 +44,7 @@ export default function RecruiterDashboard() {
         {[
           { label: 'Assigned Candidates', value: profile?.assignment_count ?? 0, icon: '👤' },
           { label: 'Total C2C Jobs Found', value: assignments.totalJobs ?? 0, icon: '💼' },
-          { label: 'In Market Now', value: candidateResults.filter(r => r.candidate.market_status === 'in_market').length, icon: '🟢' },
+          { label: 'In Market Now', value: (candidateResults ?? []).filter(r => r.candidate.market_status === 'in_market').length, icon: '🟢' },
         ].map(stat => (
           <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="text-2xl mb-1">{stat.icon}</div>

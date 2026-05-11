@@ -120,9 +120,9 @@ export default function Compliance() {
       {activeTab === 'overview' && data && (
         <div className="space-y-4">
           {/* Missing W-9 */}
-          {data.missing_w9.length > 0 && (
+          {(data.missing_w9 ?? []).length > 0 && (
             <div className="card p-4">
-              <h3 className="font-semibold text-gray-900 mb-3">⚠️ Contractors Missing W-9 ({data.missing_w9.length})</h3>
+              <h3 className="font-semibold text-gray-900 mb-3">⚠️ Contractors Missing W-9 ({(data.missing_w9 ?? []).length})</h3>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
@@ -132,7 +132,7 @@ export default function Compliance() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {data.missing_w9.map(r => (
+                  {(data.missing_w9 ?? []).map(r => (
                     <tr key={r.id} className="hover:bg-gray-50">
                       <td className="px-3 py-2 font-medium text-gray-900">{r.name}</td>
                       <td className="px-3 py-2 text-gray-600">{r.email}</td>
@@ -145,9 +145,9 @@ export default function Compliance() {
           )}
 
           {/* Pending classification */}
-          {data.pending_classification.length > 0 && (
+          {(data.pending_classification ?? []).length > 0 && (
             <div className="card p-4">
-              <h3 className="font-semibold text-gray-900 mb-3">🔍 Pending Classification Review ({data.pending_classification.length})</h3>
+              <h3 className="font-semibold text-gray-900 mb-3">🔍 Pending Classification Review ({(data.pending_classification ?? []).length})</h3>
               <p className="text-xs text-gray-500 mb-2">DOL 2024 final rule (effective March 11, 2024) — use 6-factor economic reality test. Consult counsel before final classification.</p>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
@@ -158,7 +158,7 @@ export default function Compliance() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {data.pending_classification.map(r => (
+                  {(data.pending_classification ?? []).map(r => (
                     <tr key={r.id} className="hover:bg-gray-50">
                       <td className="px-3 py-2 font-medium text-gray-900">{r.name}</td>
                       <td className="px-3 py-2 text-gray-600">{r.start_date || '—'}</td>
@@ -171,9 +171,9 @@ export default function Compliance() {
           )}
 
           {/* Terminated still active */}
-          {data.terminated_still_active.length > 0 && (
+          {(data.terminated_still_active ?? []).length > 0 && (
             <div className="card p-4 border-l-4 border-red-400">
-              <h3 className="font-semibold text-red-700 mb-3">🚨 Past End Date but Still Active ({data.terminated_still_active.length})</h3>
+              <h3 className="font-semibold text-red-700 mb-3">🚨 Past End Date but Still Active ({(data.terminated_still_active ?? []).length})</h3>
               <p className="text-xs text-gray-500 mb-2">These employees have passed their end date but are still marked active. Update their status to avoid payroll and records compliance issues.</p>
               <table className="w-full text-sm">
                 <thead className="bg-red-50">
@@ -184,7 +184,7 @@ export default function Compliance() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-red-50">
-                  {data.terminated_still_active.map(r => (
+                  {(data.terminated_still_active ?? []).map(r => (
                     <tr key={r.id}>
                       <td className="px-3 py-2 font-medium text-gray-900">{r.name}</td>
                       <td className="px-3 py-2 text-red-600 font-semibold">{r.end_date}</td>
@@ -273,7 +273,7 @@ export default function Compliance() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {otData.employees.map(e => (
+                {(otData.employees ?? []).map(e => (
                   <tr key={e.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-900">{e.name}</p>
@@ -368,18 +368,18 @@ export default function Compliance() {
       {/* ── Contractor Issues ── */}
       {activeTab === 'contractors' && data && (
         <div className="space-y-4">
-          {data.missing_w9.length === 0 && data.pending_classification.length === 0 ? (
+          {(data.missing_w9 ?? []).length === 0 && (data.pending_classification ?? []).length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <div className="text-5xl mb-3">✅</div>
               <p>No contractor compliance issues</p>
             </div>
           ) : (
             <>
-              {data.missing_w9.length > 0 && (
+              {(data.missing_w9 ?? []).length > 0 && (
                 <div className="card p-4">
-                  <h3 className="font-semibold text-amber-700 mb-3">Missing W-9 / W-8BEN ({data.missing_w9.length})</h3>
+                  <h3 className="font-semibold text-amber-700 mb-3">Missing W-9 / W-8BEN ({(data.missing_w9 ?? []).length})</h3>
                   <p className="text-xs text-gray-500 mb-3">IRS requires W-9 from U.S. contractors paid $600+ for reporting on Form 1099-NEC. Consult a tax professional for international contractors.</p>
-                  {data.missing_w9.map(r => (
+                  {(data.missing_w9 ?? []).map(r => (
                     <div key={r.id} className="flex items-center justify-between py-2 border-b last:border-0">
                       <div>
                         <p className="font-medium text-gray-900">{r.name}</p>
@@ -390,11 +390,11 @@ export default function Compliance() {
                   ))}
                 </div>
               )}
-              {data.pending_classification.length > 0 && (
+              {(data.pending_classification ?? []).length > 0 && (
                 <div className="card p-4">
-                  <h3 className="font-semibold text-amber-700 mb-2">Pending Classification ({data.pending_classification.length})</h3>
+                  <h3 className="font-semibold text-amber-700 mb-2">Pending Classification ({(data.pending_classification ?? []).length})</h3>
                   <p className="text-xs text-gray-500 mb-3">DOL 2024 rule — evaluate using the 6-factor economic reality test. Misclassification creates significant FLSA liability. Consult employment counsel.</p>
-                  {data.pending_classification.map(r => (
+                  {(data.pending_classification ?? []).map(r => (
                     <div key={r.id} className="py-2 border-b last:border-0">
                       <p className="font-medium text-gray-900">{r.name}</p>
                       <p className="text-xs text-gray-400">{r.classification_notes || 'No notes'}</p>
@@ -410,7 +410,7 @@ export default function Compliance() {
       {/* ── Expiring Documents ── */}
       {activeTab === 'data' && data && (
         <div>
-          {data.expiring_documents.length === 0 ? (
+          {(data.expiring_documents ?? []).length === 0 ? (
             <div className="text-center py-16 text-gray-400">
               <div className="text-5xl mb-3">📂</div>
               <p>No documents expiring in the next 60 days</p>
@@ -419,7 +419,7 @@ export default function Compliance() {
             <div className="card overflow-hidden">
               <div className="p-4 border-b border-gray-100 bg-amber-50">
                 <p className="text-sm text-amber-800">
-                  <strong>{data.expiring_documents.length}</strong> document(s) expire within 60 days. Review and renew as appropriate.
+                  <strong>{(data.expiring_documents ?? []).length}</strong> document(s) expire within 60 days. Review and renew as appropriate.
                 </p>
               </div>
               <table className="w-full text-sm">
@@ -432,7 +432,7 @@ export default function Compliance() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {data.expiring_documents.map(d => (
+                  {(data.expiring_documents ?? []).map(d => (
                     <tr key={d.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-900">{d.title}</td>
                       <td className="px-4 py-3 text-gray-600">{d.candidate_name || '—'}</td>

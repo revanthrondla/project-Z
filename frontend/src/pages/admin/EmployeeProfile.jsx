@@ -1011,7 +1011,7 @@ function ProfileHeader({ empId }) {
 
           {data?.warnings?.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3">
-              {data.warnings.map((w, i) => <Badge key={i} text={`⚠️ ${w}`} color="yellow" />)}
+              {(data.warnings ?? []).map((w, i) => <Badge key={i} text={`⚠️ ${w}`} color="yellow" />)}
             </div>
           )}
 

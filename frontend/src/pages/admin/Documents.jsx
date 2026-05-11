@@ -37,7 +37,7 @@ function SignerBadge({ sig }) {
 }
 
 /* ── Upload Modal ── */
-function UploadModal({ employees, clients, onClose, onUploaded }) {
+function UploadModal({ employees = [], clients = [], onClose, onUploaded }) {
   const [form, setForm] = useState({
     title: '', description: '',
     signature_type: 'none',

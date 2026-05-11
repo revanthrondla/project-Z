@@ -48,7 +48,7 @@ export default function ClientDashboard() {
     </div>
   );
 
-  const { client, employees, recentTimesheets, kpis } = data;
+  const { client, employees = [], recentTimesheets = [], kpis = {} } = data ?? {};
 
   const TABS = [
     { key: 'overview',  label: '📊 Overview' },
