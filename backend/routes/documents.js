@@ -201,42 +201,49 @@ router.post('/', authenticate, injectTenantDb, upload.single('file'), async (req
   if (signature_type === 'two_way'   && signerList.length !== 2) return res.status(400).json({ error: 'two_way requires exactly 2 signers' });
   if (signature_type === 'three_way' && signerList.length !== 3) return res.status(400).json({ error: 'three_way requires exactly 3 signers' });
 
-  const insertResult = await req.db.query(`
-    INSERT INTO documents
-      (title, description, file_name, file_path, file_size, mime_type,
-       uploaded_by, candidate_id, client_id, signature_type, required_signers, status)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-    RETURNING id
-  `, [
-    title,
-    description || null,
-    req.file.originalname,
-    req.file.filename,
-    req.file.size,
-    req.file.mimetype,
-    user.id,
-    resolvedCandidateId,
-    resolvedClientId,
-    signature_type,
-    signerList.join(','),
-    signature_type === 'none' ? 'completed' : 'pending',
-  ]);
+  try {
+    const insertResult = await req.db.query(`
+      INSERT INTO documents
+        (title, description, file_name, file_path, file_size, mime_type,
+         uploaded_by, candidate_id, client_id, signature_type, required_signers, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      RETURNING id
+    `, [
+      title,
+      description || null,
+      req.file.originalname,
+      req.file.filename,
+      req.file.size,
+      req.file.mimetype,
+      user.id,
+      resolvedCandidateId ? parseInt(resolvedCandidateId, 10) : null,
+      resolvedClientId    ? parseInt(resolvedClientId, 10)    : null,
+      signature_type,
+      signerList.join(','),
+      signature_type === 'none' ? 'completed' : 'pending',
+    ]);
 
-  const docId = insertResult.rows[0].id;
+    const docId = insertResult.rows[0].id;
 
-  // Create pending signature records for each required signer
-  if (signerList.length > 0) {
-    for (const role of signerList) {
-      await req.db.query(`
-        INSERT INTO document_signatures (document_id, signer_role, status)
-        VALUES ($1, $2, 'pending')
-      `, [docId, role]);
+    // Create pending signature records for each required signer
+    if (signerList.length > 0) {
+      for (const role of signerList) {
+        await req.db.query(`
+          INSERT INTO document_signatures (document_id, signer_role, status)
+          VALUES ($1, $2, 'pending')
+        `, [docId, role]);
+      }
     }
-  }
 
-  const docResult = await req.db.query('SELECT * FROM documents WHERE id = $1', [docId]);
-  const doc = docResult.rows[0];
-  res.status(201).json(doc);
+    const docResult = await req.db.query('SELECT * FROM documents WHERE id = $1', [docId]);
+    const doc = docResult.rows[0];
+    res.status(201).json(doc);
+  } catch (err) {
+    // Clean up the uploaded file if DB insert fails
+    if (req.file?.path) { try { fs.unlinkSync(req.file.path); } catch (_) {} }
+    console.error('[Documents] POST insert error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── GET /api/documents/:id — document detail with signatures ──────────────────

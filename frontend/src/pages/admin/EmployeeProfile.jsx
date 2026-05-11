@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import api from '../../api';
 
@@ -1387,6 +1387,395 @@ function HistoryTab({ empId }) {
   );
 }
 
+// ─── DOCUMENTS TAB ────────────────────────────────────────────────────────────
+
+const SIG_TYPE_LABELS = {
+  none:      'No signature',
+  single:    'Single',
+  two_way:   'Two-way',
+  three_way: 'Three-way',
+};
+const DOC_STATUS_META = {
+  pending:   { label: 'Pending',   cls: 'bg-yellow-100 text-yellow-800' },
+  partial:   { label: 'Partial',   cls: 'bg-blue-100   text-blue-800'   },
+  completed: { label: 'Completed', cls: 'bg-green-100  text-green-800'  },
+  voided:    { label: 'Voided',    cls: 'bg-red-100    text-red-800'    },
+};
+
+function DocStatusBadge({ status }) {
+  const m = DOC_STATUS_META[status] || { label: status, cls: 'bg-gray-100 text-gray-700' };
+  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${m.cls}`}>{m.label}</span>;
+}
+
+function DocumentsTab({ empId }) {
+  const [docs, setDocs]           = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState('');
+  const [showUpload, setShowUpload] = useState(false);
+  const [selected, setSelected]   = useState(null);  // for detail/download view
+
+  const loadDocs = useCallback(() => {
+    setLoading(true); setError('');
+    api.get(`/api/documents?candidate_id=${empId}`)
+      .then(r => setDocs(Array.isArray(r.data) ? r.data : []))
+      .catch(e => setError(e.response?.data?.error || 'Failed to load documents'))
+      .finally(() => setLoading(false));
+  }, [empId]);
+
+  useEffect(() => { loadDocs(); }, [loadDocs]);
+
+  const handleDelete = async (docId, e) => {
+    e.stopPropagation();
+    if (!confirm('Delete this document permanently?')) return;
+    try {
+      await api.delete(`/api/documents/${docId}`);
+      loadDocs();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  if (loading) return <p className="text-sm text-gray-500 py-4">Loading documents…</p>;
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="text-sm text-red-500">{error}</p>}
+
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">
+          {docs.length === 0 ? 'No documents attached yet.' : `${docs.length} document${docs.length !== 1 ? 's' : ''}`}
+        </p>
+        <button
+          onClick={() => setShowUpload(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors"
+        >
+          📤 Upload Document
+        </button>
+      </div>
+
+      {/* Document cards */}
+      {docs.length === 0 ? (
+        <EmptyState icon="📁" message="No documents have been uploaded for this employee yet." />
+      ) : (
+        <div className="space-y-2">
+          {docs.map(doc => (
+            <div
+              key={doc.id}
+              onClick={() => setSelected(doc)}
+              className="flex items-center justify-between p-3 rounded-xl border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/30 cursor-pointer transition-colors group"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-2xl flex-shrink-0">
+                  {doc.mime_type === 'application/pdf' ? '📄' :
+                   doc.mime_type?.includes('image')    ? '🖼️' :
+                   doc.mime_type?.includes('word')     ? '📝' : '📎'}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{doc.title}</p>
+                  <p className="text-xs text-gray-400 truncate">{doc.file_name} · {(doc.file_size / 1024).toFixed(1)} KB</p>
+                  <p className="text-xs text-gray-400">{fmtDateTime(doc.created_at)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full hidden sm:inline">
+                  {SIG_TYPE_LABELS[doc.signature_type] || doc.signature_type}
+                </span>
+                <DocStatusBadge status={doc.status} />
+                <a
+                  href={`/api/documents/${doc.id}/file`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  className="text-xs text-emerald-600 hover:underline px-2 py-1 rounded hover:bg-emerald-50"
+                  title="View / Download"
+                >
+                  ↓
+                </a>
+                <button
+                  onClick={e => handleDelete(doc.id, e)}
+                  className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Delete"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUpload && (
+        <EmpDocUploadModal
+          empId={empId}
+          onClose={() => setShowUpload(false)}
+          onUploaded={() => { setShowUpload(false); loadDocs(); }}
+        />
+      )}
+
+      {/* Detail / Download Modal */}
+      {selected && (
+        <DocDetailModal
+          doc={selected}
+          onClose={() => setSelected(null)}
+          onDelete={() => { setSelected(null); loadDocs(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Inline upload modal scoped to this employee ────────────────────────────
+function EmpDocUploadModal({ empId, onClose, onUploaded }) {
+  const [form, setForm]     = useState({ title: '', description: '', signature_type: 'none', required_signers: [] });
+  const [file, setFile]     = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+  const fileRef             = useRef();
+
+  const signerOptions = {
+    none:      [],
+    single:    [['candidate'], ['admin']],
+    two_way:   [['candidate','admin'], ['candidate','client'], ['client','admin']],
+    three_way: [['candidate','client','admin']],
+  };
+  const ROLE_ICONS = { candidate: '👤', client: '🏢', admin: '🔑' };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!file) return setError('Please select a file');
+    if (!form.title.trim()) return setError('Title is required');
+    if (form.signature_type !== 'none' && form.required_signers.length === 0)
+      return setError('Select who must sign');
+
+    setSaving(true); setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('title', form.title.trim());
+      fd.append('description', form.description);
+      fd.append('signature_type', form.signature_type);
+      fd.append('required_signers', form.required_signers.join(','));
+      fd.append('candidate_id', empId);
+      // No Content-Type header — let axios set multipart/form-data with boundary
+      await api.post('/api/documents', fd);
+      onUploaded();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Upload failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-900">Upload Document</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">{error}</div>}
+
+          {/* File picker */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">File <span className="text-red-500">*</span></label>
+            <div
+              onClick={() => fileRef.current.click()}
+              className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-400 transition-colors"
+            >
+              {file
+                ? <p className="text-sm text-gray-700">📄 {file.name} ({(file.size/1024).toFixed(1)} KB)</p>
+                : <p className="text-sm text-gray-400">Click to browse — PDF, Word, image, TXT (max 10 MB)</p>
+              }
+              <input ref={fileRef} type="file" className="hidden"
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.txt"
+                onChange={e => setFile(e.target.files[0] || null)} />
+            </div>
+          </div>
+
+          {/* Title */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
+            <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Employment Contract 2026" />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+              value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Optional notes…" />
+          </div>
+
+          {/* Signature type */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Signature Requirement</label>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(SIG_TYPE_LABELS).map(([val, lbl]) => (
+                <button key={val} type="button"
+                  onClick={() => setForm(f => ({ ...f, signature_type: val, required_signers: [] }))}
+                  className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors text-left ${
+                    form.signature_type === val
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                      : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                  }`}>
+                  {val === 'none' && '✏️ '}
+                  {val === 'single' && '👤 '}
+                  {val === 'two_way' && '🤝 '}
+                  {val === 'three_way' && '🔐 '}
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Signer combos */}
+          {form.signature_type !== 'none' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Who must sign?</label>
+              <div className="space-y-1">
+                {(signerOptions[form.signature_type] || []).map(combo => {
+                  const key = combo.join(',');
+                  const selected = form.required_signers.join(',') === key;
+                  return (
+                    <button key={key} type="button"
+                      onClick={() => setForm(f => ({ ...f, required_signers: combo }))}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                        selected ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                      }`}>
+                      <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${selected ? 'bg-emerald-600 border-emerald-600' : 'border-gray-300'}`} />
+                      {combo.map(r => `${ROLE_ICONS[r]} ${r}`).join(' + ')}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-60">
+              {saving ? '⏳ Uploading…' : '📤 Upload'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Document detail / download modal ──────────────────────────────────────
+function DocDetailModal({ doc, onClose, onDelete }) {
+  const [audit, setAudit]           = useState(null);
+  const [loadingAudit, setLoadAudit] = useState(true);
+
+  useEffect(() => {
+    api.get(`/api/documents/${doc.id}/audit`)
+      .then(r => setAudit(r.data))
+      .catch(() => {})
+      .finally(() => setLoadAudit(false));
+  }, [doc.id]);
+
+  const doDelete = async () => {
+    if (!confirm('Delete this document permanently?')) return;
+    try {
+      await api.delete(`/api/documents/${doc.id}`);
+      onDelete();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const ROLE_ICONS = { candidate: '👤', client: '🏢', admin: '🔑' };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-900">{doc.title}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {doc.file_name} · {(doc.file_size / 1024).toFixed(1)} KB · Uploaded {fmtDateTime(doc.created_at)}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl ml-4">✕</button>
+        </div>
+
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+          {/* Status + download */}
+          <div className="flex flex-wrap items-center gap-2">
+            <DocStatusBadge status={doc.status} />
+            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+              {SIG_TYPE_LABELS[doc.signature_type] || doc.signature_type}
+            </span>
+            <a
+              href={`/api/documents/${doc.id}/file`}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-auto text-sm text-emerald-600 hover:underline flex items-center gap-1"
+            >
+              📄 View / Download
+            </a>
+          </div>
+
+          {doc.description && <p className="text-sm text-gray-600">{doc.description}</p>}
+
+          {/* Signature audit trail */}
+          {doc.required_signers && doc.required_signers.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">Signature Status</p>
+              {loadingAudit ? (
+                <p className="text-xs text-gray-400">Loading…</p>
+              ) : (
+                <div className="space-y-2">
+                  {(audit?.audit_trail || []).map((entry, i) => (
+                    <div key={i} className={`flex items-center gap-3 rounded-xl p-3 border ${
+                      entry.status === 'signed'   ? 'bg-green-50 border-green-200' :
+                      entry.status === 'rejected' ? 'bg-red-50 border-red-200'    :
+                                                    'bg-gray-50 border-gray-200'}`}>
+                      <span className="text-xl">{ROLE_ICONS[entry.role] || '?'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 capitalize">{entry.role}</p>
+                        {entry.status === 'signed' && (
+                          <p className="text-xs text-gray-500">{entry.name} · {fmtDateTime(entry.signed_at)}</p>
+                        )}
+                        {entry.status === 'pending'  && <p className="text-xs text-gray-400">Awaiting signature</p>}
+                        {entry.status === 'rejected' && <p className="text-xs text-red-600">Rejected</p>}
+                      </div>
+                      <span className="text-lg">
+                        {entry.status === 'signed' ? '✅' : entry.status === 'rejected' ? '❌' : '⏳'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex gap-2 justify-end">
+          <button onClick={doDelete}
+            className="px-4 py-2 rounded-lg border border-red-200 text-red-600 text-sm hover:bg-red-50">
+            Delete
+          </button>
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -1400,6 +1789,7 @@ const TABS = [
   { id: 'reviews',     label: '📊 Reviews',     component: ReviewsTab },
   { id: 'training',    label: '🎓 Training',    component: TrainingTab },
   { id: 'licenses',    label: '📜 Licences',    component: LicencesTab },
+  { id: 'documents',   label: '📁 Documents',   component: DocumentsTab },
   { id: 'eeo',         label: '⚖️ EEO',         component: EEOTab },
   { id: 'history',     label: '🕐 History',     component: HistoryTab },
 ];
