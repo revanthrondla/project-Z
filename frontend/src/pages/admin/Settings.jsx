@@ -2238,10 +2238,11 @@ function CustomFieldsTab() {
 // ── Root Settings page with tabs ──────────────────────────────────────────────
 
 const TABS = [
-  { key: 'general',       label: '⚙️ General',        component: GeneralTab       },
-  { key: 'ai',            label: '🤖 AI Assistant',   component: AITab            },
-  { key: 'security',      label: '🔒 Security',       component: SecurityTab      },
-  { key: 'custom-fields', label: '🗂️ Custom Fields',  component: CustomFieldsTab  },
+  { key: 'general',       label: '⚙️ General',           component: GeneralTab       },
+  { key: 'ai',            label: '🤖 AI Assistant',      component: AITab            },
+  { key: 'security',      label: '🔒 Security',          component: SecurityTab      },
+  { key: 'org-setup',     label: '🏢 Organisation Setup', component: OrgSetupTab      },
+  { key: 'custom-fields', label: '🗂️ Custom Fields',     component: CustomFieldsTab  },
 ];
 
 export default function Settings() {
