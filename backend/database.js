@@ -1034,6 +1034,13 @@ async function createTenantSchema(slug) {
         vat_number          TEXT,
         registration_number TEXT,
         jurisdiction        TEXT,
+        -- registered address (each entity can have its own)
+        address_line1       TEXT,
+        address_line2       TEXT,
+        city                TEXT,
+        state               TEXT,
+        postcode            TEXT,
+        country             TEXT DEFAULT 'US',
         is_primary          BOOLEAN DEFAULT FALSE,
         notes               TEXT,
         created_at          TIMESTAMPTZ DEFAULT NOW(),
@@ -1041,6 +1048,13 @@ async function createTenantSchema(slug) {
       )
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_org_legal_entities_primary ON org_legal_entities(is_primary)`);
+    // address columns — idempotent for schemas created before this migration
+    await client.query(`ALTER TABLE org_legal_entities ADD COLUMN IF NOT EXISTS address_line1 TEXT`);
+    await client.query(`ALTER TABLE org_legal_entities ADD COLUMN IF NOT EXISTS address_line2 TEXT`);
+    await client.query(`ALTER TABLE org_legal_entities ADD COLUMN IF NOT EXISTS city          TEXT`);
+    await client.query(`ALTER TABLE org_legal_entities ADD COLUMN IF NOT EXISTS state         TEXT`);
+    await client.query(`ALTER TABLE org_legal_entities ADD COLUMN IF NOT EXISTS postcode      TEXT`);
+    await client.query(`ALTER TABLE org_legal_entities ADD COLUMN IF NOT EXISTS country       TEXT DEFAULT 'US'`);
 
     // 8c. Departments (many per tenant)
     await client.query(`

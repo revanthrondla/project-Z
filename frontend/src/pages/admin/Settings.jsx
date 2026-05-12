@@ -976,7 +976,8 @@ function CompanyProfileSection() {
 function LegalEntityModal({ entity, onSave, onClose }) {
   const isEdit = !!entity?.id;
   const blank  = { legal_name:'', trading_name:'', tax_id_label:'Tax ID', tax_id:'',
-                   vat_number:'', registration_number:'', jurisdiction:'', is_primary:false, notes:'' };
+                   vat_number:'', registration_number:'', jurisdiction:'', is_primary:false, notes:'',
+                   address_line1:'', address_line2:'', city:'', state:'', postcode:'', country:'US' };
   const [form, setForm]   = useState(entity ? { ...blank, ...entity } : blank);
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
@@ -1031,9 +1032,35 @@ function LegalEntityModal({ entity, onSave, onClose }) {
           </div>
 
           <div>
-            <label className="label">Jurisdiction / Country</label>
+            <label className="label">Jurisdiction</label>
             <input className="input" value={form.jurisdiction} onChange={e => set('jurisdiction', e.target.value)} placeholder="e.g. United States, United Kingdom" />
           </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Registered Address</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Address Line 1</label>
+                <input className="input" value={form.address_line1} onChange={e => set('address_line1', e.target.value)} placeholder="Street / Building" />
+              </div>
+              <div>
+                <label className="label">Address Line 2</label>
+                <input className="input" value={form.address_line2} onChange={e => set('address_line2', e.target.value)} placeholder="Suite, Floor, etc." />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="label">City</label><input className="input" value={form.city} onChange={e => set('city', e.target.value)} /></div>
+                <div><label className="label">State / Region</label><input className="input" value={form.state} onChange={e => set('state', e.target.value)} /></div>
+                <div><label className="label">Postcode / ZIP</label><input className="input" value={form.postcode} onChange={e => set('postcode', e.target.value)} /></div>
+                <div>
+                  <label className="label">Country</label>
+                  <select className="input" value={form.country} onChange={e => set('country', e.target.value)}>
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="label">Notes</label>
             <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any additional notes…" />
@@ -1112,8 +1139,13 @@ function LegalTaxSection() {
                     {e.tax_id        && <span>{e.tax_id_label || 'Tax ID'}: {e.tax_id}</span>}
                     {e.vat_number    && <span>VAT: {e.vat_number}</span>}
                     {e.registration_number && <span>Reg: {e.registration_number}</span>}
-                    {e.jurisdiction  && <span>📍 {e.jurisdiction}</span>}
+                    {e.jurisdiction  && <span>⚖️ {e.jurisdiction}</span>}
                   </div>
+                  {(e.address_line1 || e.city) && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      📍 {[e.address_line1, e.address_line2, e.city, e.state, e.postcode, e.country].filter(Boolean).join(', ')}
+                    </p>
+                  )}
                   {e.notes && <p className="text-xs text-gray-400 mt-1 italic">{e.notes}</p>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

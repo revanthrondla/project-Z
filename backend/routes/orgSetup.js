@@ -391,8 +391,9 @@ router.get('/legal-entities', async (req, res) => {
 // POST /api/org-setup/legal-entities
 router.post('/legal-entities', async (req, res) => {
   try {
-    const { legal_name, trading_name, tax_id_label, tax_id,
-            vat_number, registration_number, jurisdiction, is_primary, notes } = req.body;
+    const { legal_name, trading_name, tax_id_label, tax_id, vat_number,
+            registration_number, jurisdiction, is_primary, notes,
+            address_line1, address_line2, city, state, postcode, country } = req.body;
     if (!legal_name?.trim()) return res.status(400).json({ error: 'legal_name is required' });
 
     if (cleanBool(is_primary)) {
@@ -401,14 +402,18 @@ router.post('/legal-entities', async (req, res) => {
     const result = await req.db.query(`
       INSERT INTO org_legal_entities
         (legal_name, trading_name, tax_id_label, tax_id, vat_number,
-         registration_number, jurisdiction, is_primary, notes)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         registration_number, jurisdiction, is_primary, notes,
+         address_line1, address_line2, city, state, postcode, country)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
       RETURNING *
     `, [
       legal_name.trim(), cleanStr(trading_name),
       cleanStr(tax_id_label) || 'Tax ID', cleanStr(tax_id),
-      cleanStr(vat_number),  cleanStr(registration_number),
+      cleanStr(vat_number), cleanStr(registration_number),
       cleanStr(jurisdiction), cleanBool(is_primary), cleanStr(notes),
+      cleanStr(address_line1), cleanStr(address_line2),
+      cleanStr(city), cleanStr(state), cleanStr(postcode),
+      cleanStr(country) || 'US',
     ]);
     res.status(201).json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -428,12 +433,16 @@ router.put('/legal-entities/:id', async (req, res) => {
     }
     const result = await req.db.query(`
       UPDATE org_legal_entities SET
-        legal_name          = $1, trading_name        = $2,
-        tax_id_label        = $3, tax_id              = $4,
-        vat_number          = $5, registration_number = $6,
-        jurisdiction        = $7, is_primary          = $8,
-        notes               = $9, updated_at          = NOW()
-      WHERE id = $10 RETURNING *
+        legal_name          = $1,  trading_name        = $2,
+        tax_id_label        = $3,  tax_id              = $4,
+        vat_number          = $5,  registration_number = $6,
+        jurisdiction        = $7,  is_primary          = $8,
+        notes               = $9,
+        address_line1       = $10, address_line2       = $11,
+        city                = $12, state               = $13,
+        postcode            = $14, country             = $15,
+        updated_at          = NOW()
+      WHERE id = $16 RETURNING *
     `, [
       (b.legal_name || ex.legal_name).trim(),
       cleanStr(b.trading_name)        ?? ex.trading_name,
@@ -444,6 +453,12 @@ router.put('/legal-entities/:id', async (req, res) => {
       cleanStr(b.jurisdiction)        ?? ex.jurisdiction,
       isPrimary,
       cleanStr(b.notes)               ?? ex.notes,
+      cleanStr(b.address_line1)       ?? ex.address_line1,
+      cleanStr(b.address_line2)       ?? ex.address_line2,
+      cleanStr(b.city)                ?? ex.city,
+      cleanStr(b.state)               ?? ex.state,
+      cleanStr(b.postcode)            ?? ex.postcode,
+      cleanStr(b.country)             || ex.country || 'US',
       id,
     ]);
     res.json(result.rows[0]);
