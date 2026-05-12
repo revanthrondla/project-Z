@@ -343,6 +343,38 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
 
       const employeeId = candidateResult.rows[0].id;
 
+      // ── Auto-create initial employment history record ─────────────────────
+      // Maps the hire-form fields into the employment_history table so the
+      // Employment tab immediately shows the hire data without double-entry.
+      const empTypeMap = {
+        contractor: 'contract',
+        employee:   'full_time',
+        part_time:  'part_time',
+        intern:     'intern',
+        freelance:  'freelance',
+      };
+      const mappedEmpType = empTypeMap[(contract_type || '').toLowerCase()] || 'full_time';
+      const effectiveFrom = start_date || new Date().toISOString().split('T')[0];
+
+      await tx.query(`
+        INSERT INTO employment_history
+          (candidate_id, position_title, employment_type, start_date, end_date,
+           remuneration, currency, frequency, effective_from, changed_by, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, 'USD', 'hourly', $7, $8, $9)
+      `, [
+        employeeId,
+        contract_type
+          ? contract_type.charAt(0).toUpperCase() + contract_type.slice(1)
+          : 'Employee',              // position_title derived from contract type
+        mappedEmpType,
+        start_date || null,
+        end_date   || null,
+        parseFloat(hourly_rate) || null,
+        effectiveFrom,
+        req.user.id,
+        'Initial hire record — auto-created from onboarding form',
+      ]);
+
       const newCandidateResult = await tx.query(
         'SELECT c.*, cl.name as client_name FROM employees c LEFT JOIN clients cl ON c.client_id = cl.id WHERE c.id = $1',
         [employeeId]

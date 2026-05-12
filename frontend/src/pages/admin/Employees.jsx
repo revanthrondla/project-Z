@@ -153,6 +153,9 @@ export default function AdminCandidates() {
   // Employee number config
   const [empNumConfig, setEmpNumConfig] = useState({ emp_num_mode: 'auto', next_number: null });
 
+  // SSN visibility toggle (hire form only)
+  const [showSSN, setShowSSN] = useState(false);
+
   // Duplicate detection state
   const [dupDuplicates, setDupDuplicates] = useState(null); // null = no dialog; array = show dialog
   const [pendingPayload, setPendingPayload] = useState(null); // form payload waiting on dup decision
@@ -189,11 +192,13 @@ export default function AdminCandidates() {
     setCustomFieldValues({});
     setCfErrors({});
     setError('');
+    setShowSSN(false);
     setShowModal(true);
   };
 
   const openEdit = async (c) => {
     setEditing(c);
+    setShowSSN(false);
     setForm({ ...c, password: '', ssn: '', date_of_birth: c.date_of_birth ? c.date_of_birth.split('T')[0] : '' });
     setCustomFieldValues({});
     setCfErrors({});
@@ -548,15 +553,25 @@ export default function AdminCandidates() {
                 {!editing && (
                   <div className="col-span-2">
                     <label className="label">SSN (Social Security Number)</label>
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      className="input font-mono tracking-widest"
-                      value={form.ssn || ''}
-                      onChange={e => setForm(f => ({ ...f, ssn: e.target.value }))}
-                      placeholder="e.g. 123-45-6789 — stored as a secure hash"
-                      maxLength={11}
-                    />
+                    <div className="relative">
+                      <input
+                        type={showSSN ? 'text' : 'password'}
+                        autoComplete="off"
+                        className="input font-mono tracking-widest pr-10"
+                        value={form.ssn || ''}
+                        onChange={e => setForm(f => ({ ...f, ssn: e.target.value }))}
+                        placeholder="e.g. 123-45-6789"
+                        maxLength={11}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSSN(v => !v)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"
+                        title={showSSN ? 'Hide SSN' : 'Show SSN'}
+                      >
+                        {showSSN ? '🙈' : '👁️'}
+                      </button>
+                    </div>
                     <p className="text-xs text-gray-400 mt-1">Only the last 4 digits are stored for display. The full number is hashed for duplicate detection.</p>
                   </div>
                 )}

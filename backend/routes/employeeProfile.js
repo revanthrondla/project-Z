@@ -76,6 +76,9 @@ router.get('/:id/contact', wrap(async (req, res) => {
     home_state:     ext.home_state     || '',
     home_postcode:  ext.home_postcode  || '',
     home_country:   ext.home_country   || '',
+    // identity (masked — only last4 stored; full SSN is never returned)
+    ssn_last4:      cand.ssn_last4     || null,
+    date_of_birth:  cand.date_of_birth || null,
   });
   }));
 

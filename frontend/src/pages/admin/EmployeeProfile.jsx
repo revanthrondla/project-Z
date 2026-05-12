@@ -149,6 +149,9 @@ function ContactTab({ empId }) {
   const [editingAddress, setEditingAddress] = useState(false);
   const [form, setForm]     = useState({});
   const [saving, setSaving] = useState(false);
+  // Click-to-reveal state for sensitive identity fields
+  const [revealSSN, setRevealSSN] = useState(false);
+  const [revealDOB, setRevealDOB] = useState(false);
 
   useEffect(() => { if (data) setForm(data); }, [data]);
 
@@ -233,6 +236,53 @@ function ContactTab({ empId }) {
           </div>
         )}
       </SectionCard>
+
+      {/* Identity — SSN (last 4 only) + DOB, click-to-reveal */}
+      {(data?.ssn_last4 || data?.date_of_birth) && (
+        <SectionCard title="Identity" icon="🔒">
+          <div className="grid grid-cols-2 gap-6 text-sm">
+            {/* SSN */}
+            {data?.ssn_last4 && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Social Security Number</p>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-medium text-gray-800">
+                    {revealSSN ? `•••-••-${data.ssn_last4}` : '•••-••-••••'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRevealSSN(v => !v)}
+                    className="text-xs text-emerald-600 hover:text-emerald-700 font-medium underline underline-offset-2"
+                  >
+                    {revealSSN ? 'Hide' : 'View last 4'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">Only the last 4 digits are stored</p>
+              </div>
+            )}
+            {/* Date of Birth */}
+            {data?.date_of_birth && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Date of Birth</p>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-medium text-gray-800">
+                    {revealDOB
+                      ? new Date(data.date_of_birth).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+                      : '•• / •• / ••••'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRevealDOB(v => !v)}
+                    className="text-xs text-emerald-600 hover:text-emerald-700 font-medium underline underline-offset-2"
+                  >
+                    {revealDOB ? 'Hide' : 'View'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 }
