@@ -244,7 +244,7 @@ const TENANT_DDL = `
     mime_type        TEXT,                      -- was: file_type
     category         TEXT DEFAULT 'general',
     signature_type   TEXT DEFAULT 'none'
-                     CHECK(signature_type IN ('none','electronic','wet')),
+                     CHECK(signature_type IN ('none','single','two_way','three_way')),
     required_signers TEXT,                      -- comma-separated roles
     status           TEXT DEFAULT 'pending'
                      CHECK(status IN ('pending','partial','completed','voided')),
@@ -1429,6 +1429,17 @@ async function createTenantSchema(slug) {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_number
         ON employees(employee_number)
         WHERE employee_number IS NOT NULL
+    `);
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // FIX: documents.signature_type CHECK constraint (original DDL was wrong)
+    // Old: CHECK(signature_type IN ('none','electronic','wet'))
+    // New: CHECK(signature_type IN ('none','single','two_way','three_way'))
+    // ══════════════════════════════════════════════════════════════════════════
+    await client.query(`ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_signature_type_check`);
+    await client.query(`
+      ALTER TABLE documents ADD CONSTRAINT documents_signature_type_check
+        CHECK(signature_type IN ('none','single','two_way','three_way'))
     `);
 
     // --- org_profile additions (employee number config + dup-check toggles) ---

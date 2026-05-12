@@ -144,7 +144,7 @@ function useData(url, deps = []) {
 // ─── TAB: CONTACT ─────────────────────────────────────────────────────────────
 
 function ContactTab({ empId }) {
-  const { data, loading, reload } = useData(`/employees/${empId}/contact`);
+  const { data, loading, reload } = useData(`/api/employees/${empId}/contact`);
   const [editingCore, setEditingCore]       = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
   const [form, setForm]     = useState({});
@@ -155,7 +155,7 @@ function ContactTab({ empId }) {
   const saveCore = async () => {
     setSaving(true);
     try {
-      await api.put(`/employees/${empId}/contact`, form);
+      await api.put(`/api/employees/${empId}/contact`, form);
       setEditingCore(false);
       reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
@@ -165,7 +165,7 @@ function ContactTab({ empId }) {
   const saveAddress = async () => {
     setSaving(true);
     try {
-      await api.put(`/employees/${empId}/contact`, form);
+      await api.put(`/api/employees/${empId}/contact`, form);
       setEditingAddress(false);
       reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
@@ -240,7 +240,7 @@ function ContactTab({ empId }) {
 // ─── TAB: EMERGENCY CONTACTS ──────────────────────────────────────────────────
 
 function EmergencyTab({ empId }) {
-  const { data, loading, reload } = useData(`/employees/${empId}/emergency-contacts`);
+  const { data, loading, reload } = useData(`/api/employees/${empId}/emergency-contacts`);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ name: '', relationship: '', phone1: '', phone2: '' });
@@ -253,8 +253,8 @@ function EmergencyTab({ empId }) {
     if (!form.name || !form.phone1) return alert('Name and primary phone are required');
     setSaving(true);
     try {
-      if (editItem) await api.put(`/employees/${empId}/emergency-contacts/${editItem.id}`, form);
-      else await api.post(`/employees/${empId}/emergency-contacts`, form);
+      if (editItem) await api.put(`/api/employees/${empId}/emergency-contacts/${editItem.id}`, form);
+      else await api.post(`/api/employees/${empId}/emergency-contacts`, form);
       setShowModal(false); reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
     finally { setSaving(false); }
@@ -262,7 +262,7 @@ function EmergencyTab({ empId }) {
 
   const del = async (id) => {
     if (!confirm('Remove this emergency contact?')) return;
-    await api.delete(`/employees/${empId}/emergency-contacts/${id}`);
+    await api.delete(`/api/employees/${empId}/emergency-contacts/${id}`);
     reload();
   };
 
@@ -317,7 +317,7 @@ function EmergencyTab({ empId }) {
 const FREQ_LABELS = { hourly: 'per hour', daily: 'per day', weekly: 'per week', monthly: 'per month', annual: 'per year' };
 
 function EmploymentTab({ empId }) {
-  const { data, loading, reload } = useData(`/employees/${empId}/employment-history`);
+  const { data, loading, reload } = useData(`/api/employees/${empId}/employment-history`);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ position_title: '', start_date: '', end_date: '', remuneration: '', currency: 'USD', frequency: 'annual', notes: '' });
@@ -331,8 +331,8 @@ function EmploymentTab({ empId }) {
     if (!form.position_title || !form.start_date) return alert('Position title and start date are required');
     setSaving(true);
     try {
-      if (editItem) await api.put(`/employees/${empId}/employment-history/${editItem.id}`, form);
-      else await api.post(`/employees/${empId}/employment-history`, form);
+      if (editItem) await api.put(`/api/employees/${empId}/employment-history/${editItem.id}`, form);
+      else await api.post(`/api/employees/${empId}/employment-history`, form);
       setShowModal(false); reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
     finally { setSaving(false); }
@@ -340,7 +340,7 @@ function EmploymentTab({ empId }) {
 
   const del = async (id) => {
     if (!confirm('Delete this employment record?')) return;
-    await api.delete(`/employees/${empId}/employment-history/${id}`);
+    await api.delete(`/api/employees/${empId}/employment-history/${id}`);
     reload();
   };
 
@@ -415,7 +415,7 @@ function EmploymentTab({ empId }) {
 // ─── TAB: BANK ACCOUNTS ───────────────────────────────────────────────────────
 
 function BankTab({ empId }) {
-  const { data, loading, reload } = useData(`/employees/${empId}/bank-accounts`);
+  const { data, loading, reload } = useData(`/api/employees/${empId}/bank-accounts`);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ account_name: '', bank_name: '', account_number: '', routing_number: '', swift_code: '', country: 'US', is_primary: false });
   const [saving, setSaving] = useState(false);
@@ -426,7 +426,7 @@ function BankTab({ empId }) {
     if (!form.account_name || !form.bank_name || !form.account_number) return alert('Account name, bank name and account number are required');
     setSaving(true);
     try {
-      await api.post(`/employees/${empId}/bank-accounts`, form);
+      await api.post(`/api/employees/${empId}/bank-accounts`, form);
       setShowModal(false); reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
     finally { setSaving(false); }
@@ -434,7 +434,7 @@ function BankTab({ empId }) {
 
   const del = async (id) => {
     if (!confirm('Remove this bank account?')) return;
-    await api.delete(`/employees/${empId}/bank-accounts/${id}`);
+    await api.delete(`/api/employees/${empId}/bank-accounts/${id}`);
     reload();
   };
 
@@ -504,7 +504,7 @@ function BankTab({ empId }) {
 
 function LeaveTab({ empId }) {
   const [year, setYear] = useState(new Date().getFullYear());
-  const { data, loading, reload } = useData(`/employees/${empId}/leave-balances?year=${year}`, [year]);
+  const { data, loading, reload } = useData(`/api/employees/${empId}/leave-balances?year=${year}`, [year]);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ entitlement_days: '', carry_over_days: '' });
   const [saving, setSaving] = useState(false);
@@ -517,7 +517,7 @@ function LeaveTab({ empId }) {
   const save = async () => {
     setSaving(true);
     try {
-      await api.put(`/employees/${empId}/leave-balances`, { leave_type: editItem.leave_type, year, entitlement_days: parseFloat(form.entitlement_days) || 0, carry_over_days: parseFloat(form.carry_over_days) || 0 });
+      await api.put(`/api/employees/${empId}/leave-balances`, { leave_type: editItem.leave_type, year, entitlement_days: parseFloat(form.entitlement_days) || 0, carry_over_days: parseFloat(form.carry_over_days) || 0 });
       setEditItem(null); reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
     finally { setSaving(false); }
@@ -582,7 +582,7 @@ const ASSET_ICONS = { computer: '💻', phone: '📱', security_card: '🪪', un
 const STATUS_COLORS = { on_loan: 'blue', returned: 'green', lost: 'red', damaged: 'yellow' };
 
 function AssetsTab({ empId }) {
-  const { data, loading, reload } = useData(`/employees/${empId}/assets`);
+  const { data, loading, reload } = useData(`/api/employees/${empId}/assets`);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ serial_number: '', description: '', category: 'other', checkout_date: '', checkin_date: '', status: 'on_loan', notes: '' });
@@ -596,8 +596,8 @@ function AssetsTab({ empId }) {
     if (!form.description || !form.checkout_date) return alert('Description and checkout date are required');
     setSaving(true);
     try {
-      if (editItem) await api.put(`/employees/${empId}/assets/${editItem.id}`, form);
-      else await api.post(`/employees/${empId}/assets`, form);
+      if (editItem) await api.put(`/api/employees/${empId}/assets/${editItem.id}`, form);
+      else await api.post(`/api/employees/${empId}/assets`, form);
       setShowModal(false); reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
     finally { setSaving(false); }
@@ -605,7 +605,7 @@ function AssetsTab({ empId }) {
 
   const del = async (id) => {
     if (!confirm('Remove this asset record?')) return;
-    await api.delete(`/employees/${empId}/assets/${id}`);
+    await api.delete(`/api/employees/${empId}/assets/${id}`);
     reload();
   };
 
@@ -668,7 +668,7 @@ function AssetsTab({ empId }) {
 // ─── TAB: BENEFITS ────────────────────────────────────────────────────────────
 
 function BenefitsTab({ empId }) {
-  const { data, loading, reload } = useData(`/employees/${empId}/benefits`);
+  const { data, loading, reload } = useData(`/api/employees/${empId}/benefits`);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ benefit_type: '', provider: '', value: '', currency: 'USD', access_details: '', notes: '', effective_date: '', end_date: '' });
@@ -682,8 +682,8 @@ function BenefitsTab({ empId }) {
     if (!form.benefit_type) return alert('Benefit type is required');
     setSaving(true);
     try {
-      if (editItem) await api.put(`/employees/${empId}/benefits/${editItem.id}`, form);
-      else await api.post(`/employees/${empId}/benefits`, form);
+      if (editItem) await api.put(`/api/employees/${empId}/benefits/${editItem.id}`, form);
+      else await api.post(`/api/employees/${empId}/benefits`, form);
       setShowModal(false); reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
     finally { setSaving(false); }
@@ -691,7 +691,7 @@ function BenefitsTab({ empId }) {
 
   const del = async (id) => {
     if (!confirm('Remove this benefit?')) return;
-    await api.delete(`/employees/${empId}/benefits/${id}`);
+    await api.delete(`/api/employees/${empId}/benefits/${id}`);
     reload();
   };
 
@@ -757,7 +757,7 @@ function Stars({ score }) {
 }
 
 function ReviewsTab({ empId }) {
-  const { data, loading, reload } = useData(`/employees/${empId}/performance-reviews`);
+  const { data, loading, reload } = useData(`/api/employees/${empId}/performance-reviews`);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ review_date: '', reviewer_name: '', overall_score: '', evaluation: '', next_steps: '' });
@@ -771,8 +771,8 @@ function ReviewsTab({ empId }) {
     if (!form.review_date) return alert('Review date is required');
     setSaving(true);
     try {
-      if (editItem) await api.put(`/employees/${empId}/performance-reviews/${editItem.id}`, form);
-      else await api.post(`/employees/${empId}/performance-reviews`, form);
+      if (editItem) await api.put(`/api/employees/${empId}/performance-reviews/${editItem.id}`, form);
+      else await api.post(`/api/employees/${empId}/performance-reviews`, form);
       setShowModal(false); reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
     finally { setSaving(false); }
@@ -780,7 +780,7 @@ function ReviewsTab({ empId }) {
 
   const del = async (id) => {
     if (!confirm('Delete this performance review?')) return;
-    await api.delete(`/employees/${empId}/performance-reviews/${id}`);
+    await api.delete(`/api/employees/${empId}/performance-reviews/${id}`);
     reload();
   };
 
@@ -854,7 +854,7 @@ function ReviewsTab({ empId }) {
 // ─── TAB: TRAINING ────────────────────────────────────────────────────────────
 
 function TrainingTab({ empId }) {
-  const { data, loading, reload } = useData(`/employees/${empId}/training`);
+  const { data, loading, reload } = useData(`/api/employees/${empId}/training`);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ training_date: '', name: '', content: '', results: '', certificate_url: '' });
@@ -868,8 +868,8 @@ function TrainingTab({ empId }) {
     if (!form.training_date || !form.name) return alert('Date and training name are required');
     setSaving(true);
     try {
-      if (editItem) await api.put(`/employees/${empId}/training/${editItem.id}`, form);
-      else await api.post(`/employees/${empId}/training`, form);
+      if (editItem) await api.put(`/api/employees/${empId}/training/${editItem.id}`, form);
+      else await api.post(`/api/employees/${empId}/training`, form);
       setShowModal(false); reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
     finally { setSaving(false); }
@@ -877,7 +877,7 @@ function TrainingTab({ empId }) {
 
   const del = async (id) => {
     if (!confirm('Delete this training record?')) return;
-    await api.delete(`/employees/${empId}/training/${id}`);
+    await api.delete(`/api/employees/${empId}/training/${id}`);
     reload();
   };
 
@@ -935,7 +935,7 @@ function TrainingTab({ empId }) {
 // ─── TAB: LICENCES ────────────────────────────────────────────────────────────
 
 function LicencesTab({ empId }) {
-  const { data, loading, reload } = useData(`/employees/${empId}/licenses`);
+  const { data, loading, reload } = useData(`/api/employees/${empId}/licenses`);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ document_type: '', document_url: '', issue_date: '', expiry_date: '', reminder_days_before: 30, notes: '' });
@@ -949,8 +949,8 @@ function LicencesTab({ empId }) {
     if (!form.document_type) return alert('Document type is required');
     setSaving(true);
     try {
-      if (editItem) await api.put(`/employees/${empId}/licenses/${editItem.id}`, form);
-      else await api.post(`/employees/${empId}/licenses`, form);
+      if (editItem) await api.put(`/api/employees/${empId}/licenses/${editItem.id}`, form);
+      else await api.post(`/api/employees/${empId}/licenses`, form);
       setShowModal(false); reload();
     } catch (e) { alert(e.response?.data?.error || 'Save failed'); }
     finally { setSaving(false); }
@@ -958,7 +958,7 @@ function LicencesTab({ empId }) {
 
   const del = async (id) => {
     if (!confirm('Delete this licence record?')) return;
-    await api.delete(`/employees/${empId}/licenses/${id}`);
+    await api.delete(`/api/employees/${empId}/licenses/${id}`);
     reload();
   };
 
@@ -1027,8 +1027,8 @@ function LicencesTab({ empId }) {
 // ─── PROFILE HEADER ───────────────────────────────────────────────────────────
 
 function ProfileHeader({ empId }) {
-  const { data, loading } = useData(`/employees/${empId}/summary`);
-  const { data: contact } = useData(`/employees/${empId}/contact`);
+  const { data, loading } = useData(`/api/employees/${empId}/summary`);
+  const { data: contact } = useData(`/api/employees/${empId}/contact`);
 
   if (loading || !contact) return <div className="h-32 bg-gray-100 rounded-2xl animate-pulse" />;
 
@@ -1116,7 +1116,7 @@ function EEOTab({ empId }) {
   const [err,     setErr]     = useState(null);
 
   useEffect(() => {
-    api.get(`/eeo/employees/${empId}`)
+    api.get(`/api/eeo/employees/${empId}`)
       .then(r => setForm(r.data))
       .catch(e => setErr(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
@@ -1128,7 +1128,7 @@ function EEOTab({ empId }) {
     setSaving(true); setErr(null); setSaved(false);
     try {
       const { id, name, email, role, _labels, ...body } = form;
-      await api.put(`/eeo/employees/${empId}`, body);
+      await api.put(`/api/eeo/employees/${empId}`, body);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
@@ -1308,7 +1308,7 @@ const ACTION_STYLE = {
 };
 
 function HistoryTab({ empId }) {
-  const { data, loading, error } = useData(`/employees/${empId}/history`);
+  const { data, loading, error } = useData(`/api/employees/${empId}/history`);
   const [expanded, setExpanded] = useState({});
 
   const entries = Array.isArray(data) ? data : [];

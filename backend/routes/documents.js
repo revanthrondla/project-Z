@@ -178,9 +178,23 @@ router.post('/', authenticate, injectTenantDb, upload.single('file'), async (req
     resolvedClientId    = null;
   }
 
+  // Parse and validate IDs
+  const candidateIdInt = resolvedCandidateId ? parseInt(resolvedCandidateId, 10) : null;
+  const clientIdInt    = resolvedClientId    ? parseInt(resolvedClientId, 10)    : null;
+
+  if (resolvedCandidateId && (isNaN(candidateIdInt) || candidateIdInt <= 0)) {
+    if (req.file?.path) { try { fs.unlinkSync(req.file.path); } catch (_) {} }
+    return res.status(400).json({ error: `Invalid candidate_id: ${resolvedCandidateId}` });
+  }
+  if (resolvedClientId && (isNaN(clientIdInt) || clientIdInt <= 0)) {
+    if (req.file?.path) { try { fs.unlinkSync(req.file.path); } catch (_) {} }
+    return res.status(400).json({ error: `Invalid client_id: ${resolvedClientId}` });
+  }
+
   // Validate signature_type
   const validTypes = ['none', 'single', 'two_way', 'three_way'];
   if (!validTypes.includes(signature_type)) {
+    if (req.file?.path) { try { fs.unlinkSync(req.file.path); } catch (_) {} }
     return res.status(400).json({ error: 'Invalid signature_type' });
   }
 
@@ -192,6 +206,7 @@ router.post('/', authenticate, injectTenantDb, upload.single('file'), async (req
   const validRoles = ['candidate', 'client', 'admin'];
   for (const s of signerList) {
     if (!validRoles.includes(s)) {
+      if (req.file?.path) { try { fs.unlinkSync(req.file.path); } catch (_) {} }
       return res.status(400).json({ error: `Invalid signer role: ${s}` });
     }
   }
@@ -202,6 +217,25 @@ router.post('/', authenticate, injectTenantDb, upload.single('file'), async (req
   if (signature_type === 'three_way' && signerList.length !== 3) return res.status(400).json({ error: 'three_way requires exactly 3 signers' });
 
   try {
+    // Verify employee exists before inserting (FK pre-check with clear error)
+    if (candidateIdInt) {
+      const empCheck = await req.db.query('SELECT id FROM employees WHERE id = $1', [candidateIdInt]);
+      if (empCheck.rows.length === 0) {
+        if (req.file?.path) { try { fs.unlinkSync(req.file.path); } catch (_) {} }
+        console.error(`[Documents] Employee not found: candidate_id=${candidateIdInt}`);
+        return res.status(422).json({ error: `Employee not found (id=${candidateIdInt}). Cannot attach document.` });
+      }
+    }
+
+    // Verify client exists if provided
+    if (clientIdInt) {
+      const clientCheck = await req.db.query('SELECT id FROM clients WHERE id = $1', [clientIdInt]);
+      if (clientCheck.rows.length === 0) {
+        if (req.file?.path) { try { fs.unlinkSync(req.file.path); } catch (_) {} }
+        return res.status(422).json({ error: `Client not found (id=${clientIdInt}). Cannot attach document.` });
+      }
+    }
+
     const insertResult = await req.db.query(`
       INSERT INTO documents
         (title, description, file_name, file_path, file_size, mime_type,
@@ -216,8 +250,8 @@ router.post('/', authenticate, injectTenantDb, upload.single('file'), async (req
       req.file.size,
       req.file.mimetype,
       user.id,
-      resolvedCandidateId ? parseInt(resolvedCandidateId, 10) : null,
-      resolvedClientId    ? parseInt(resolvedClientId, 10)    : null,
+      candidateIdInt,
+      clientIdInt,
       signature_type,
       signerList.join(','),
       signature_type === 'none' ? 'completed' : 'pending',
