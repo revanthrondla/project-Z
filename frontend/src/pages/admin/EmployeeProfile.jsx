@@ -379,6 +379,7 @@ const PAY_FREQ_LABELS = {
 
 function OrgAssignmentCard({ empId }) {
   const [assignment, setAssignment] = useState(null);
+  const [loadError, setLoadError]   = useState(null);
   const [editing, setEditing]       = useState(false);
   const [form, setForm]             = useState({});
   const [saving, setSaving]         = useState(false);
@@ -390,22 +391,31 @@ function OrgAssignmentCard({ empId }) {
   const [les, setLes]         = useState([]);
   const [rules, setRules]     = useState([]);
 
-  // Load current assignment + org dropdown lists in parallel
-  useEffect(() => {
-    Promise.all([
-      api.get(`/api/employees/${empId}/org-assignment`).catch(() => ({ data: null })),
-      api.get('/api/org-setup/departments').catch(() => ({ data: [] })),
-      api.get('/api/org-setup/locations').catch(() => ({ data: [] })),
-      api.get('/api/org-setup/legal-entities').catch(() => ({ data: [] })),
-      api.get('/api/pay-rules').catch(() => ({ data: [] })),
-    ]).then(([asgn, d, l, le, pr]) => {
-      setAssignment(asgn.data);
+  const fetchData = useCallback(async () => {
+    setLoadingData(true);
+    setLoadError(null);
+    try {
+      const [asgn, d, l, le, pr] = await Promise.all([
+        api.get(`/api/employees/${empId}/org-assignment`),
+        api.get('/api/org-setup/departments').catch(() => ({ data: [] })),
+        api.get('/api/org-setup/locations').catch(() => ({ data: [] })),
+        api.get('/api/org-setup/legal-entities').catch(() => ({ data: [] })),
+        api.get('/api/pay-rules').catch(() => ({ data: [] })),
+      ]);
+      setAssignment(asgn.data || {});
       setDepts(Array.isArray(d.data) ? d.data : []);
       setLocs(Array.isArray(l.data) ? l.data : []);
       setLes(Array.isArray(le.data) ? le.data : []);
       setRules(Array.isArray(pr.data) ? pr.data : []);
-    }).finally(() => setLoadingData(false));
+    } catch (e) {
+      setLoadError(e.response?.data?.error || e.message || 'Failed to load org assignment');
+    } finally {
+      setLoadingData(false);
+    }
   }, [empId]);
+
+  // Load current assignment + org dropdown lists in parallel
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const openEdit = () => {
     setForm({
@@ -422,7 +432,13 @@ function OrgAssignmentCard({ empId }) {
     setSaving(true);
     try {
       const res = await api.put(`/api/employees/${empId}/org-assignment`, form);
-      setAssignment(res.data);
+      // res.data is the full record with names (department_name, etc.) from backend re-query
+      if (res.data && typeof res.data === 'object' && !res.data.message) {
+        setAssignment(res.data);
+      } else {
+        // Fallback: re-fetch to get the resolved names
+        await fetchData();
+      }
       setEditing(false);
     } catch (e) {
       alert(e.response?.data?.error || 'Save failed');
@@ -438,6 +454,18 @@ function OrgAssignmentCard({ empId }) {
         {[1,2,3,4,5].map(i => <div key={i} className="h-8 bg-gray-100 rounded" />)}
       </div>
     </div>
+  );
+
+  if (loadError) return (
+    <SectionCard title="Org Assignment" icon="🏢">
+      <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg">
+        <div>
+          <p className="text-sm font-medium text-red-700">Could not load org assignment</p>
+          <p className="text-xs text-red-500 mt-0.5">{loadError}</p>
+        </div>
+        <Btn variant="secondary" size="sm" onClick={fetchData}>Retry</Btn>
+      </div>
+    </SectionCard>
   );
 
   return (
