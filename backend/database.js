@@ -1073,9 +1073,15 @@ async function createTenantSchema(slug) {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_org_departments_active ON org_departments(is_active)`);
 
-    // Add department_id to employees if not exists (migration-safe)
-    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS department_id BIGINT REFERENCES org_departments(id) ON DELETE SET NULL`);
-    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_id   BIGINT REFERENCES org_locations(id)   ON DELETE SET NULL`);
+    // Add org-link columns to employees (all idempotent)
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS department_id    BIGINT REFERENCES org_departments(id)    ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_id      BIGINT REFERENCES org_locations(id)      ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS legal_entity_id  BIGINT REFERENCES org_legal_entities(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_frequency    TEXT DEFAULT 'bi-weekly'
+      CHECK(pay_frequency IN ('weekly','bi-weekly','semi-monthly','monthly','quarterly','annually'))`);
+    await client.query(`ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_pay_frequency_check`);
+    await client.query(`ALTER TABLE employees ADD CONSTRAINT employees_pay_frequency_check
+      CHECK(pay_frequency IN ('weekly','bi-weekly','semi-monthly','monthly','quarterly','annually'))`);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONSULTING / PROFESSIONAL SERVICES SCHEMA
@@ -1660,7 +1666,19 @@ async function initializeTenantData(slug) {
  * Called from the Super Admin "create tenant" endpoint.
  */
 async function provisionTenantDb(slug, adminName, adminEmail, adminPassword) {
+  // Step 1: Create all tables + inline ALTER migrations (createTenantSchema is
+  // the canonical full-schema DDL — it always reflects the current schema state)
   await createTenantSchema(slug);
+
+  // Step 2: Run migrate.js numbered migrations against the new schema.
+  // createTenantSchema already applied everything structurally, but the
+  // schema_migrations tracking table needs to be stamped so that future
+  // runAllMigrations() calls at server restart don't re-run them.
+  // All migrations use IF NOT EXISTS so running them after createTenantSchema is safe.
+  const { runMigrationsForSchema } = require('./migrate');
+  await runMigrationsForSchema(`tenant_${slug}`);
+
+  // Step 3: Seed default data and admin account
   await initializeTenantData(slug);
   await seedTenantAdmin(slug, adminName, adminEmail, adminPassword);
   console.log(`✅ Tenant provisioned: ${slug} (admin: ${adminEmail})`);
