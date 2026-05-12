@@ -363,9 +363,7 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
         VALUES ($1, $2, $3, $4, $5, $6, 'USD', 'hourly', $7, $8, $9)
       `, [
         employeeId,
-        contract_type
-          ? contract_type.charAt(0).toUpperCase() + contract_type.slice(1)
-          : 'Employee',              // position_title derived from contract type
+        role || 'Employee',          // position_title = job title from hire form
         mappedEmpType,
         start_date || null,
         end_date   || null,
