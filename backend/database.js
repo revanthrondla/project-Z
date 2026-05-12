@@ -1432,6 +1432,25 @@ async function createTenantSchema(slug) {
     `);
 
     // ══════════════════════════════════════════════════════════════════════════
+    // FIX: document_signatures columns — routes use signer_user_id/name/email
+    // but DDL only had signer_id.  Add the missing columns idempotently.
+    // ══════════════════════════════════════════════════════════════════════════
+    await client.query(`ALTER TABLE document_signatures ADD COLUMN IF NOT EXISTS signer_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE document_signatures ADD COLUMN IF NOT EXISTS signer_name    TEXT`);
+    await client.query(`ALTER TABLE document_signatures ADD COLUMN IF NOT EXISTS signer_email   TEXT`);
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // FIX: documents.candidate_id FK — ensure it references employees(id).
+    // On schemas created before the candidates→employees rename this constraint
+    // may reference the old 'candidates' OID.  Drop and recreate to be safe.
+    // ══════════════════════════════════════════════════════════════════════════
+    await client.query(`ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_candidate_id_fkey`);
+    await client.query(`
+      ALTER TABLE documents ADD CONSTRAINT documents_candidate_id_fkey
+        FOREIGN KEY (candidate_id) REFERENCES employees(id) ON DELETE CASCADE
+    `);
+
+    // ══════════════════════════════════════════════════════════════════════════
     // FIX: documents.signature_type CHECK constraint (original DDL was wrong)
     // Old: CHECK(signature_type IN ('none','electronic','wet'))
     // New: CHECK(signature_type IN ('none','single','two_way','three_way'))
