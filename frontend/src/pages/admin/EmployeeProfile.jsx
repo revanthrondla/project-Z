@@ -2147,58 +2147,155 @@ function DocDetailModal({ doc, onClose, onDelete }) {
   );
 }
 
+// ─── GROUPED TAB PANELS ───────────────────────────────────────────────────────
+
+/**
+ * A labelled section divider used to separate cards inside a grouped tab.
+ */
+function SectionDivider({ icon, title }) {
+  return (
+    <div className="flex items-center gap-3 py-1">
+      <span className="text-lg">{icon}</span>
+      <h2 className="text-base font-semibold text-gray-700">{title}</h2>
+      <div className="flex-1 h-px bg-gray-200" />
+    </div>
+  );
+}
+
+/**
+ * Personal Info — Contact, Emergency, Bank, EEO
+ */
+function PersonalInfoPanel({ empId }) {
+  return (
+    <div className="space-y-8">
+      <div className="space-y-4">
+        <SectionDivider icon="📇" title="Contact Details" />
+        <ContactTab empId={empId} />
+      </div>
+      <div className="space-y-4">
+        <SectionDivider icon="🆘" title="Emergency Contacts" />
+        <EmergencyTab empId={empId} />
+      </div>
+      <div className="space-y-4">
+        <SectionDivider icon="🏦" title="Bank Accounts" />
+        <BankTab empId={empId} />
+      </div>
+      <div className="space-y-4">
+        <SectionDivider icon="⚖️" title="EEO Data" />
+        <EEOTab empId={empId} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Employment Info — Org Assignment + Employment History, Leave, Benefits,
+ *                   Assets, Reviews, Training, Licences
+ */
+function EmploymentInfoPanel({ empId }) {
+  return (
+    <div className="space-y-8">
+      <div className="space-y-4">
+        <SectionDivider icon="📋" title="Position & History" />
+        <EmploymentTab empId={empId} />
+      </div>
+      <div className="space-y-4">
+        <SectionDivider icon="🏖️" title="Leave & Absences" />
+        <LeaveTab empId={empId} />
+      </div>
+      <div className="space-y-4">
+        <SectionDivider icon="🎁" title="Benefits" />
+        <BenefitsTab empId={empId} />
+      </div>
+      <div className="space-y-4">
+        <SectionDivider icon="📦" title="Assets" />
+        <AssetsTab empId={empId} />
+      </div>
+      <div className="space-y-4">
+        <SectionDivider icon="📊" title="Reviews & Performance" />
+        <ReviewsTab empId={empId} />
+      </div>
+      <div className="space-y-4">
+        <SectionDivider icon="🎓" title="Training Records" />
+        <TrainingTab empId={empId} />
+      </div>
+      <div className="space-y-4">
+        <SectionDivider icon="📜" title="Licences & Certifications" />
+        <LicencesTab empId={empId} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Documents — Documents library + Audit / Change History
+ */
+function DocumentsPanel({ empId }) {
+  return (
+    <div className="space-y-8">
+      <div className="space-y-4">
+        <SectionDivider icon="📁" title="Documents" />
+        <DocumentsTab empId={empId} />
+      </div>
+      <div className="space-y-4">
+        <SectionDivider icon="🕐" title="Audit & Change History" />
+        <HistoryTab empId={empId} />
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'contact',     label: '📇 Contact',     component: ContactTab },
-  { id: 'emergency',   label: '🆘 Emergency',   component: EmergencyTab },
-  { id: 'employment',  label: '📋 Employment',  component: EmploymentTab },
-  { id: 'bank',        label: '🏦 Bank',        component: BankTab },
-  { id: 'leave',       label: '🏖️ Leave',      component: LeaveTab },
-  { id: 'assets',      label: '📦 Assets',      component: AssetsTab },
-  { id: 'benefits',    label: '🎁 Benefits',    component: BenefitsTab },
-  { id: 'reviews',     label: '📊 Reviews',     component: ReviewsTab },
-  { id: 'training',    label: '🎓 Training',    component: TrainingTab },
-  { id: 'licenses',    label: '📜 Licences',    component: LicencesTab },
-  { id: 'documents',   label: '📁 Documents',   component: DocumentsTab },
-  { id: 'eeo',         label: '⚖️ EEO',         component: EEOTab },
-  { id: 'history',     label: '🕐 History',     component: HistoryTab },
+  { id: 'personal',    label: '🧑 Personal Info',    component: PersonalInfoPanel },
+  { id: 'employment',  label: '💼 Employment Info',  component: EmploymentInfoPanel },
+  { id: 'documents',   label: '📁 Documents',        component: DocumentsPanel },
 ];
 
 export default function EmployeeProfile() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'contact');
+
+  // Map legacy deep-link tab ids to the new group they live in
+  const LEGACY_TAB_MAP = {
+    contact: 'personal', emergency: 'personal', bank: 'personal', eeo: 'personal',
+    leave: 'employment', assets: 'employment', benefits: 'employment',
+    reviews: 'employment', training: 'employment', licenses: 'employment',
+    history: 'documents',
+  };
+  const rawTab = searchParams.get('tab') || 'personal';
+  const resolvedTab = LEGACY_TAB_MAP[rawTab] ?? (TABS.find(t => t.id === rawTab) ? rawTab : 'personal');
+
+  const [activeTab, setActiveTab] = useState(resolvedTab);
 
   const switchTab = (tabId) => {
     setActiveTab(tabId);
     setSearchParams({ tab: tabId }, { replace: true });
   };
 
-  const TabComponent = TABS.find(t => t.id === activeTab)?.component || ContactTab;
+  const TabComponent = TABS.find(t => t.id === activeTab)?.component || PersonalInfoPanel;
 
   return (
     <div className="space-y-6">
       <ProfileHeader empId={id} />
 
-      {/* Tab bar */}
+      {/* Tab bar — 3 top-level groups */}
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <div className="flex border-b border-gray-200 min-w-max">
-            {TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => switchTab(tab.id)}
-                className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
-                  activeTab === tab.id
-                    ? 'border-green-500 text-green-700 bg-green-50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        <div className="flex border-b border-gray-200">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => switchTab(tab.id)}
+              className={`flex-1 px-6 py-3.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                activeTab === tab.id
+                  ? 'border-green-500 text-green-700 bg-green-50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
         <div className="p-6">
           <TabComponent empId={id} />
