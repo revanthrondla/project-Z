@@ -1451,6 +1451,16 @@ async function createTenantSchema(slug) {
     `);
 
     // ══════════════════════════════════════════════════════════════════════════
+    // FIX: employment_history.candidate_id FK — same stale-OID issue as docs.
+    // Recreate to guarantee it references employees(id) on old schemas.
+    // ══════════════════════════════════════════════════════════════════════════
+    await client.query(`ALTER TABLE employment_history DROP CONSTRAINT IF EXISTS employment_history_candidate_id_fkey`);
+    await client.query(`
+      ALTER TABLE employment_history ADD CONSTRAINT employment_history_candidate_id_fkey
+        FOREIGN KEY (candidate_id) REFERENCES employees(id) ON DELETE CASCADE
+    `);
+
+    // ══════════════════════════════════════════════════════════════════════════
     // FIX: documents.signature_type CHECK constraint (original DDL was wrong)
     // Old: CHECK(signature_type IN ('none','electronic','wet'))
     // New: CHECK(signature_type IN ('none','single','two_way','three_way'))
