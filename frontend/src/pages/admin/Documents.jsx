@@ -73,9 +73,9 @@ function UploadModal({ employees = [], clients = [], onClose, onUploaded }) {
       fd.append('required_signers', form.required_signers.join(','));
       if (form.candidate_id) fd.append('candidate_id', form.candidate_id);
       if (form.client_id)    fd.append('client_id', form.client_id);
-      // Do NOT set Content-Type manually — axios detects FormData and sets
-      // multipart/form-data WITH the correct boundary automatically.
-      await api.post('/api/documents', fd);
+      // Pass Content-Type: undefined to clear the axios-instance default of
+      // 'application/json'. Axios then auto-sets 'multipart/form-data; boundary=...'
+      await api.post('/api/documents', fd, { headers: { 'Content-Type': undefined } });
       onUploaded();
       onClose();
     } catch (err) {

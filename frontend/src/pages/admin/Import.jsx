@@ -121,7 +121,7 @@ function ImportSection({ section }) {
       const form = new FormData();
       form.append('file', file);
       const res = await api.post(apiUploadPath, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': undefined },
       });
       setResult(res.data);
       setShowErrors(false);

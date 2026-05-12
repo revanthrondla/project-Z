@@ -1558,8 +1558,9 @@ function EmpDocUploadModal({ empId, onClose, onUploaded }) {
       fd.append('signature_type', form.signature_type);
       fd.append('required_signers', form.required_signers.join(','));
       fd.append('candidate_id', empId);
-      // No Content-Type header — let axios set multipart/form-data with boundary
-      await api.post('/api/documents', fd);
+      // Pass Content-Type: undefined to clear the axios-instance default of
+      // 'application/json'. Axios then auto-sets 'multipart/form-data; boundary=...'
+      await api.post('/api/documents', fd, { headers: { 'Content-Type': undefined } });
       onUploaded();
     } catch (err) {
       setError(err.response?.data?.error || 'Upload failed');

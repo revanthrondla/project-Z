@@ -35,7 +35,7 @@ function UploadModal({ onClose, onUploaded }) {
       fd.append('title', title);
       fd.append('description', desc);
       fd.append('signature_type', 'none');
-      await api.post('/api/documents', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await api.post('/api/documents', fd, { headers: { 'Content-Type': undefined } });
       onUploaded(); onClose();
     } catch (err) {
       setError(err.response?.data?.error || 'Upload failed');

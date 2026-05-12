@@ -73,7 +73,7 @@ export default function AIChatDocuments() {
       } else {
         fd.append('content', textContent.trim());
       }
-      await api.post('/api/ai-chat/documents', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await api.post('/api/ai-chat/documents', fd, { headers: { 'Content-Type': undefined } });
       setSuccess('Document added to knowledge base successfully.');
       setTitle(''); setTextContent(''); setFile(null);
       if (fileRef.current) fileRef.current.value = '';
