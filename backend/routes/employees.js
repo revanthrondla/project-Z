@@ -210,19 +210,35 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
   try {
     if (req.user.role === 'admin') {
       const result = await req.db.query(`
-        SELECT c.*, cl.name as client_name, u.email as user_email
+        SELECT c.*, cl.name as client_name, u.email as user_email,
+               d.name   AS department_name,
+               l.name   AS location_name,
+               le.legal_name AS legal_entity_name,
+               pr.name  AS pay_rule_name
         FROM employees c
-        LEFT JOIN clients cl ON c.client_id = cl.id
-        LEFT JOIN users u ON c.user_id = u.id
+        LEFT JOIN clients           cl ON cl.id = c.client_id
+        LEFT JOIN users             u  ON u.id  = c.user_id
+        LEFT JOIN org_departments   d  ON d.id  = c.department_id
+        LEFT JOIN org_locations     l  ON l.id  = c.location_id
+        LEFT JOIN org_legal_entities le ON le.id = c.legal_entity_id
+        LEFT JOIN pay_rules         pr ON pr.id = c.pay_rule_id
         ORDER BY c.name
       `);
       return res.json(result.rows);
     }
     // Candidate: own profile only
     const result = await req.db.query(`
-      SELECT c.*, cl.name as client_name
+      SELECT c.*, cl.name as client_name,
+             d.name   AS department_name,
+             l.name   AS location_name,
+             le.legal_name AS legal_entity_name,
+             pr.name  AS pay_rule_name
       FROM employees c
-      LEFT JOIN clients cl ON c.client_id = cl.id
+      LEFT JOIN clients           cl ON cl.id = c.client_id
+      LEFT JOIN org_departments   d  ON d.id  = c.department_id
+      LEFT JOIN org_locations     l  ON l.id  = c.location_id
+      LEFT JOIN org_legal_entities le ON le.id = c.legal_entity_id
+      LEFT JOIN pay_rules         pr ON pr.id = c.pay_rule_id
       WHERE c.id = $1
     `, [req.user.employeeId]);
     const candidate = result.rows[0];
@@ -241,9 +257,17 @@ router.get('/:id', authenticate, injectTenantDb, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
     const result = await req.db.query(`
-      SELECT c.*, cl.name as client_name, cl.contact_email as client_contact_email
+      SELECT c.*, cl.name as client_name, cl.contact_email as client_contact_email,
+             d.name   AS department_name,
+             l.name   AS location_name,
+             le.legal_name AS legal_entity_name,
+             pr.name  AS pay_rule_name
       FROM employees c
-      LEFT JOIN clients cl ON c.client_id = cl.id
+      LEFT JOIN clients           cl ON cl.id = c.client_id
+      LEFT JOIN org_departments   d  ON d.id  = c.department_id
+      LEFT JOIN org_locations     l  ON l.id  = c.location_id
+      LEFT JOIN org_legal_entities le ON le.id = c.legal_entity_id
+      LEFT JOIN pay_rules         pr ON pr.id = c.pay_rule_id
       WHERE c.id = $1
     `, [id]);
     const candidate = result.rows[0];
@@ -325,13 +349,16 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
         }
       }
 
+      const { department_id, location_id, legal_entity_id, pay_rule_id, pay_frequency } = req.body;
+
       const candidateResult = await tx.query(`
         INSERT INTO employees (
           user_id, name, email, phone, role, hourly_rate, client_id,
           start_date, end_date, status, contract_type,
-          employee_number, ssn_hash, ssn_last4, date_of_birth
+          employee_number, ssn_hash, ssn_last4, date_of_birth,
+          department_id, location_id, legal_entity_id, pay_rule_id, pay_frequency
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
         RETURNING id
       `, [
         userId, name, email.toLowerCase().trim(), phone || null,
@@ -339,6 +366,8 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
         start_date || null, end_date || null,
         status || 'active', contract_type || 'contractor',
         empNum, ssnHash, ssnLast4, date_of_birth || null,
+        department_id || null, location_id || null,
+        legal_entity_id || null, pay_rule_id || null, pay_frequency || null,
       ]);
 
       const employeeId = candidateResult.rows[0].id;
@@ -374,7 +403,16 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
       ]);
 
       const newCandidateResult = await tx.query(
-        'SELECT c.*, cl.name as client_name FROM employees c LEFT JOIN clients cl ON c.client_id = cl.id WHERE c.id = $1',
+        `SELECT c.*, cl.name as client_name,
+               d.name AS department_name, l.name AS location_name,
+               le.legal_name AS legal_entity_name, pr.name AS pay_rule_name
+         FROM employees c
+         LEFT JOIN clients cl ON cl.id = c.client_id
+         LEFT JOIN org_departments d ON d.id = c.department_id
+         LEFT JOIN org_locations l ON l.id = c.location_id
+         LEFT JOIN org_legal_entities le ON le.id = c.legal_entity_id
+         LEFT JOIN pay_rules pr ON pr.id = c.pay_rule_id
+         WHERE c.id = $1`,
         [employeeId]
       );
 
@@ -400,7 +438,9 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const { name, email, phone, role, hourly_rate, client_id, start_date, end_date, status, contract_type, market_status, available_date, market_notes } = req.body;
+    const { name, email, phone, role, hourly_rate, client_id, start_date, end_date,
+            status, contract_type, market_status, available_date, market_notes,
+            department_id, location_id, legal_entity_id, pay_rule_id, pay_frequency } = req.body;
     const validErr = validateCandidateInput({ name, email, hourly_rate, start_date, end_date });
     if (validErr) return res.status(400).json({ error: validErr });
 
@@ -421,6 +461,11 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
       if (end_date !== undefined) { updateFields.push(`end_date = $${paramCounter++}`); values.push(end_date || null); }
       if (status) { updateFields.push(`status = $${paramCounter++}`); values.push(status); }
       if (contract_type) { updateFields.push(`contract_type = $${paramCounter++}`); values.push(contract_type); }
+      if (department_id   !== undefined) { updateFields.push(`department_id   = $${paramCounter++}`); values.push(department_id   || null); }
+      if (location_id     !== undefined) { updateFields.push(`location_id     = $${paramCounter++}`); values.push(location_id     || null); }
+      if (legal_entity_id !== undefined) { updateFields.push(`legal_entity_id = $${paramCounter++}`); values.push(legal_entity_id || null); }
+      if (pay_rule_id     !== undefined) { updateFields.push(`pay_rule_id     = $${paramCounter++}`); values.push(pay_rule_id     || null); }
+      if (pay_frequency   !== undefined) { updateFields.push(`pay_frequency   = $${paramCounter++}`); values.push(pay_frequency   || null); }
     }
 
     if (updateFields.length === 0) return res.status(400).json({ error: 'No fields to update' });

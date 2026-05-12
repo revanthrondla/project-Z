@@ -240,6 +240,72 @@ router.delete('/:id/employment-history/:ehId', requireAdmin, wrap(async (req, re
   res.json({ message: 'Employment record deleted' });
   }));
 
+// ── Org Assignment — GET/PUT the five org-level links on an employee ──────────
+router.get('/:id/org-assignment', requireAdmin, wrap(async (req, res) => {
+  const db   = req.db;
+  const cand = await resolveCandidate(req, res);
+  if (!cand) return;
+
+  const result = await db.query(`
+    SELECT e.department_id, e.location_id, e.legal_entity_id, e.pay_rule_id, e.pay_frequency,
+           d.name   AS department_name,
+           l.name   AS location_name,
+           le.legal_name AS legal_entity_name,
+           pr.name  AS pay_rule_name
+    FROM employees e
+    LEFT JOIN org_departments    d  ON d.id  = e.department_id
+    LEFT JOIN org_locations      l  ON l.id  = e.location_id
+    LEFT JOIN org_legal_entities le ON le.id = e.legal_entity_id
+    LEFT JOIN pay_rules          pr ON pr.id = e.pay_rule_id
+    WHERE e.id = $1
+  `, [cand.id]);
+
+  res.json(result.rows[0] || {});
+}));
+
+router.put('/:id/org-assignment', requireAdmin, wrap(async (req, res) => {
+  const db   = req.db;
+  const cand = await resolveCandidate(req, res);
+  if (!cand) return;
+
+  const { department_id, location_id, legal_entity_id, pay_rule_id, pay_frequency } = req.body;
+
+  await db.query(`
+    UPDATE employees SET
+      department_id   = $1,
+      location_id     = $2,
+      legal_entity_id = $3,
+      pay_rule_id     = $4,
+      pay_frequency   = $5,
+      updated_at      = NOW()
+    WHERE id = $6
+  `, [
+    department_id   || null,
+    location_id     || null,
+    legal_entity_id || null,
+    pay_rule_id     || null,
+    pay_frequency   || null,
+    cand.id,
+  ]);
+
+  // Re-query with JOINs so the client gets names back immediately
+  const updated = await db.query(`
+    SELECT e.department_id, e.location_id, e.legal_entity_id, e.pay_rule_id, e.pay_frequency,
+           d.name        AS department_name,
+           l.name        AS location_name,
+           le.legal_name AS legal_entity_name,
+           pr.name       AS pay_rule_name
+    FROM employees e
+    LEFT JOIN org_departments    d  ON d.id  = e.department_id
+    LEFT JOIN org_locations      l  ON l.id  = e.location_id
+    LEFT JOIN org_legal_entities le ON le.id = e.legal_entity_id
+    LEFT JOIN pay_rules          pr ON pr.id = e.pay_rule_id
+    WHERE e.id = $1
+  `, [cand.id]);
+
+  res.json(updated.rows[0] || {});
+}));
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 4. BANK ACCOUNTS
 // ═══════════════════════════════════════════════════════════════════════════════
