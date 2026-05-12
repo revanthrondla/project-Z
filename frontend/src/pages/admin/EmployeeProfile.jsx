@@ -540,16 +540,41 @@ function OrgAssignmentCard({ empId }) {
 
 // ─── TAB: EMPLOYMENT HISTORY ─────────────────────────────────────────────────
 
+const EMP_TYPE_LABELS = {
+  full_time: 'Full-time',
+  part_time: 'Part-time',
+  contract:  'Contract',
+  freelance: 'Freelance',
+  intern:    'Intern',
+};
+
+/** Normalise a value that might be a full ISO timestamp to YYYY-MM-DD for date inputs */
+function toDateInput(val) {
+  if (!val) return '';
+  return String(val).slice(0, 10);
+}
+
 function EmploymentTab({ empId }) {
   const { data, loading, reload } = useData(`/api/employees/${empId}/employment-history`);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [form, setForm] = useState({ position_title: '', start_date: '', end_date: '', remuneration: '', currency: 'USD', frequency: 'annual', notes: '' });
+  const BLANK_FORM = { position_title: '', employment_type: 'full_time', start_date: '', end_date: '', remuneration: '', currency: 'USD', frequency: 'annual', notes: '' };
+  const [form, setForm] = useState(BLANK_FORM);
   const [saving, setSaving] = useState(false);
 
-  const openNew = () => { setForm({ position_title: '', start_date: '', end_date: '', remuneration: '', currency: 'USD', frequency: 'annual', notes: '' }); setEditItem(null); setShowModal(true); };
-  const openEdit = (item) => { setForm({ ...item, remuneration: item.remuneration || '' }); setEditItem(item); setShowModal(true); };
-  const f = (k) => ({ value: form[k] || '', onChange: e => setForm(p => ({ ...p, [k]: e.target.value })), name: k });
+  const openNew = () => { setForm(BLANK_FORM); setEditItem(null); setShowModal(true); };
+  const openEdit = (item) => {
+    setForm({
+      ...item,
+      remuneration: item.remuneration ?? '',
+      // Normalise dates: pg may return full ISO timestamps — date inputs need YYYY-MM-DD
+      start_date: toDateInput(item.start_date),
+      end_date:   toDateInput(item.end_date),
+    });
+    setEditItem(item);
+    setShowModal(true);
+  };
+  const f = (k) => ({ value: form[k] ?? '', onChange: e => setForm(p => ({ ...p, [k]: e.target.value })), name: k });
 
   const save = async () => {
     if (!form.position_title || !form.start_date) return alert('Position title and start date are required');
@@ -568,6 +593,10 @@ function EmploymentTab({ empId }) {
     reload();
   };
 
+  const records = Array.isArray(data) ? data : [];
+  // Most recent active record (no end_date) or just the latest by start_date
+  const current = records.find(r => !r.end_date) || records[0] || null;
+
   if (loading) return (
     <div className="space-y-4">
       <OrgAssignmentCard empId={empId} />
@@ -580,43 +609,150 @@ function EmploymentTab({ empId }) {
       {/* Org Assignment always shown at top of Employment tab */}
       <OrgAssignmentCard empId={empId} />
 
-      {/* Employment History timeline */}
-      <div>
-        <div className="flex justify-end mb-4"><Btn onClick={openNew}>+ Add Record</Btn></div>
-        {!(Array.isArray(data) && data.length) ? <EmptyState message="No employment history on file" icon="📋" /> : (
-        <div className="relative">
-          <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-200" />
-          <div className="space-y-4">
-            {(Array.isArray(data) ? data : []).map((eh, i) => (
-              <div key={eh.id} className="relative pl-12">
-                <div className={`absolute left-3.5 top-3 w-3 h-3 rounded-full border-2 border-white ${!eh.end_date ? 'bg-green-500' : 'bg-gray-400'}`} />
-                <div className="p-4 border border-gray-200 rounded-xl">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-800">{eh.position_title}</p>
-                      <p className="text-sm text-gray-500">{fmt(eh.start_date)} → {eh.end_date ? fmt(eh.end_date) : <Badge text="Current" color="green" />}</p>
-                      <UpdatedAt date={eh.updated_at} />
-                      {eh.remuneration && (
-                        <p className="text-sm text-gray-700 mt-1">{fmtMoney(eh.remuneration, eh.currency)} <span className="text-gray-400">{FREQ_LABELS[eh.frequency]}</span></p>
-                      )}
-                      {eh.notes && <p className="text-xs text-gray-500 mt-1 italic">{eh.notes}</p>}
-                    </div>
-                    <div className="flex gap-2 ml-4">
-                      <Btn variant="secondary" onClick={() => openEdit(eh)}>Edit</Btn>
-                      <Btn variant="danger" onClick={() => del(eh.id)}>Delete</Btn>
+      {/* ── Current Position card ─────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gray-50">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2">💼 Current Position</h3>
+          <div className="flex gap-2">
+            {current && <Btn variant="secondary" onClick={() => openEdit(current)}>Edit</Btn>}
+            <Btn onClick={openNew}>+ Add Record</Btn>
+          </div>
+        </div>
+        <div className="p-5">
+          {!current ? (
+            <EmptyState message="No employment record on file" icon="💼" />
+          ) : (
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Position Title</p>
+                <p className="mt-1 text-sm font-semibold text-gray-900">{current.position_title || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Employment Type</p>
+                <p className="mt-1 text-sm text-gray-800">{EMP_TYPE_LABELS[current.employment_type] || current.employment_type || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Status</p>
+                <p className="mt-1">
+                  {current.end_date
+                    ? <Badge text={`Ended ${fmt(current.end_date)}`} color="gray" />
+                    : <Badge text="Active" color="green" />}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Start Date</p>
+                <p className="mt-1 text-sm text-gray-800">{fmt(current.start_date) || '—'}</p>
+              </div>
+              {current.end_date && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">End Date</p>
+                  <p className="mt-1 text-sm text-gray-800">{fmt(current.end_date)}</p>
+                </div>
+              )}
+              {current.remuneration != null && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Remuneration</p>
+                  <p className="mt-1 text-sm text-gray-800">
+                    {fmtMoney(current.remuneration, current.currency)}
+                    <span className="text-gray-400 ml-1">{FREQ_LABELS[current.frequency] || current.frequency}</span>
+                  </p>
+                </div>
+              )}
+              {current.notes && (
+                <div className="col-span-2 sm:col-span-3">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Notes</p>
+                  <p className="mt-1 text-sm text-gray-500 italic">{current.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Employment History timeline ───────────────────────────────── */}
+      {records.length > 1 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-1">📅 History</h3>
+          <div className="relative">
+            <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-200" />
+            <div className="space-y-3">
+              {records.map((eh) => (
+                <div key={eh.id} className="relative pl-12">
+                  <div className={`absolute left-3.5 top-3 w-3 h-3 rounded-full border-2 border-white ${!eh.end_date ? 'bg-green-500' : 'bg-gray-400'}`} />
+                  <div className="p-4 border border-gray-200 rounded-xl">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-semibold text-gray-800 text-sm">{eh.position_title}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {fmt(eh.start_date)} → {eh.end_date ? fmt(eh.end_date) : <Badge text="Current" color="green" />}
+                          {eh.employment_type && <span className="ml-2 text-gray-400">· {EMP_TYPE_LABELS[eh.employment_type] || eh.employment_type}</span>}
+                        </p>
+                        {eh.remuneration != null && (
+                          <p className="text-xs text-gray-600 mt-1">{fmtMoney(eh.remuneration, eh.currency)} <span className="text-gray-400">{FREQ_LABELS[eh.frequency]}</span></p>
+                        )}
+                        {eh.notes && <p className="text-xs text-gray-400 mt-1 italic">{eh.notes}</p>}
+                        <UpdatedAt date={eh.updated_at} />
+                      </div>
+                      <div className="flex gap-2 ml-4 shrink-0">
+                        <Btn variant="secondary" onClick={() => openEdit(eh)}>Edit</Btn>
+                        <Btn variant="danger" onClick={() => del(eh.id)}>Delete</Btn>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
 
+      {/* When there's exactly one record (auto-created on hire), show it in the
+          history section too so the Edit/Delete buttons are always accessible */}
+      {records.length === 1 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-600 mb-3">📅 History</h3>
+          <div className="relative pl-12">
+            <div className="absolute left-3.5 top-3 w-3 h-3 rounded-full border-2 border-white bg-green-500" />
+            <div className="p-4 border border-gray-200 rounded-xl">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-semibold text-gray-800 text-sm">{records[0].position_title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{fmt(records[0].start_date)} → <Badge text="Current" color="green" /></p>
+                  {records[0].remuneration != null && (
+                    <p className="text-xs text-gray-600 mt-1">{fmtMoney(records[0].remuneration, records[0].currency)} <span className="text-gray-400">{FREQ_LABELS[records[0].frequency]}</span></p>
+                  )}
+                  {records[0].notes && <p className="text-xs text-gray-400 mt-1 italic">{records[0].notes}</p>}
+                  <UpdatedAt date={records[0].updated_at} />
+                </div>
+                <div className="flex gap-2 ml-4 shrink-0">
+                  <Btn variant="secondary" onClick={() => openEdit(records[0])}>Edit</Btn>
+                  <Btn variant="danger" onClick={() => del(records[0].id)}>Delete</Btn>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {records.length === 0 && (
+        <EmptyState message="No employment history on file — use '+ Add Record' to create one" icon="📋" />
+      )}
+
+      {/* ── Add / Edit modal ──────────────────────────────────────────── */}
       {showModal && (
         <Modal title={editItem ? 'Edit Employment Record' : 'Add Employment Record'} onClose={() => setShowModal(false)} wide>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2"><FormField label="Position Title" required><Input {...f('position_title')} required /></FormField></div>
+            <FormField label="Employment Type">
+              <Select {...f('employment_type')}>
+                <option value="full_time">Full-time</option>
+                <option value="part_time">Part-time</option>
+                <option value="contract">Contract</option>
+                <option value="freelance">Freelance</option>
+                <option value="intern">Intern</option>
+              </Select>
+            </FormField>
+            <div />
             <FormField label="Start Date" required><Input {...f('start_date')} type="date" required /></FormField>
             <FormField label="End Date"><Input {...f('end_date')} type="date" /></FormField>
             <FormField label="Remuneration"><Input {...f('remuneration')} type="number" placeholder="0.00" /></FormField>
@@ -642,7 +778,6 @@ function EmploymentTab({ empId }) {
           </div>
         </Modal>
       )}
-      </div>
     </div>
   );
 }
