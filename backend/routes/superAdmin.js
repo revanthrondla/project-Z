@@ -5,7 +5,7 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 
-const { authenticate, requireSuperAdmin } = require('../middleware/auth');
+const { authenticate, requireSuperAdmin, invalidateTenantStatusCache } = require('../middleware/auth');
 const { masterDb, seedDefaultModulesForTenant } = require('../masterDatabase');
 const { provisionTenantDb, getTenantDb } = require('../database');
 const { MODULE_REGISTRY } = require('../moduleRegistry');
@@ -227,6 +227,13 @@ router.patch('/tenants/:id', async (req, res) => {
 
     const updatedResult = await masterDb.query('SELECT * FROM tenants WHERE id = $1', [tenant.id]);
     const updated = updatedResult.rows[0];
+
+    // If status changed, evict the tenant from the auth middleware's status cache
+    // so the new status takes effect on the next request (within 1 minute at most).
+    if (status && status !== tenant.status) {
+      invalidateTenantStatusCache(tenant.slug);
+    }
+
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });

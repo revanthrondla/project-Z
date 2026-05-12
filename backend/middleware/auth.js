@@ -2,6 +2,29 @@ const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 const { createScopedWrapper } = require('../db/wrapper');
 
+// ── Tenant status cache ───────────────────────────────────────────────────────
+// Short-lived in-memory cache so we don't hit masterDb on every request,
+// but still notice tenant suspensions within ~1 minute.
+const _tenantStatusCache = new Map();
+const TENANT_STATUS_TTL  = 60_000; // 1 minute
+
+async function _getTenantStatus(slug) {
+  const cached = _tenantStatusCache.get(slug);
+  if (cached && Date.now() - cached.ts < TENANT_STATUS_TTL) return cached.status;
+  try {
+    const { masterDb } = require('../masterDatabase');
+    const row = await masterDb.prepare('SELECT status FROM tenants WHERE slug = $1').get(slug);
+    const status = row?.status ?? null;
+    _tenantStatusCache.set(slug, { status, ts: Date.now() });
+    return status;
+  } catch {
+    // If masterDb is temporarily unreachable, allow through rather than
+    // taking down all tenants simultaneously.  Log a warning so ops can see it.
+    console.warn(`[injectTenantDb] Could not verify tenant status for '${slug}' — masterDb unavailable`);
+    return 'active';
+  }
+}
+
 // ── JWT Secret enforcement ────────────────────────────────────────────────────
 let JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -60,8 +83,38 @@ async function injectTenantDb(req, res, next) {
   if (req.user.role === 'super_admin') return next(); // super-admin uses masterDb directly
 
   const slug = req.user.tenantSlug;
-  const schema = slug ? `tenant_${slug}` : 'tenant_hireiq'; // legacy dev fallback
 
+  // Hard-reject tokens with no tenant context — never fall back to a shared schema.
+  if (!slug) {
+    return res.status(401).json({
+      error: 'Token is missing tenant context — please log in again',
+      code:  'NO_TENANT_CONTEXT',
+    });
+  }
+
+  // Validate tenant is still active before opening a schema connection.
+  // This prevents suspended/deleted tenants from continuing to use valid JWTs.
+  try {
+    const tenantStatus = await _getTenantStatus(slug);
+    if (tenantStatus === null) {
+      return res.status(401).json({
+        error: 'Tenant not found — please contact support',
+        code:  'TENANT_NOT_FOUND',
+      });
+    }
+    if (tenantStatus !== 'active') {
+      return res.status(403).json({
+        error: `This account is currently ${tenantStatus}. Please contact support.`,
+        code:  'TENANT_INACTIVE',
+      });
+    }
+  } catch (err) {
+    // Defensive: if status check itself throws, log and proceed.
+    // _getTenantStatus already swallows masterDb errors, so this is belt-and-suspenders.
+    console.error('[injectTenantDb] Status check error:', err.message);
+  }
+
+  const schema = `tenant_${slug}`;
   try {
     const { wrapper, release } = await createScopedWrapper(pool, schema);
     req.db = wrapper;
@@ -126,4 +179,18 @@ function requireModule(moduleKey) {
   };
 }
 
-module.exports = { authenticate, requireAdmin, requireRecruiter, requireSuperAdmin, injectTenantDb, requireModule, JWT_SECRET };
+/** Clear the tenant status cache for a specific slug (call after status changes). */
+function invalidateTenantStatusCache(slug) {
+  if (slug) _tenantStatusCache.delete(slug);
+}
+
+module.exports = {
+  authenticate,
+  requireAdmin,
+  requireRecruiter,
+  requireSuperAdmin,
+  injectTenantDb,
+  requireModule,
+  invalidateTenantStatusCache,
+  JWT_SECRET,
+};

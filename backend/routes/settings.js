@@ -3,8 +3,8 @@ const router = express.Router();
 const { authenticate, requireAdmin, injectTenantDb } = require('../middleware/auth');
 const { masterDb } = require('../masterDatabase');
 
-// All settings endpoints are admin-only
-router.use(authenticate, requireAdmin);
+// All settings endpoints are admin-only and tenant-scoped
+router.use(authenticate, requireAdmin, injectTenantDb);
 
 /**
  * GET /api/settings

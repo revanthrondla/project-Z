@@ -6,11 +6,28 @@ const fs = require('fs');
 const { authenticate, requireAdmin, injectTenantDb } = require('../middleware/auth');
 
 // ── File storage ──────────────────────────────────────────────────────────────
-const UPLOAD_DIR = path.join(__dirname, '../uploads/documents');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// Files are stored under uploads/documents/{tenantSlug}/ so each tenant's
+// files are physically separated on disk.  file_path in the DB is stored as
+// "{tenantSlug}/{filename}" so existing flat-file entries (legacy) still work
+// because path.join(UPLOAD_BASE, 'somefile.pdf') resolves correctly.
+const UPLOAD_BASE = path.join(__dirname, '../uploads/documents');
+if (!fs.existsSync(UPLOAD_BASE)) fs.mkdirSync(UPLOAD_BASE, { recursive: true });
+
+// Backwards-compat alias used by existing download/delete code below.
+const UPLOAD_DIR = UPLOAD_BASE;
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  destination: (req, _file, cb) => {
+    const slug = req.user?.tenantSlug;
+    // Slug is already validated by injectTenantDb, but defensively reject
+    // anything that doesn't look like a safe directory component.
+    if (!slug || !/^[a-z0-9_-]+$/i.test(slug)) {
+      return cb(new Error('Cannot resolve tenant for file storage'));
+    }
+    const dir = path.join(UPLOAD_BASE, slug);
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
   filename: (_req, file, cb) => {
     const unique = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
     const ext = path.extname(file.originalname);
@@ -246,7 +263,7 @@ router.post('/', authenticate, injectTenantDb, upload.single('file'), async (req
       title,
       description || null,
       req.file.originalname,
-      req.file.filename,
+      `${req.user.tenantSlug}/${req.file.filename}`,   // namespaced path
       req.file.size,
       req.file.mimetype,
       user.id,
