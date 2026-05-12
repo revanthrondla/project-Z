@@ -273,9 +273,6 @@ export default function Layout() {
             {isSuperAdmin && (
               <p className="text-xs text-purple-300 font-semibold mt-0.5 pl-0.5 truncate">Platform Admin</p>
             )}
-            {!isSuperAdmin && user?.tenantName && (
-              <p className="text-xs text-emerald-300 font-medium mt-0.5 pl-0.5 truncate">{user.tenantName}</p>
-            )}
           </div>
         )}
       </div>
@@ -421,9 +418,6 @@ export default function Layout() {
             <span className="text-sm font-medium text-gray-700 capitalize">
               {isSuperAdmin ? 'Super Admin' : user?.role}
             </span>
-            {user?.tenantName && !isSuperAdmin && (
-              <span className="text-gray-400 text-xs truncate max-w-[120px]">· {user.tenantName}</span>
-            )}
           </div>
 
           {/* Avatar button */}
