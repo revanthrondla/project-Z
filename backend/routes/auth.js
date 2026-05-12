@@ -195,10 +195,12 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
 
       // ── Resolve linked IDs (needed for MFA token and session token) ────────────
       let employeeId = null;
-      if (user.role === 'candidate') {
-        const candResult = await tenantDb.query('SELECT id FROM employees WHERE user_id = $1', [user.id]);
-        const cand = candResult.rows[0];
-        if (cand) employeeId = cand.id;
+      let positionTitle = null;
+      // Fetch employee record for any role — admins can also be employees
+      const empResult = await tenantDb.query('SELECT id, role FROM employees WHERE user_id = $1', [user.id]);
+      if (empResult.rows[0]) {
+        employeeId    = empResult.rows[0].id;
+        positionTitle = empResult.rows[0].role || null;   // job title / position
       }
 
       let clientId = null;
@@ -232,7 +234,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
         if (mfaMethods.includes('email_otp')) {
           const mfaToken = jwt.sign(
             { userId: user.id, email: user.email, name: user.name, role: user.role,
-              employeeId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+              employeeId, clientId, recruiterId, positionTitle, tenantSlug: tenant.slug, tenantName: tenant.company_name,
               mustChangePw, type: 'mfa_pending' },
             JWT_SECRET, { expiresIn: '2m' }
           );
@@ -241,7 +243,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
         // TOTP only — user must enroll first
         const setupToken = jwt.sign(
           { userId: user.id, email: user.email, name: user.name, role: user.role,
-            employeeId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+            employeeId, clientId, recruiterId, positionTitle, tenantSlug: tenant.slug, tenantName: tenant.company_name,
             mustChangePw, type: 'mfa_setup_required' },
           JWT_SECRET, { expiresIn: '15m' }
         );
@@ -253,7 +255,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
         const method = user.mfa_method || 'totp';
         const mfaToken = jwt.sign(
           { userId: user.id, email: user.email, name: user.name, role: user.role,
-            employeeId, clientId, recruiterId, tenantSlug: tenant.slug, tenantName: tenant.company_name,
+            employeeId, clientId, recruiterId, positionTitle, tenantSlug: tenant.slug, tenantName: tenant.company_name,
             mustChangePw, type: 'mfa_pending' },
           JWT_SECRET, { expiresIn: '2m' }
         );
@@ -263,7 +265,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
       const token = jwt.sign(
         {
           id: user.id, email: user.email, name: user.name, role: user.role,
-          employeeId, clientId, recruiterId,
+          employeeId, clientId, recruiterId, positionTitle,
           tenantSlug: tenant.slug,
           tenantName: tenant.company_name,
           mustChangePw,
@@ -277,7 +279,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
         token,   // Also returned for API / non-browser clients
         user: {
           id: user.id, name: user.name, email: user.email, role: user.role,
-          employeeId, clientId, recruiterId,
+          employeeId, clientId, recruiterId, positionTitle,
           tenantSlug: tenant.slug,
           tenantName: tenant.company_name,
           mustChangePw,
@@ -317,7 +319,18 @@ router.get('/me', authenticate, injectTenantDb, async (req, res) => {
     const userResult = await db.query('SELECT id, name, email, role, created_at FROM users WHERE id = $1', [req.user.id]);
     const user = userResult.rows[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
+
+    // Resolve positionTitle from employees record
+    const empResult = await db.query('SELECT role FROM employees WHERE user_id = $1', [req.user.id]);
+    const positionTitle = empResult.rows[0]?.role || null;
+
+    res.json({
+      ...user,
+      positionTitle,
+      employeeId:  req.user.employeeId  || null,
+      clientId:    req.user.clientId    || null,
+      tenantSlug:  req.user.tenantSlug  || null,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -366,11 +379,12 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
     const freshToken = jwt.sign(
       {
         id: user.id, email: user.email, name: user.name, role: user.role,
-        employeeId: req.user.employeeId || null,
-        clientId:    req.user.clientId    || null,
-        recruiterId: req.user.recruiterId || null,
-        tenantSlug:  req.user.tenantSlug  || null,
-        tenantName:  req.user.tenantName  || null,
+        employeeId:    req.user.employeeId    || null,
+        clientId:      req.user.clientId      || null,
+        recruiterId:   req.user.recruiterId   || null,
+        positionTitle: req.user.positionTitle || null,
+        tenantSlug:    req.user.tenantSlug    || null,
+        tenantName:    req.user.tenantName    || null,
         mustChangePw: false,
       },
       JWT_SECRET,

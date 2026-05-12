@@ -255,7 +255,7 @@ export default function Layout() {
 
   const roleLabel = () => {
     if (isSuperAdmin) return 'Flow Staff';
-    return user?.role ?? '';
+    return user?.positionTitle || user?.role || '';
   };
 
   // Sidebar collapsed state (desktop only)
