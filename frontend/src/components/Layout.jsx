@@ -255,7 +255,6 @@ export default function Layout() {
 
   const roleLabel = () => {
     if (isSuperAdmin) return 'Flow Staff';
-    if (user?.tenantName) return user.tenantName;
     return user?.role ?? '';
   };
 
