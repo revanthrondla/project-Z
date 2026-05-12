@@ -543,6 +543,127 @@ const MIGRATIONS = [
     },
   },
   {
+    id: 13,
+    scope: 'tenant',
+    description: 'Create org_locations, org_legal_entities, org_departments, pay_rules tables + add org-link columns to employees',
+    async up(client) {
+      // ── Org locations ───────────────────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS org_locations (
+          id            BIGSERIAL PRIMARY KEY,
+          name          TEXT NOT NULL,
+          address_line1 TEXT,
+          address_line2 TEXT,
+          city          TEXT,
+          state         TEXT,
+          postcode      TEXT,
+          country       TEXT NOT NULL DEFAULT 'US',
+          timezone      TEXT NOT NULL DEFAULT 'UTC',
+          phone         TEXT,
+          is_primary    BOOLEAN NOT NULL DEFAULT FALSE,
+          is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+          display_order INTEGER NOT NULL DEFAULT 0,
+          created_at    TIMESTAMPTZ DEFAULT NOW(),
+          updated_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_org_locations_active ON org_locations(is_active)`);
+
+      // ── Org legal entities ──────────────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS org_legal_entities (
+          id                  BIGSERIAL PRIMARY KEY,
+          legal_name          TEXT NOT NULL,
+          trading_name        TEXT,
+          tax_id_label        TEXT DEFAULT 'Tax ID',
+          tax_id              TEXT,
+          vat_number          TEXT,
+          registration_number TEXT,
+          jurisdiction        TEXT,
+          address_line1       TEXT,
+          address_line2       TEXT,
+          city                TEXT,
+          state               TEXT,
+          postcode            TEXT,
+          country             TEXT DEFAULT 'US',
+          is_primary          BOOLEAN DEFAULT FALSE,
+          notes               TEXT,
+          created_at          TIMESTAMPTZ DEFAULT NOW(),
+          updated_at          TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_org_legal_entities_primary ON org_legal_entities(is_primary)`);
+
+      // ── Org departments ─────────────────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS org_departments (
+          id            BIGSERIAL PRIMARY KEY,
+          name          TEXT NOT NULL,
+          code          TEXT,
+          cost_center   TEXT,
+          description   TEXT,
+          parent_id     BIGINT REFERENCES org_departments(id) ON DELETE SET NULL,
+          is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+          display_order INTEGER NOT NULL DEFAULT 0,
+          created_at    TIMESTAMPTZ DEFAULT NOW(),
+          updated_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_org_departments_active ON org_departments(is_active)`);
+
+      // ── Org-link columns on employees ───────────────────────────────────────
+      await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS department_id   BIGINT REFERENCES org_departments(id)    ON DELETE SET NULL`);
+      await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_id     BIGINT REFERENCES org_locations(id)      ON DELETE SET NULL`);
+      await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS legal_entity_id BIGINT REFERENCES org_legal_entities(id) ON DELETE SET NULL`);
+      await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_frequency   TEXT DEFAULT 'bi-weekly'`);
+      // Upsert the CHECK constraint cleanly (safe even if it already exists)
+      await client.query(`ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_pay_frequency_check`);
+      await client.query(`ALTER TABLE employees ADD CONSTRAINT employees_pay_frequency_check
+        CHECK (pay_frequency IN ('weekly','bi-weekly','semi-monthly','monthly','quarterly','annually'))`);
+    },
+  },
+  {
+    id: 14,
+    scope: 'tenant',
+    description: 'Create pay_rules table + add pay_rule_id to employees + seed FLSA default rule',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS pay_rules (
+          id                    BIGSERIAL PRIMARY KEY,
+          name                  TEXT NOT NULL,
+          is_default            BOOLEAN NOT NULL DEFAULT FALSE,
+          workweek_start        TEXT NOT NULL DEFAULT 'monday'
+                                CHECK(workweek_start IN ('monday','tuesday','wednesday','thursday','friday','saturday','sunday')),
+          daily_ot_threshold    NUMERIC(5,2),
+          weekly_ot_threshold   NUMERIC(5,2) DEFAULT 40,
+          double_time_threshold NUMERIC(5,2),
+          ot_multiplier         NUMERIC(4,2) DEFAULT 1.5,
+          dt_multiplier         NUMERIC(4,2) DEFAULT 2.0,
+          minimum_wage          NUMERIC(8,2) DEFAULT 7.25,
+          time_rounding         TEXT NOT NULL DEFAULT 'none'
+                                CHECK(time_rounding IN ('none','6min','15min','nearest_quarter')),
+          break_threshold_hours NUMERIC(4,2) DEFAULT 6,
+          break_duration_min    INTEGER DEFAULT 30,
+          paid_breaks           BOOLEAN DEFAULT FALSE,
+          location_id           BIGINT REFERENCES org_locations(id) ON DELETE SET NULL,
+          notes                 TEXT,
+          created_at            TIMESTAMPTZ DEFAULT NOW(),
+          updated_at            TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_pay_rules_default ON pay_rules(is_default) WHERE is_default = TRUE`);
+
+      await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_rule_id BIGINT REFERENCES pay_rules(id) ON DELETE SET NULL`);
+
+      // Seed one FLSA-compliant default rule if none exists
+      await client.query(`
+        INSERT INTO pay_rules (name, is_default, workweek_start, weekly_ot_threshold, ot_multiplier, minimum_wage, time_rounding)
+        SELECT 'FLSA Standard', TRUE, 'monday', 40, 1.5, 7.25, 'none'
+        WHERE NOT EXISTS (SELECT 1 FROM pay_rules WHERE is_default = TRUE)
+      `);
+    },
+  },
+  {
     id: 12,
     scope: 'tenant',
     description: 'Add client approval fields to time_entries',
