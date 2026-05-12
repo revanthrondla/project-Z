@@ -611,15 +611,21 @@ const MIGRATIONS = [
       `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_org_departments_active ON org_departments(is_active)`);
 
-      // ── Org-link columns on employees ───────────────────────────────────────
-      await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS department_id   BIGINT REFERENCES org_departments(id)    ON DELETE SET NULL`);
-      await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_id     BIGINT REFERENCES org_locations(id)      ON DELETE SET NULL`);
-      await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS legal_entity_id BIGINT REFERENCES org_legal_entities(id) ON DELETE SET NULL`);
-      await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_frequency   TEXT DEFAULT 'bi-weekly'`);
-      // Upsert the CHECK constraint cleanly (safe even if it already exists)
-      await client.query(`ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_pay_frequency_check`);
-      await client.query(`ALTER TABLE employees ADD CONSTRAINT employees_pay_frequency_check
-        CHECK (pay_frequency IN ('weekly','bi-weekly','semi-monthly','monthly','quarterly','annually'))`);
+      // ── Org-link columns on employees (only if employees table exists) ────────
+      const empCheck = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'employees'
+      `);
+      if (empCheck.rowCount > 0) {
+        await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS department_id   BIGINT REFERENCES org_departments(id)    ON DELETE SET NULL`);
+        await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_id     BIGINT REFERENCES org_locations(id)      ON DELETE SET NULL`);
+        await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS legal_entity_id BIGINT REFERENCES org_legal_entities(id) ON DELETE SET NULL`);
+        await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_frequency   TEXT DEFAULT 'bi-weekly'`);
+        // Upsert the CHECK constraint cleanly (safe even if it already exists)
+        await client.query(`ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_pay_frequency_check`);
+        await client.query(`ALTER TABLE employees ADD CONSTRAINT employees_pay_frequency_check
+          CHECK (pay_frequency IN ('weekly','bi-weekly','semi-monthly','monthly','quarterly','annually'))`);
+      }
     },
   },
   {
@@ -653,7 +659,14 @@ const MIGRATIONS = [
       `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_pay_rules_default ON pay_rules(is_default) WHERE is_default = TRUE`);
 
-      await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_rule_id BIGINT REFERENCES pay_rules(id) ON DELETE SET NULL`);
+      // Only add the FK column if employees exists
+      const empCheck2 = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'employees'
+      `);
+      if (empCheck2.rowCount > 0) {
+        await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_rule_id BIGINT REFERENCES pay_rules(id) ON DELETE SET NULL`);
+      }
 
       // Seed one FLSA-compliant default rule if none exists
       await client.query(`
@@ -774,10 +787,21 @@ async function runAllMigrations() {
   const tenantSchemas = schemas.map(r => r.schema_name);
   const allSchemas = ['master', ...tenantSchemas];
 
+  let failedSchemas = [];
   for (const schema of allSchemas) {
-    await runMigrationsForSchema(schema);
+    try {
+      await runMigrationsForSchema(schema);
+    } catch (err) {
+      // A broken/incomplete tenant schema should never crash the whole server.
+      // Log the error and continue — other tenants must keep working.
+      console.error(`  ❌ [${schema}] Migration failed (skipping): ${err.message}`);
+      failedSchemas.push({ schema, error: err.message });
+    }
   }
 
+  if (failedSchemas.length > 0) {
+    console.warn(`⚠️  ${failedSchemas.length} schema(s) had migration failures — check logs above.`);
+  }
   console.log('✅ All migrations complete');
 }
 
