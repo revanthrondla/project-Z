@@ -1451,14 +1451,53 @@ async function createTenantSchema(slug) {
     `);
 
     // ══════════════════════════════════════════════════════════════════════════
-    // FIX: employment_history.candidate_id FK — same stale-OID issue as docs.
-    // Recreate to guarantee it references employees(id) on old schemas.
+    // FIX: ALL candidate_id FK constraints — full sweep after candidates→employees rename.
+    // Every FK that was created when the table was still named 'candidates' has a
+    // stale pg_class OID. DROP + ADD CONSTRAINT on each table fixes it permanently.
+    // This block is idempotent and safe to run on any schema version.
     // ══════════════════════════════════════════════════════════════════════════
-    await client.query(`ALTER TABLE employment_history DROP CONSTRAINT IF EXISTS employment_history_candidate_id_fkey`);
-    await client.query(`
-      ALTER TABLE employment_history ADD CONSTRAINT employment_history_candidate_id_fkey
-        FOREIGN KEY (candidate_id) REFERENCES employees(id) ON DELETE CASCADE
-    `);
+
+    const candidateFkTables = [
+      // table name                              constraint name (pg auto-name)
+      ['candidate_resumes',                'candidate_resumes_candidate_id_fkey',                'CASCADE'],
+      ['time_entries',                     'time_entries_candidate_id_fkey',                     'CASCADE'],
+      ['absences',                         'absences_candidate_id_fkey',                         'CASCADE'],
+      ['invoices',                         'invoices_candidate_id_fkey',                         'CASCADE'],
+      ['job_applications',                 'job_applications_candidate_id_fkey',                 'CASCADE'],
+      ['documents',                        'documents_candidate_id_fkey',                        'CASCADE'],
+      ['payroll_items',                    'payroll_items_candidate_id_fkey',                    'CASCADE'],
+      ['employee_contact_ext',             'employee_contact_ext_candidate_id_fkey',             'CASCADE'],
+      ['emergency_contacts',               'emergency_contacts_candidate_id_fkey',               'CASCADE'],
+      ['employment_history',               'employment_history_candidate_id_fkey',               'CASCADE'],
+      ['bank_accounts',                    'bank_accounts_candidate_id_fkey',                    'CASCADE'],
+      ['leave_balances',                   'leave_balances_candidate_id_fkey',                   'CASCADE'],
+      ['employee_assets',                  'employee_assets_candidate_id_fkey',                  'CASCADE'],
+      ['employee_benefits',               'employee_benefits_candidate_id_fkey',                'CASCADE'],
+      ['performance_reviews',              'performance_reviews_candidate_id_fkey',              'CASCADE'],
+      ['training_records',                 'training_records_candidate_id_fkey',                 'CASCADE'],
+      ['employee_licenses',                'employee_licenses_candidate_id_fkey',                'CASCADE'],
+      ['recruiter_assignments',            'recruiter_assignments_candidate_id_fkey',            'CASCADE'],
+      ['employee_custom_field_values',     'employee_custom_field_values_candidate_id_fkey',     'CASCADE'],
+      ['rate_cards',                       'rate_cards_candidate_id_fkey',                       'CASCADE'],
+      ['expenses',                         'expenses_candidate_id_fkey',                         'CASCADE'],
+      ['data_requests',                    'data_requests_candidate_id_fkey',                    'CASCADE'],
+    ];
+
+    for (const [table, constraint, onDelete] of candidateFkTables) {
+      // Check table exists before attempting FK repair (some tables are created
+      // via migrations and may not exist on very old schemas)
+      const tableExists = await client.query(`
+        SELECT 1 FROM pg_tables
+        WHERE schemaname = current_schema() AND tablename = $1
+      `, [table]);
+      if (tableExists.rows.length === 0) continue;
+
+      await client.query(`ALTER TABLE ${table} DROP CONSTRAINT IF EXISTS ${constraint}`);
+      await client.query(`
+        ALTER TABLE ${table} ADD CONSTRAINT ${constraint}
+          FOREIGN KEY (candidate_id) REFERENCES employees(id) ON DELETE ${onDelete}
+      `);
+    }
 
     // ══════════════════════════════════════════════════════════════════════════
     // FIX: documents.signature_type CHECK constraint (original DDL was wrong)
