@@ -137,11 +137,17 @@ const EMPTY_FORM = {
   start_date: '', end_date: '', status: 'active', contract_type: 'contractor',
   password: 'candidate123', market_status: 'employed', available_date: '', market_notes: '',
   employee_number: '', ssn: '', date_of_birth: '',
+  // Org links
+  department_id: '', location_id: '', legal_entity_id: '', pay_rule_id: '', pay_frequency: 'bi-weekly',
 };
 
 export default function AdminCandidates() {
   const [employees, setEmployees]   = useState([]);
   const [clients, setClients]         = useState([]);
+  const [orgDepts, setOrgDepts]       = useState([]);
+  const [orgLocations, setOrgLocations] = useState([]);
+  const [orgLegalEntities, setOrgLegalEntities] = useState([]);
+  const [payRules, setPayRules]       = useState([]);
   const [loading, setLoading]         = useState(true);
   const [showModal, setShowModal]     = useState(false);
   const [editing, setEditing]         = useState(null);
@@ -170,10 +176,18 @@ export default function AdminCandidates() {
       api.get('/api/employees'),
       api.get('/api/clients'),
       api.get('/api/custom-fields/active'),
-    ]).then(([c, cl, cf]) => {
+      api.get('/api/org-setup/departments').catch(() => ({ data: [] })),
+      api.get('/api/org-setup/locations').catch(() => ({ data: [] })),
+      api.get('/api/org-setup/legal-entities').catch(() => ({ data: [] })),
+      api.get('/api/pay-rules').catch(() => ({ data: [] })),
+    ]).then(([c, cl, cf, depts, locs, les, prs]) => {
       setEmployees(Array.isArray(c.data) ? c.data : []);
       setClients(Array.isArray(cl.data) ? cl.data : []);
       setCustomFieldDefs(Array.isArray(cf.data) ? cf.data : []);
+      setOrgDepts(Array.isArray(depts.data) ? depts.data : []);
+      setOrgLocations(Array.isArray(locs.data) ? locs.data : []);
+      setOrgLegalEntities(Array.isArray(les.data) ? les.data : []);
+      setPayRules(Array.isArray(prs.data) ? prs.data : []);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -199,7 +213,17 @@ export default function AdminCandidates() {
   const openEdit = async (c) => {
     setEditing(c);
     setShowSSN(false);
-    setForm({ ...c, password: '', ssn: '', date_of_birth: c.date_of_birth ? c.date_of_birth.split('T')[0] : '' });
+    setForm({
+      ...c,
+      password: '',
+      ssn: '',
+      date_of_birth: c.date_of_birth ? c.date_of_birth.split('T')[0] : '',
+      department_id:   c.department_id   || '',
+      location_id:     c.location_id     || '',
+      legal_entity_id: c.legal_entity_id || '',
+      pay_rule_id:     c.pay_rule_id     || '',
+      pay_frequency:   c.pay_frequency   || 'bi-weekly',
+    });
     setCustomFieldValues({});
     setCfErrors({});
     setError('');
@@ -474,6 +498,55 @@ export default function AdminCandidates() {
                 <label className="label">End Date</label>
                 <input type="date" className="input" value={form.end_date || ''} onChange={e => setForm({...form, end_date: e.target.value})} />
               </div>
+            </div>
+
+            {/* ── Org Assignment Section ── */}
+            <div className="border-t border-gray-100 pt-4 mt-2">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Org Assignment</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Legal Entity</label>
+                  <select className="input" value={form.legal_entity_id || ''} onChange={e => setForm(f => ({ ...f, legal_entity_id: e.target.value }))}>
+                    <option value="">— Not assigned —</option>
+                    {orgLegalEntities.map(le => <option key={le.id} value={le.id}>{le.legal_name}{le.is_primary ? ' ★' : ''}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Location</label>
+                  <select className="input" value={form.location_id || ''} onChange={e => setForm(f => ({ ...f, location_id: e.target.value }))}>
+                    <option value="">— Not assigned —</option>
+                    {orgLocations.map(l => <option key={l.id} value={l.id}>{l.name}{l.city ? ` (${l.city})` : ''}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Department</label>
+                  <select className="input" value={form.department_id || ''} onChange={e => setForm(f => ({ ...f, department_id: e.target.value }))}>
+                    <option value="">— Not assigned —</option>
+                    {orgDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Workweek &amp; Pay Rule</label>
+                  <select className="input" value={form.pay_rule_id || ''} onChange={e => setForm(f => ({ ...f, pay_rule_id: e.target.value }))}>
+                    <option value="">— Use default —</option>
+                    {payRules.map(pr => <option key={pr.id} value={pr.id}>{pr.name}{pr.is_default ? ' (default)' : ''}</option>)}
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="label">Pay Frequency</label>
+                  <select className="input" value={form.pay_frequency || 'bi-weekly'} onChange={e => setForm(f => ({ ...f, pay_frequency: e.target.value }))}>
+                    <option value="weekly">Weekly</option>
+                    <option value="bi-weekly">Bi-weekly (every 2 weeks)</option>
+                    <option value="semi-monthly">Semi-monthly (1st &amp; 15th)</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="annually">Annually</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="label">Status</label>
                 <select className="input" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>

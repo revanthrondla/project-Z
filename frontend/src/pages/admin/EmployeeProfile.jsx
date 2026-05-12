@@ -366,6 +366,152 @@ function EmergencyTab({ empId }) {
 
 const FREQ_LABELS = { hourly: 'per hour', daily: 'per day', weekly: 'per week', monthly: 'per month', annual: 'per year' };
 
+// ─── ORG ASSIGNMENT CARD ──────────────────────────────────────────────────────
+
+const PAY_FREQ_LABELS = {
+  weekly:       'Weekly',
+  'bi-weekly':  'Bi-weekly',
+  'semi-monthly': 'Semi-monthly',
+  monthly:      'Monthly',
+  quarterly:    'Quarterly',
+  annually:     'Annually',
+};
+
+function OrgAssignmentCard({ empId }) {
+  const [assignment, setAssignment] = useState(null);
+  const [editing, setEditing]       = useState(false);
+  const [form, setForm]             = useState({});
+  const [saving, setSaving]         = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // Dropdown option lists
+  const [depts, setDepts]     = useState([]);
+  const [locs, setLocs]       = useState([]);
+  const [les, setLes]         = useState([]);
+  const [rules, setRules]     = useState([]);
+
+  // Load current assignment + org dropdown lists in parallel
+  useEffect(() => {
+    Promise.all([
+      api.get(`/api/employees/${empId}/org-assignment`).catch(() => ({ data: null })),
+      api.get('/api/org-setup/departments').catch(() => ({ data: [] })),
+      api.get('/api/org-setup/locations').catch(() => ({ data: [] })),
+      api.get('/api/org-setup/legal-entities').catch(() => ({ data: [] })),
+      api.get('/api/pay-rules').catch(() => ({ data: [] })),
+    ]).then(([asgn, d, l, le, pr]) => {
+      setAssignment(asgn.data);
+      setDepts(Array.isArray(d.data) ? d.data : []);
+      setLocs(Array.isArray(l.data) ? l.data : []);
+      setLes(Array.isArray(le.data) ? le.data : []);
+      setRules(Array.isArray(pr.data) ? pr.data : []);
+    }).finally(() => setLoadingData(false));
+  }, [empId]);
+
+  const openEdit = () => {
+    setForm({
+      department_id:   assignment?.department_id   || '',
+      location_id:     assignment?.location_id     || '',
+      legal_entity_id: assignment?.legal_entity_id || '',
+      pay_rule_id:     assignment?.pay_rule_id      || '',
+      pay_frequency:   assignment?.pay_frequency   || 'bi-weekly',
+    });
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await api.put(`/api/employees/${empId}/org-assignment`, form);
+      setAssignment(res.data);
+      setEditing(false);
+    } catch (e) {
+      alert(e.response?.data?.error || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loadingData) return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4 animate-pulse">
+      <div className="h-4 bg-gray-100 rounded w-1/3 mb-3" />
+      <div className="grid grid-cols-2 gap-3">
+        {[1,2,3,4,5].map(i => <div key={i} className="h-8 bg-gray-100 rounded" />)}
+      </div>
+    </div>
+  );
+
+  return (
+    <SectionCard
+      title="Org Assignment"
+      icon="🏢"
+      action={
+        !editing
+          ? <Btn variant="secondary" size="sm" onClick={openEdit}>Edit</Btn>
+          : <div className="flex gap-2">
+              <Btn size="sm" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Btn>
+              <Btn variant="secondary" size="sm" onClick={() => setEditing(false)}>Cancel</Btn>
+            </div>
+      }
+    >
+      {editing ? (
+        <div className="grid grid-cols-2 gap-4">
+          <FormField label="Legal Entity">
+            <Select value={form.legal_entity_id} onChange={e => setForm(f => ({ ...f, legal_entity_id: e.target.value }))}>
+              <option value="">— Not assigned —</option>
+              {les.map(le => <option key={le.id} value={le.id}>{le.legal_name}{le.is_primary ? ' ★' : ''}</option>)}
+            </Select>
+          </FormField>
+          <FormField label="Location">
+            <Select value={form.location_id} onChange={e => setForm(f => ({ ...f, location_id: e.target.value }))}>
+              <option value="">— Not assigned —</option>
+              {locs.map(l => <option key={l.id} value={l.id}>{l.name}{l.city ? ` (${l.city})` : ''}</option>)}
+            </Select>
+          </FormField>
+          <FormField label="Department">
+            <Select value={form.department_id} onChange={e => setForm(f => ({ ...f, department_id: e.target.value }))}>
+              <option value="">— Not assigned —</option>
+              {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </Select>
+          </FormField>
+          <FormField label="Workweek & Pay Rule">
+            <Select value={form.pay_rule_id} onChange={e => setForm(f => ({ ...f, pay_rule_id: e.target.value }))}>
+              <option value="">— Use default —</option>
+              {rules.map(r => <option key={r.id} value={r.id}>{r.name}{r.is_default ? ' (default)' : ''}</option>)}
+            </Select>
+          </FormField>
+          <FormField label="Pay Frequency">
+            <Select value={form.pay_frequency} onChange={e => setForm(f => ({ ...f, pay_frequency: e.target.value }))}>
+              <option value="weekly">Weekly</option>
+              <option value="bi-weekly">Bi-weekly (every 2 weeks)</option>
+              <option value="semi-monthly">Semi-monthly (1st &amp; 15th)</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="annually">Annually</option>
+            </Select>
+          </FormField>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {[
+            { label: 'Legal Entity',        value: assignment?.legal_entity_name  || '—', icon: '🏛️' },
+            { label: 'Location',             value: assignment?.location_name      || '—', icon: '📍' },
+            { label: 'Department',           value: assignment?.department_name    || '—', icon: '🏗️' },
+            { label: 'Workweek & Pay Rule',  value: assignment?.pay_rule_name      || '— (default)', icon: '⏱️' },
+            { label: 'Pay Frequency',        value: PAY_FREQ_LABELS[assignment?.pay_frequency] || '—', icon: '💰' },
+          ].map(({ label, value, icon }) => (
+            <div key={label} className="bg-gray-50 rounded-lg p-3">
+              <p className="text-xs text-gray-500 mb-0.5">{icon} {label}</p>
+              <p className="text-sm font-medium text-gray-800 truncate">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+// ─── TAB: EMPLOYMENT HISTORY ─────────────────────────────────────────────────
+
 function EmploymentTab({ empId }) {
   const { data, loading, reload } = useData(`/api/employees/${empId}/employment-history`);
   const [showModal, setShowModal] = useState(false);
@@ -394,12 +540,22 @@ function EmploymentTab({ empId }) {
     reload();
   };
 
-  if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
+  if (loading) return (
+    <div className="space-y-4">
+      <OrgAssignmentCard empId={empId} />
+      <p className="text-sm text-gray-500">Loading employment history…</p>
+    </div>
+  );
 
   return (
-    <div>
-      <div className="flex justify-end mb-4"><Btn onClick={openNew}>+ Add Record</Btn></div>
-      {!(Array.isArray(data) && data.length) ? <EmptyState message="No employment history on file" icon="📋" /> : (
+    <div className="space-y-6">
+      {/* Org Assignment always shown at top of Employment tab */}
+      <OrgAssignmentCard empId={empId} />
+
+      {/* Employment History timeline */}
+      <div>
+        <div className="flex justify-end mb-4"><Btn onClick={openNew}>+ Add Record</Btn></div>
+        {!(Array.isArray(data) && data.length) ? <EmptyState message="No employment history on file" icon="📋" /> : (
         <div className="relative">
           <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-200" />
           <div className="space-y-4">
@@ -458,6 +614,7 @@ function EmploymentTab({ empId }) {
           </div>
         </Modal>
       )}
+      </div>
     </div>
   );
 }
