@@ -1023,6 +1023,25 @@ async function createTenantSchema(slug) {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_org_locations_active ON org_locations(is_active)`);
 
+    // 8c-extra. Legal Entities (many per tenant — replaces single org_profile legal fields)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS org_legal_entities (
+        id                  BIGSERIAL PRIMARY KEY,
+        legal_name          TEXT NOT NULL,
+        trading_name        TEXT,
+        tax_id_label        TEXT DEFAULT 'Tax ID',
+        tax_id              TEXT,
+        vat_number          TEXT,
+        registration_number TEXT,
+        jurisdiction        TEXT,
+        is_primary          BOOLEAN DEFAULT FALSE,
+        notes               TEXT,
+        created_at          TIMESTAMPTZ DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_org_legal_entities_primary ON org_legal_entities(is_primary)`);
+
     // 8c. Departments (many per tenant)
     await client.query(`
       CREATE TABLE IF NOT EXISTS org_departments (

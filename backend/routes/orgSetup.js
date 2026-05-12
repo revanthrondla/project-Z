@@ -375,6 +375,92 @@ router.delete('/locations/:id', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+// LEGAL ENTITIES
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /api/org-setup/legal-entities
+router.get('/legal-entities', async (req, res) => {
+  try {
+    const result = await req.db.query(
+      'SELECT * FROM org_legal_entities ORDER BY is_primary DESC, id ASC'
+    );
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/org-setup/legal-entities
+router.post('/legal-entities', async (req, res) => {
+  try {
+    const { legal_name, trading_name, tax_id_label, tax_id,
+            vat_number, registration_number, jurisdiction, is_primary, notes } = req.body;
+    if (!legal_name?.trim()) return res.status(400).json({ error: 'legal_name is required' });
+
+    if (cleanBool(is_primary)) {
+      await req.db.query('UPDATE org_legal_entities SET is_primary = FALSE WHERE is_primary = TRUE');
+    }
+    const result = await req.db.query(`
+      INSERT INTO org_legal_entities
+        (legal_name, trading_name, tax_id_label, tax_id, vat_number,
+         registration_number, jurisdiction, is_primary, notes)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      RETURNING *
+    `, [
+      legal_name.trim(), cleanStr(trading_name),
+      cleanStr(tax_id_label) || 'Tax ID', cleanStr(tax_id),
+      cleanStr(vat_number),  cleanStr(registration_number),
+      cleanStr(jurisdiction), cleanBool(is_primary), cleanStr(notes),
+    ]);
+    res.status(201).json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/org-setup/legal-entities/:id
+router.put('/legal-entities/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const ex = (await req.db.query('SELECT * FROM org_legal_entities WHERE id = $1', [id])).rows[0];
+    if (!ex) return res.status(404).json({ error: 'Legal entity not found' });
+
+    const b = req.body;
+    const isPrimary = b.is_primary !== undefined ? cleanBool(b.is_primary) : ex.is_primary;
+    if (isPrimary && !ex.is_primary) {
+      await req.db.query('UPDATE org_legal_entities SET is_primary = FALSE WHERE is_primary = TRUE AND id != $1', [id]);
+    }
+    const result = await req.db.query(`
+      UPDATE org_legal_entities SET
+        legal_name          = $1, trading_name        = $2,
+        tax_id_label        = $3, tax_id              = $4,
+        vat_number          = $5, registration_number = $6,
+        jurisdiction        = $7, is_primary          = $8,
+        notes               = $9, updated_at          = NOW()
+      WHERE id = $10 RETURNING *
+    `, [
+      (b.legal_name || ex.legal_name).trim(),
+      cleanStr(b.trading_name)        ?? ex.trading_name,
+      cleanStr(b.tax_id_label)        || ex.tax_id_label,
+      cleanStr(b.tax_id)              ?? ex.tax_id,
+      cleanStr(b.vat_number)          ?? ex.vat_number,
+      cleanStr(b.registration_number) ?? ex.registration_number,
+      cleanStr(b.jurisdiction)        ?? ex.jurisdiction,
+      isPrimary,
+      cleanStr(b.notes)               ?? ex.notes,
+      id,
+    ]);
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/org-setup/legal-entities/:id
+router.delete('/legal-entities/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const result = await req.db.query('DELETE FROM org_legal_entities WHERE id = $1 RETURNING id', [id]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Legal entity not found' });
+    res.json({ message: 'Legal entity deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // DEPARTMENTS
 // ══════════════════════════════════════════════════════════════════════════════
 

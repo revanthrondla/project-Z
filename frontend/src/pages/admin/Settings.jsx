@@ -973,84 +973,167 @@ function CompanyProfileSection() {
 }
 
 // ── Section: Legal & Tax ──────────────────────────────────────────────────
-function LegalTaxSection() {
-  const { profile, loading, saving, save, error, setError, success } = useOrgProfile();
-  const [form, setForm] = useState(null);
-
-  useEffect(() => {
-    if (profile) setForm({
-      legal_name:          profile.legal_name          || '',
-      tax_id_label:        profile.tax_id_label        || 'Tax ID',
-      tax_id:              profile.tax_id              || '',
-      vat_number:          profile.vat_number          || '',
-      registration_number: profile.registration_number || '',
-      address_line1:       profile.address_line1       || '',
-      address_line2:       profile.address_line2       || '',
-      city:                profile.city                || '',
-      state:               profile.state               || '',
-      postcode:            profile.postcode            || '',
-      country:             profile.country             || 'US',
-    });
-  }, [profile]);
-
+function LegalEntityModal({ entity, onSave, onClose }) {
+  const isEdit = !!entity?.id;
+  const blank  = { legal_name:'', trading_name:'', tax_id_label:'Tax ID', tax_id:'',
+                   vat_number:'', registration_number:'', jurisdiction:'', is_primary:false, notes:'' };
+  const [form, setForm]   = useState(entity ? { ...blank, ...entity } : blank);
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  if (loading || !form) return <Spinner />;
+
+  const submit = async (e) => {
+    e.preventDefault(); setError(''); setSaving(true);
+    try {
+      if (isEdit) await api.put(`/api/org-setup/legal-entities/${entity.id}`, form);
+      else        await api.post('/api/org-setup/legal-entities', form);
+      onSave();
+    } catch (err) { setError(err.response?.data?.error || 'Save failed'); }
+    finally { setSaving(false); }
+  };
 
   return (
-    <form onSubmit={e => { e.preventDefault(); save(form); }} className="space-y-5 max-w-2xl">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h3 className="font-semibold text-gray-900">{isEdit ? 'Edit Legal Entity' : 'Add Legal Entity'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <form onSubmit={submit} className="p-6 space-y-4">
+          {error && <Banner type="error" message={error} onClose={() => setError('')} />}
+
+          <div>
+            <label className="label">Legal Name <span className="text-red-500">*</span> <span className="text-xs text-gray-400">(as registered)</span></label>
+            <input className="input" value={form.legal_name} onChange={e => set('legal_name', e.target.value)} placeholder="Full registered legal name" required />
+          </div>
+          <div>
+            <label className="label">Trading / DBA Name</label>
+            <input className="input" value={form.trading_name} onChange={e => set('trading_name', e.target.value)} placeholder="The name customers see" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Tax ID Label</label>
+              <input className="input" value={form.tax_id_label} onChange={e => set('tax_id_label', e.target.value)} placeholder="e.g. EIN, ABN, VAT, TRN" />
+            </div>
+            <div>
+              <label className="label">Tax ID / Number</label>
+              <input className="input" value={form.tax_id} onChange={e => set('tax_id', e.target.value)} placeholder="e.g. 12-3456789" />
+            </div>
+            <div>
+              <label className="label">VAT Number</label>
+              <input className="input" value={form.vat_number} onChange={e => set('vat_number', e.target.value)} placeholder="e.g. GB123456789" />
+            </div>
+            <div>
+              <label className="label">Company Registration No.</label>
+              <input className="input" value={form.registration_number} onChange={e => set('registration_number', e.target.value)} placeholder="e.g. 01234567" />
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Jurisdiction / Country</label>
+            <input className="input" value={form.jurisdiction} onChange={e => set('jurisdiction', e.target.value)} placeholder="e.g. United States, United Kingdom" />
+          </div>
+          <div>
+            <label className="label">Notes</label>
+            <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any additional notes…" />
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer text-sm">
+            <input type="checkbox" className="w-4 h-4 accent-emerald-600" checked={!!form.is_primary} onChange={e => set('is_primary', e.target.checked)} />
+            Set as primary legal entity
+          </label>
+
+          <div className="flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onClose} className="btn-secondary px-4 py-2">Cancel</button>
+            <button type="submit" disabled={saving} className="btn-primary px-6 py-2">{saving ? 'Saving…' : isEdit ? 'Save' : 'Add'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function LegalTaxSection() {
+  const [entities, setEntities] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [modal, setModal]       = useState(null); // null | 'new' | entity obj
+  const [error, setError]       = useState('');
+  const [success, setSuccess]   = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get('/api/org-setup/legal-entities')
+      .then(r => setEntities(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setError('Failed to load legal entities'))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const handleSave = () => { setModal(null); setSuccess('Saved'); setTimeout(() => setSuccess(''), 3000); load(); };
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this legal entity?')) return;
+    try { await api.delete(`/api/org-setup/legal-entities/${id}`); load(); }
+    catch (err) { setError(err.response?.data?.error || 'Delete failed'); }
+  };
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div className="max-w-3xl space-y-4">
       <Banner type="error"   message={error}   onClose={() => setError('')} />
       <Banner type="success" message={success} />
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h3 className="font-semibold text-gray-800">Legal Entity</h3>
-        <div>
-          <label className="label">Legal Name <span className="text-xs text-gray-400">(as registered)</span></label>
-          <input className="input" value={form.legal_name} onChange={e => set('legal_name', e.target.value)} placeholder="Full registered legal name" />
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-gray-800">Legal Entities</h3>
+            <p className="text-sm text-gray-500 mt-0.5">Add each registered legal entity, subsidiary, or trading company. Mark one as primary.</p>
+          </div>
+          <button onClick={() => setModal('new')} className="btn-primary px-4 py-2 text-sm">+ Add Entity</button>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">Tax ID Label</label>
-            <input className="input" value={form.tax_id_label} onChange={e => set('tax_id_label', e.target.value)} placeholder="e.g. EIN, ABN, VAT, TRN" />
+
+        {entities.length === 0 ? (
+          <div className="text-center py-10 text-gray-400">
+            <div className="text-3xl mb-2">⚖️</div>
+            <p className="text-sm">No legal entities added yet</p>
           </div>
-          <div>
-            <label className="label">Tax ID / Number</label>
-            <input className="input" value={form.tax_id} onChange={e => set('tax_id', e.target.value)} placeholder="e.g. 12-3456789" />
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {entities.map(e => (
+              <div key={e.id} className="flex items-start justify-between py-4 gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-gray-900">{e.legal_name}</span>
+                    {e.is_primary && <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Primary</span>}
+                  </div>
+                  {e.trading_name && <p className="text-sm text-gray-500 mt-0.5">DBA: {e.trading_name}</p>}
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-xs text-gray-500">
+                    {e.tax_id        && <span>{e.tax_id_label || 'Tax ID'}: {e.tax_id}</span>}
+                    {e.vat_number    && <span>VAT: {e.vat_number}</span>}
+                    {e.registration_number && <span>Reg: {e.registration_number}</span>}
+                    {e.jurisdiction  && <span>📍 {e.jurisdiction}</span>}
+                  </div>
+                  {e.notes && <p className="text-xs text-gray-400 mt-1 italic">{e.notes}</p>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => setModal(e)} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium px-2 py-1 rounded hover:bg-emerald-50">Edit</button>
+                  <button onClick={() => handleDelete(e.id)} className="text-xs text-red-500 hover:text-red-600 font-medium px-2 py-1 rounded hover:bg-red-50">Delete</button>
+                </div>
+              </div>
+            ))}
           </div>
-          <div>
-            <label className="label">VAT Number</label>
-            <input className="input" value={form.vat_number} onChange={e => set('vat_number', e.target.value)} placeholder="e.g. GB123456789" />
-          </div>
-          <div>
-            <label className="label">Company Registration No.</label>
-            <input className="input" value={form.registration_number} onChange={e => set('registration_number', e.target.value)} placeholder="e.g. 01234567" />
-          </div>
-        </div>
+        )}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h3 className="font-semibold text-gray-800">Registered Address</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2">
-            <label className="label">Address Line 1</label>
-            <input className="input" value={form.address_line1} onChange={e => set('address_line1', e.target.value)} placeholder="Street / Building" />
-          </div>
-          <div className="col-span-2">
-            <label className="label">Address Line 2</label>
-            <input className="input" value={form.address_line2} onChange={e => set('address_line2', e.target.value)} placeholder="Suite, Floor, etc." />
-          </div>
-          <div><label className="label">City</label><input className="input" value={form.city} onChange={e => set('city', e.target.value)} /></div>
-          <div><label className="label">State / Region</label><input className="input" value={form.state} onChange={e => set('state', e.target.value)} /></div>
-          <div><label className="label">Postcode / ZIP</label><input className="input" value={form.postcode} onChange={e => set('postcode', e.target.value)} /></div>
-          <div>
-            <label className="label">Country</label>
-            <select className="input" value={form.country} onChange={e => set('country', e.target.value)}>
-              {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-        </div>
-      </div>
-      <div className="flex justify-end"><button type="submit" disabled={saving} className="btn-primary px-6 py-2">{saving ? 'Saving…' : 'Save'}</button></div>
-    </form>
+      {modal && (
+        <LegalEntityModal
+          entity={modal === 'new' ? null : modal}
+          onSave={handleSave}
+          onClose={() => setModal(null)}
+        />
+      )}
+    </div>
   );
 }
 
