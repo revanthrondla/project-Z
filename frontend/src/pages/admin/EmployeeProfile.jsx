@@ -1426,14 +1426,12 @@ function ProfileHeader({ empId }) {
 
           <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-600">
             {[
-              ['📞', data?.has_emergency_contact ? `${data.emergency_contact_count} emergency contact(s)` : null, !data?.has_emergency_contact && '⚠️ No emergency contact'],
-              ['📦', data?.assets_on_loan ? `${data.assets_on_loan} asset(s) on loan` : null, null],
-              ['🎁', data?.benefit_count ? `${data.benefit_count} benefit(s)` : null, null],
-              ['🏦', data?.has_bank_account ? 'Bank account on file' : null, !data?.has_bank_account && '⚠️ No bank account'],
-            ].map(([icon, pos, neg], i) => pos ? (
+              ['📞', data?.has_emergency_contact ? `${data.emergency_contact_count} emergency contact(s)` : null],
+              ['📦', data?.assets_on_loan ? `${data.assets_on_loan} asset(s) on loan` : null],
+              ['🎁', data?.benefit_count ? `${data.benefit_count} benefit(s)` : null],
+              ['🏦', data?.has_bank_account ? 'Bank account on file' : null],
+            ].map(([icon, pos], i) => pos ? (
               <span key={i} className="flex items-center gap-1">{icon} {pos}</span>
-            ) : neg ? (
-              <span key={i} className="flex items-center gap-1 text-yellow-600">{neg}</span>
             ) : null)}
           </div>
         </div>
