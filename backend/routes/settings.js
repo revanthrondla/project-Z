@@ -80,4 +80,50 @@ router.delete('/logo', async (req, res) => {
   }
 });
 
+// ── GET /api/settings/access-review ──────────────────────────────────────────
+// SOC 2 CC6.3: Periodic access review — lists all users with role, MFA status,
+// last login, and account status so admins can certify or revoke access.
+router.get('/access-review', async (req, res) => {
+  try {
+    const db = req.db;
+    const result = await db.query(`
+      SELECT
+        u.id,
+        u.name,
+        u.email,
+        u.role,
+        u.created_at,
+        u.last_login_at,
+        u.must_change_password,
+        COALESCE(u.mfa_enabled, FALSE)  AS mfa_enabled,
+        u.mfa_method,
+        e.status                        AS employee_status,
+        e.id                            AS employee_id
+      FROM users u
+      LEFT JOIN employees e ON e.user_id = u.id
+      ORDER BY u.role, u.name
+    `);
+
+    const users = result.rows;
+    const totalUsers    = users.length;
+    const mfaEnabled    = users.filter(u => u.mfa_enabled).length;
+    const noRecentLogin = users.filter(u => {
+      if (!u.last_login_at) return true;
+      const days = (Date.now() - new Date(u.last_login_at).getTime()) / 86400000;
+      return days > 90;
+    }).length;
+    const mustChangePw  = users.filter(u => u.must_change_password).length;
+
+    res.json({
+      generatedAt: new Date().toISOString(),
+      tenantSlug:  req.user.tenantSlug,
+      summary: { totalUsers, mfaEnabled, noRecentLogin, mustChangePw },
+      users,
+    });
+  } catch (err) {
+    console.error('[access-review]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

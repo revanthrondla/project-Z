@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "audit:ci": "npm audit --audit-level=high",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

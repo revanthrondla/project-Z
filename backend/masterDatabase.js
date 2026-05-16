@@ -126,14 +126,62 @@ const MASTER_DDL = `
     PRIMARY KEY (email, tenant_slug)
   );
 
+  -- ── SOC 2: Account lockout tracking (CC6.1) ───────────────────────────────
+  -- Tracks failed login attempts per email+tenant. Accounts are locked for
+  -- LOCKOUT_DURATION_MINUTES after MAX_FAILED_ATTEMPTS consecutive failures.
+  CREATE TABLE IF NOT EXISTS login_attempts (
+    id              BIGSERIAL PRIMARY KEY,
+    email           TEXT NOT NULL,
+    tenant_slug     TEXT,                     -- NULL for super-admin attempts
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    locked_until    TIMESTAMPTZ,
+    last_attempt_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(email, tenant_slug)
+  );
+
+  -- ── SOC 2: Token revocation list (CC6.1) ─────────────────────────────────
+  -- JTI (JWT ID) of tokens that have been explicitly revoked (logout, admin
+  -- revoke, password change). Checked on every authenticated request.
+  -- Expired entries are purged by the nightly retention job.
+  CREATE TABLE IF NOT EXISTS token_revocations (
+    jti         TEXT PRIMARY KEY,
+    tenant_slug TEXT,
+    user_id     BIGINT,
+    revoked_at  TIMESTAMPTZ DEFAULT NOW(),
+    expires_at  TIMESTAMPTZ NOT NULL,         -- when the original JWT would have expired
+    reason      TEXT NOT NULL DEFAULT 'logout'
+  );
+
+  -- ── SOC 2: Immutable audit log (CC7.2) ───────────────────────────────────
+  -- Centralised across all tenants so tenant admins cannot tamper with their
+  -- own logs. Includes tenant_slug for tenant-scoped views.
+  -- (Supersedes per-tenant audit_logs tables which remain for legacy reads.)
+  CREATE TABLE IF NOT EXISTS security_audit_logs (
+    id          BIGSERIAL PRIMARY KEY,
+    tenant_slug TEXT,
+    table_name  TEXT NOT NULL,
+    record_id   TEXT,
+    action      TEXT NOT NULL,
+    changed_by  BIGINT,
+    changed_at  TIMESTAMPTZ DEFAULT NOW(),
+    old_values  JSONB,
+    new_values  JSONB,
+    ip_address  TEXT,
+    user_agent  TEXT
+  );
+
   CREATE INDEX IF NOT EXISTS idx_tenants_slug         ON tenants(slug);
   CREATE INDEX IF NOT EXISTS idx_tenant_modules_key   ON tenant_modules(tenant_slug, module_key);
   CREATE INDEX IF NOT EXISTS idx_demo_requests_status ON demo_requests(status);
   CREATE INDEX IF NOT EXISTS idx_demo_requests_email  ON demo_requests(email);
-  CREATE INDEX IF NOT EXISTS idx_pst_tenant         ON platform_support_tickets(tenant_slug);
-  CREATE INDEX IF NOT EXISTS idx_pst_status         ON platform_support_tickets(status);
-  CREATE INDEX IF NOT EXISTS idx_psm_ticket         ON platform_support_messages(ticket_id);
-  CREATE INDEX IF NOT EXISTS idx_uti_email          ON user_tenant_index(email);
+  CREATE INDEX IF NOT EXISTS idx_pst_tenant           ON platform_support_tickets(tenant_slug);
+  CREATE INDEX IF NOT EXISTS idx_pst_status           ON platform_support_tickets(status);
+  CREATE INDEX IF NOT EXISTS idx_psm_ticket           ON platform_support_messages(ticket_id);
+  CREATE INDEX IF NOT EXISTS idx_uti_email            ON user_tenant_index(email);
+  CREATE INDEX IF NOT EXISTS idx_login_attempts_email ON login_attempts(email, tenant_slug);
+  CREATE INDEX IF NOT EXISTS idx_token_rev_jti        ON token_revocations(jti);
+  CREATE INDEX IF NOT EXISTS idx_token_rev_expires    ON token_revocations(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_sal_tenant           ON security_audit_logs(tenant_slug, changed_at DESC);
 `;
 
 /**
@@ -356,6 +404,131 @@ async function removeUserEmailIndex(email, tenantSlug) {
   }
 }
 
+// ── SOC 2: Account lockout helpers ───────────────────────────────────────────
+const MAX_FAILED_ATTEMPTS   = 5;
+const LOCKOUT_MINUTES       = 30;
+
+/**
+ * Check if an email+tenant combination is currently locked out.
+ * Returns { locked: true, lockedUntil } or { locked: false }.
+ */
+async function checkLoginLockout(email, tenantSlug) {
+  try {
+    const key = email.toLowerCase().trim();
+    const row = await masterDb.prepare(
+      'SELECT attempts, locked_until FROM login_attempts WHERE email = $1 AND tenant_slug IS NOT DISTINCT FROM $2'
+    ).get(key, tenantSlug ?? null);
+
+    if (!row) return { locked: false };
+    if (row.locked_until && new Date(row.locked_until) > new Date()) {
+      return { locked: true, lockedUntil: row.locked_until };
+    }
+    return { locked: false };
+  } catch (err) {
+    console.error('[lockout check]', err.message);
+    return { locked: false }; // fail-open so a DB hiccup doesn't lock everyone out
+  }
+}
+
+/**
+ * Record a failed login attempt. Locks the account after MAX_FAILED_ATTEMPTS.
+ */
+async function recordFailedLogin(email, tenantSlug) {
+  try {
+    const key = email.toLowerCase().trim();
+    await masterDb.query(`
+      INSERT INTO login_attempts (email, tenant_slug, attempts, last_attempt_at)
+      VALUES ($1, $2, 1, NOW())
+      ON CONFLICT (email, tenant_slug) DO UPDATE
+        SET attempts        = login_attempts.attempts + 1,
+            last_attempt_at = NOW(),
+            locked_until    = CASE
+              WHEN login_attempts.attempts + 1 >= $3
+              THEN NOW() + ($4 || ' minutes')::INTERVAL
+              ELSE login_attempts.locked_until
+            END
+    `, [key, tenantSlug ?? null, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES]);
+  } catch (err) {
+    console.error('[recordFailedLogin]', err.message);
+  }
+}
+
+/** Reset failed attempts on successful login. */
+async function clearLoginAttempts(email, tenantSlug) {
+  try {
+    const key = email.toLowerCase().trim();
+    await masterDb.query(
+      'DELETE FROM login_attempts WHERE email = $1 AND tenant_slug IS NOT DISTINCT FROM $2',
+      [key, tenantSlug ?? null]
+    );
+  } catch (err) {
+    console.error('[clearLoginAttempts]', err.message);
+  }
+}
+
+// ── SOC 2: Token revocation helpers ──────────────────────────────────────────
+
+/** Revoke a JWT by its jti claim. */
+async function revokeToken(jti, expiresAt, tenantSlug, userId, reason = 'logout') {
+  try {
+    await masterDb.query(`
+      INSERT INTO token_revocations (jti, tenant_slug, user_id, expires_at, reason)
+      VALUES ($1, $2, $3, to_timestamp($4), $5)
+      ON CONFLICT (jti) DO NOTHING
+    `, [jti, tenantSlug ?? null, userId ?? null, expiresAt, reason]);
+  } catch (err) {
+    console.error('[revokeToken]', err.message);
+  }
+}
+
+/** Returns true if the jti has been revoked. */
+async function isTokenRevoked(jti) {
+  try {
+    const row = await masterDb.prepare(
+      'SELECT 1 FROM token_revocations WHERE jti = $1 AND expires_at > NOW()'
+    ).get(jti);
+    return !!row;
+  } catch (err) {
+    console.error('[isTokenRevoked]', err.message);
+    return false; // fail-open
+  }
+}
+
+/** Purge expired revocation records (run nightly). */
+async function purgeExpiredRevocations() {
+  try {
+    const res = await masterDb.query('DELETE FROM token_revocations WHERE expires_at < NOW()');
+    if (res.rowCount > 0) console.log(`🧹 Purged ${res.rowCount} expired token revocations`);
+  } catch (err) {
+    console.error('[purgeExpiredRevocations]', err.message);
+  }
+}
+
+// ── SOC 2: Centralised audit log writer ───────────────────────────────────────
+
+/** Write an audit record to the tamper-resistant master security_audit_logs. */
+async function writeSecurityAuditLog({ tenantSlug, tableName, recordId, action, changedBy, oldValues, newValues, ipAddress, userAgent }) {
+  try {
+    await masterDb.query(`
+      INSERT INTO security_audit_logs
+        (tenant_slug, table_name, record_id, action, changed_by, old_values, new_values, ip_address, user_agent)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    `, [
+      tenantSlug   ?? null,
+      tableName,
+      recordId     ? String(recordId) : null,
+      action,
+      changedBy    ?? null,
+      oldValues    ? JSON.stringify(oldValues) : null,
+      newValues    ? JSON.stringify(newValues) : null,
+      ipAddress    ?? null,
+      userAgent    ? String(userAgent).slice(0, 255) : null,
+    ]);
+  } catch (err) {
+    console.error('[writeSecurityAuditLog]', err.message);
+  }
+}
+
 module.exports = {
   masterDb: masterDbProxy,   // safe to destructure at module level — no getter
   initMaster,
@@ -363,4 +536,12 @@ module.exports = {
   getMasterDb,
   indexUserEmail,
   removeUserEmailIndex,
+  // SOC 2 helpers
+  checkLoginLockout,
+  recordFailedLogin,
+  clearLoginAttempts,
+  revokeToken,
+  isTokenRevoked,
+  purgeExpiredRevocations,
+  writeSecurityAuditLog,
 };

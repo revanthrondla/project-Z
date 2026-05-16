@@ -11,6 +11,7 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true });
 const { authenticate, requireAdmin, injectTenantDb } = require('../middleware/auth');
+const { encrypt, decrypt } = require('../services/cryptoUtils');
 
 router.use(authenticate, injectTenantDb);
 
@@ -317,13 +318,18 @@ router.get('/:id/bank-accounts', requireAdmin, wrap(async (req, res) => {
 
   const result = await db.query('SELECT * FROM bank_accounts WHERE candidate_id = $1 ORDER BY is_primary DESC, id', [cand.id]);
   const accounts = result.rows;
-  // Mask account number: show only last 4 digits
-  const masked = accounts.map(a => ({
-    ...a,
-    account_number: a.account_number ? '••••' + a.account_number.slice(-4) : '',
-    _has_routing: !!a.routing_number,
-    _has_swift: !!a.swift_code,
-  }));
+  // SOC 2: Decrypt at rest values, then mask for display (show only last 4 digits)
+  const masked = accounts.map(a => {
+    const acctPlain = decrypt(a.account_number);
+    const routePlain = decrypt(a.routing_number);
+    return {
+      ...a,
+      account_number: acctPlain  ? '••••' + acctPlain.slice(-4) : '',
+      routing_number: undefined,    // never expose routing number to frontend
+      _has_routing:   !!routePlain,
+      _has_swift:     !!a.swift_code,
+    };
+  });
   res.json(masked);
   }));
 
@@ -342,11 +348,15 @@ router.post('/:id/bank-accounts', requireAdmin, wrap(async (req, res) => {
     await db.query('UPDATE bank_accounts SET is_primary = false WHERE candidate_id = $1', [cand.id]);
   }
 
+  // SOC 2 CC6.1: Encrypt sensitive fields at rest
+  const encAccount  = encrypt(account_number);
+  const encRouting  = routing_number ? encrypt(routing_number) : null;
+
   const result = await db.query(`
     INSERT INTO bank_accounts (candidate_id, account_name, bank_name, account_number, routing_number, swift_code, country, is_primary)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING id
-  `, [cand.id, account_name, bank_name, account_number, routing_number || null, swift_code || null, country || 'US', is_primary ? true : false]);
+  `, [cand.id, account_name, bank_name, encAccount, encRouting, swift_code || null, country || 'US', is_primary ? true : false]);
 
   res.status(201).json({ id: result.rows[0].id, message: 'Bank account added' });
   }));
@@ -367,6 +377,10 @@ router.put('/:id/bank-accounts/:baId', requireAdmin, wrap(async (req, res) => {
     await db.query('UPDATE bank_accounts SET is_primary = false WHERE candidate_id = $1', [cand.id]);
   }
 
+  // SOC 2 CC6.1: Encrypt sensitive fields at rest before update
+  const encAccountUpd = account_number ? encrypt(account_number) : null;
+  const encRoutingUpd = routing_number ? encrypt(routing_number) : null;
+
   await db.query(`
     UPDATE bank_accounts SET
       account_name = COALESCE($1, account_name), bank_name = COALESCE($2, bank_name),
@@ -374,7 +388,7 @@ router.put('/:id/bank-accounts/:baId', requireAdmin, wrap(async (req, res) => {
       swift_code = $5, country = COALESCE($6, country), is_primary = COALESCE($7, is_primary),
       updated_at = NOW()
     WHERE id = $8
-  `, [account_name || null, bank_name || null, account_number || null, routing_number || null, swift_code || null, country || null, is_primary !== undefined ? (is_primary ? true : false) : null, baId]);
+  `, [account_name || null, bank_name || null, encAccountUpd, encRoutingUpd, swift_code || null, country || null, is_primary !== undefined ? (is_primary ? true : false) : null, baId]);
 
   res.json({ message: 'Bank account updated' });
   }));

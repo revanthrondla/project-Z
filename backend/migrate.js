@@ -677,6 +677,34 @@ const MIGRATIONS = [
     },
   },
   {
+    id: 15,
+    scope: 'tenant',
+    description: 'Create password_history table for SOC 2 password reuse prevention',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS password_history (
+          id            BIGSERIAL PRIMARY KEY,
+          user_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          password_hash TEXT NOT NULL,
+          created_at    TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_password_history_user
+          ON password_history(user_id, created_at DESC);
+      `);
+    },
+  },
+  {
+    id: 16,
+    scope: 'tenant',
+    description: 'Add last_login_at to users for SOC 2 access review',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE users
+          ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ
+      `);
+    },
+  },
+  {
     id: 12,
     scope: 'tenant',
     description: 'Add client approval fields to time_entries',

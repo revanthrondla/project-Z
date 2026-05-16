@@ -47,15 +47,37 @@ const privacyRoutes          = require('./routes/privacy');
 const eeoRoutes              = require('./routes/eeo');
 const integrationsRoutes     = require('./routes/integrations');
 const { auditLogViewer }     = require('./middleware/auditLog');
+const { startRetentionJob }  = require('./services/retentionJob');
 
 const app      = express();
 const PORT     = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// ── Trust proxy (Railway / Heroku / nginx all terminate TLS upstream) ─────────
+// Required for req.secure and req.headers['x-forwarded-proto'] to work correctly.
+if (NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
+// ── SOC 2 CC6.7: HTTPS enforcement — redirect HTTP → HTTPS in production ──────
+app.use((req, res, next) => {
+  if (
+    NODE_ENV === 'production' &&
+    req.headers['x-forwarded-proto'] === 'http'
+  ) {
+    return res.redirect(301, `https://${req.headers.host}${req.url}`);
+  }
+  next();
+});
+
 // ── Security headers ──────────────────────────────────────────────────────────
+// SOC 2 CC6.7: HSTS — tell browsers to always use HTTPS for 1 year
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
+  hsts: NODE_ENV === 'production'
+    ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+    : false,
 }));
 
 // ── Gzip compression ──────────────────────────────────────────────────────────
@@ -593,6 +615,9 @@ async function start() {
         console.error('[LicenceCheck] Scheduled check failed:', err.message)
       );
     }, 24 * 60 * 60 * 1000);
+
+    // SOC 2 CC9.1: Start nightly data retention enforcement job
+    startRetentionJob();
 
   } catch (err) {
     console.error('[FATAL] DB initialisation failed:', err.message);

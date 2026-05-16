@@ -1,5 +1,6 @@
-const jwt = require('jsonwebtoken');
-const pool = require('../db/pool');
+const jwt    = require('jsonwebtoken');
+const crypto = require('crypto');
+const pool   = require('../db/pool');
 const { createScopedWrapper } = require('../db/wrapper');
 
 // ── Tenant status cache ───────────────────────────────────────────────────────
@@ -36,7 +37,12 @@ if (!JWT_SECRET) {
   console.warn('\n⚠️  WARNING: JWT_SECRET not set — using insecure dev default.\n');
 }
 
-function authenticate(req, res, next) {
+/** Generate a cryptographically-random JWT ID (jti) for token revocation tracking. */
+function generateJti() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+async function authenticate(req, res, next) {
   let token = req.cookies?.flow_token;
   if (!token) {
     const authHeader = req.headers.authorization;
@@ -47,6 +53,16 @@ function authenticate(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     if (!decoded.exp) return res.status(401).json({ error: 'Token has no expiry — rejected for security' });
+
+    // SOC 2 CC6.1: Check token revocation list (logout, password change, admin revoke)
+    if (decoded.jti) {
+      const { isTokenRevoked } = require('../masterDatabase');
+      const revoked = await isTokenRevoked(decoded.jti);
+      if (revoked) {
+        return res.status(401).json({ error: 'Session has been revoked — please log in again', code: 'TOKEN_REVOKED' });
+      }
+    }
+
     req.user = decoded;
     next();
   } catch {
@@ -192,5 +208,6 @@ module.exports = {
   injectTenantDb,
   requireModule,
   invalidateTenantStatusCache,
+  generateJti,
   JWT_SECRET,
 };

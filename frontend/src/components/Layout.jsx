@@ -3,6 +3,8 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useModules } from '../contexts/ModulesContext';
 import { useNotifications } from '../hooks/useNotifications';
+import { useSessionTimeout } from '../hooks/useSessionTimeout';
+import SessionTimeoutModal from './SessionTimeoutModal';
 import FlowLogo from './FlowLogo';
 
 const AIChatWidget = lazy(() => import('./AIChatWidget'));
@@ -42,6 +44,7 @@ const adminNav = [
   { to: '/compliance',             icon: '⚖️', label: 'Compliance Center' },
   { to: '/eeo',                    icon: '🏛️', label: 'EEO Reporting' },
   { to: '/privacy',                icon: '🔒', label: 'Privacy Center' },
+  { to: '/access-review',         icon: '🛡️', label: 'Access Review' },
   { to: '/import',                icon: '📥', label: 'Import',                 moduleKey: 'hr_import' },
   // ── Payroll & Tools ─────────────────────────────────────────────────────────
   { to: '/payroll-reconciliation', icon: '💰', label: 'Payroll',        section: 'Payroll & Tools' },
@@ -226,6 +229,9 @@ export default function Layout() {
   const { hasModule } = useModules();
   const navigate = useNavigate();
 
+  // SOC 2 CC6.1: 30-minute inactivity session timeout
+  const { showWarning, countdown, stayLoggedIn, logout: sessionLogout } = useSessionTimeout(!!user);
+
   // Desktop: collapsed/expanded
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // Mobile: visible/hidden overlay
@@ -334,6 +340,15 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
+
+      {/* ── SOC 2: Session timeout warning modal ──────────────────────────── */}
+      {showWarning && (
+        <SessionTimeoutModal
+          countdown={countdown}
+          onStayLoggedIn={stayLoggedIn}
+          onLogout={sessionLogout}
+        />
+      )}
 
       {/* ── Mobile backdrop ────────────────────────────────────────────────── */}
       {mobileOpen && (

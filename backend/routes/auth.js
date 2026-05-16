@@ -1,9 +1,24 @@
 const express  = require('express');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
-const { authenticate, injectTenantDb, JWT_SECRET } = require('../middleware/auth');
-const { masterDb, indexUserEmail } = require('../masterDatabase');
+const { authenticate, injectTenantDb, JWT_SECRET, generateJti } = require('../middleware/auth');
+const {
+  masterDb, indexUserEmail,
+  checkLoginLockout, recordFailedLogin, clearLoginAttempts,
+  revokeToken, writeSecurityAuditLog,
+} = require('../masterDatabase');
 const { getTenantDb, db: defaultDb } = require('../database');
+
+// ── Password complexity validator (SOC 2 CC6.1) ───────────────────────────────
+function validatePasswordComplexity(password) {
+  const errors = [];
+  if (!password || password.length < 10)      errors.push('at least 10 characters');
+  if (!/[A-Z]/.test(password))                errors.push('one uppercase letter');
+  if (!/[a-z]/.test(password))                errors.push('one lowercase letter');
+  if (!/[0-9]/.test(password))                errors.push('one number');
+  if (!/[^A-Za-z0-9]/.test(password))         errors.push('one special character');
+  return errors; // empty = valid
+}
 
 // ── Fallback: scan all active tenant schemas for an email ─────────────────────
 // Used when the user_tenant_index has no entry — covers users who were created
@@ -79,13 +94,26 @@ router.post('/login', async (req, res) => {
       const superAdmin = superAdminResult.rows[0];
 
       if (superAdmin) {
+        // SOC 2: lockout check for super-admin (tenant_slug = null)
+        const saLock = await checkLoginLockout(normalizedEmail, null);
+        if (saLock.locked) {
+          return res.status(429).json({
+            error: `Account locked due to too many failed attempts. Try again after ${new Date(saLock.lockedUntil).toLocaleTimeString()}.`,
+            code: 'ACCOUNT_LOCKED',
+          });
+        }
+
         const valid = bcrypt.compareSync(password, superAdmin.password_hash);
-        if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+        if (!valid) {
+          await recordFailedLogin(normalizedEmail, null);
+          return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        await clearLoginAttempts(normalizedEmail, null);
 
         // MFA check for super-admin
         if (superAdmin.mfa_enabled && superAdmin.mfa_secret) {
           const mfaToken = jwt.sign(
-            { userId: superAdmin.id, email: superAdmin.email, name: superAdmin.name, role: 'super_admin', type: 'mfa_pending' },
+            { jti: generateJti(), userId: superAdmin.id, email: superAdmin.email, name: superAdmin.name, role: 'super_admin', type: 'mfa_pending' },
             JWT_SECRET,
             { expiresIn: '2m' }
           );
@@ -93,7 +121,7 @@ router.post('/login', async (req, res) => {
         }
 
         const token = jwt.sign(
-          { id: superAdmin.id, email: superAdmin.email, name: superAdmin.name, role: 'super_admin' },
+          { jti: generateJti(), id: superAdmin.id, email: superAdmin.email, name: superAdmin.name, role: 'super_admin' },
           JWT_SECRET,
           { expiresIn: '8h' }
         );
@@ -179,6 +207,15 @@ router.post('/login', async (req, res) => {
 // ── Shared tenant login handler ───────────────────────────────────────────────
 // Used by both the explicit-slug path and the auto-detect path.
 async function handleTenantLogin(res, tenant, normalizedEmail, password) {
+  // SOC 2: check lockout before touching the tenant DB
+  const lockStatus = await checkLoginLockout(normalizedEmail, tenant.slug);
+  if (lockStatus.locked) {
+    return res.status(429).json({
+      error: `Account locked due to too many failed attempts. Try again after ${new Date(lockStatus.lockedUntil).toLocaleTimeString()}.`,
+      code: 'ACCOUNT_LOCKED',
+    });
+  }
+
   // getTenantDb returns { wrapper, release } — must await and destructure,
   // then release the pg client regardless of success or early return.
   let tenantRelease;
@@ -188,10 +225,17 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
 
       const userResult = await tenantDb.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
       const user = userResult.rows[0];
-      if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+      if (!user) {
+        await recordFailedLogin(normalizedEmail, tenant.slug);
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
 
       const valid = bcrypt.compareSync(password, user.password_hash);
-      if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+      if (!valid) {
+        await recordFailedLogin(normalizedEmail, tenant.slug);
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      await clearLoginAttempts(normalizedEmail, tenant.slug);
 
       // ── Resolve linked IDs (needed for MFA token and session token) ────────────
       let employeeId = null;
@@ -264,6 +308,7 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
 
       const token = jwt.sign(
         {
+          jti: generateJti(),   // SOC 2 CC6.1 — enables token revocation
           id: user.id, email: user.email, name: user.name, role: user.role,
           employeeId, clientId, recruiterId, positionTitle,
           tenantSlug: tenant.slug,
@@ -273,6 +318,9 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
         JWT_SECRET,
         { expiresIn: '8h' }
       );
+
+      // SOC 2 CC6.1: Stamp last login time (fire-and-forget, never fail the login)
+      tenantDb.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]).catch(() => {});
 
       res.cookie(COOKIE_NAME, token, cookieOptions());
       res.json({
@@ -293,12 +341,24 @@ async function handleTenantLogin(res, tenant, normalizedEmail, password) {
 }
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────────
-router.post('/logout', async (req, res) => {
+// SOC 2 CC6.1: Revoke the JWT so it cannot be replayed after logout.
+router.post('/logout', authenticate, async (req, res) => {
   try {
+    if (req.user?.jti && req.user?.exp) {
+      const expiresAt = new Date(req.user.exp * 1000).toISOString();
+      await revokeToken(
+        req.user.jti, expiresAt,
+        req.user.tenantSlug || null,
+        req.user.id || null,
+        'logout'
+      );
+    }
     res.clearCookie(COOKIE_NAME, { ...cookieOptions(), maxAge: 0 });
     res.json({ message: 'Logged out' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Never fail a logout — clear the cookie regardless
+    res.clearCookie(COOKIE_NAME, { ...cookieOptions(), maxAge: 0 });
+    res.json({ message: 'Logged out' });
   }
 });
 
@@ -340,8 +400,14 @@ router.get('/me', authenticate, injectTenantDb, async (req, res) => {
 router.put('/change-password', authenticate, injectTenantDb, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+
+    // SOC 2 CC6.1: Enforce password complexity on all change-password calls
+    const complexityErrors = validatePasswordComplexity(newPassword);
+    if (complexityErrors.length > 0) {
+      return res.status(400).json({
+        error: `Password must contain: ${complexityErrors.join(', ')}`,
+        code: 'PASSWORD_COMPLEXITY',
+      });
     }
 
     if (req.user.role === 'super_admin') {
@@ -350,13 +416,19 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
       if (!bcrypt.compareSync(currentPassword, sa.password_hash)) {
         return res.status(401).json({ error: 'Current password is incorrect' });
       }
-      if (newPassword.length < 8) {
-        return res.status(400).json({ error: 'New password must be at least 8 characters' });
-      }
-      const newHash = await bcrypt.hash(newPassword, 10);
+      const newHash = await bcrypt.hash(newPassword, 12);
       await masterDb.query('UPDATE super_admins SET password_hash = $1 WHERE id = $2', [newHash, req.user.id]);
+
+      // SOC 2 CC6.1: Revoke old token before issuing a fresh one
+      if (req.user?.jti && req.user?.exp) {
+        await revokeToken(
+          req.user.jti, new Date(req.user.exp * 1000).toISOString(),
+          null, req.user.id, 'password_change'
+        ).catch(() => {});
+      }
+
       const freshToken = jwt.sign(
-        { id: sa.id, email: sa.email, name: sa.name, role: 'super_admin', mustChangePw: false },
+        { jti: generateJti(), id: sa.id, email: sa.email, name: sa.name, role: 'super_admin', mustChangePw: false },
         JWT_SECRET, { expiresIn: '8h' }
       );
       res.cookie(COOKIE_NAME, freshToken, cookieOptions());
@@ -369,15 +441,53 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
     if (!bcrypt.compareSync(currentPassword, user.password_hash)) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+
+    // SOC 2 CC6.1: Check last 5 password hashes — disallow reuse
+    const histResult = await db.query(
+      'SELECT password_hash FROM password_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5',
+      [user.id]
+    );
+    for (const row of histResult.rows) {
+      if (bcrypt.compareSync(newPassword, row.password_hash)) {
+        return res.status(400).json({
+          error: 'New password cannot be the same as any of your last 5 passwords',
+          code: 'PASSWORD_REUSE',
+        });
+      }
     }
-    const tenantNewHash = await bcrypt.hash(newPassword, 10);
-    await db.query('UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE id = $2', [tenantNewHash, req.user.id]);
+
+    const tenantNewHash = await bcrypt.hash(newPassword, 12);
+
+    // Store old hash in history before overwriting
+    await db.query(
+      'INSERT INTO password_history (user_id, password_hash) VALUES ($1, $2)',
+      [user.id, user.password_hash]
+    );
+    // Prune history beyond 5 entries
+    await db.query(
+      `DELETE FROM password_history WHERE id IN (
+         SELECT id FROM password_history WHERE user_id = $1 ORDER BY created_at DESC OFFSET 5
+       )`,
+      [user.id]
+    );
+
+    await db.query(
+      'UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE id = $2',
+      [tenantNewHash, req.user.id]
+    );
+
+    // SOC 2 CC6.1: Revoke old token before issuing a fresh one
+    if (req.user?.jti && req.user?.exp) {
+      await revokeToken(
+        req.user.jti, new Date(req.user.exp * 1000).toISOString(),
+        req.user.tenantSlug || null, req.user.id, 'password_change'
+      ).catch(() => {});
+    }
 
     // Issue a fresh token with mustChangePw cleared so the UI unlocks immediately
     const freshToken = jwt.sign(
       {
+        jti: generateJti(),
         id: user.id, email: user.email, name: user.name, role: user.role,
         employeeId:    req.user.employeeId    || null,
         clientId:      req.user.clientId      || null,
@@ -395,6 +505,15 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── POST /api/auth/heartbeat ──────────────────────────────────────────────────
+// SOC 2 CC6.1: Session activity signal. Frontend calls this periodically while
+// the user is active. If the token is revoked or expired, 401 is returned and
+// the frontend knows to redirect to login. No DB write — the JWT itself carries
+// the expiry, and the revocation check in `authenticate` handles revoked tokens.
+router.post('/heartbeat', authenticate, (req, res) => {
+  res.json({ ok: true, userId: req.user.id });
 });
 
 module.exports = router;

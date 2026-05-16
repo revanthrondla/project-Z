@@ -160,6 +160,7 @@ const AdminCompliance       = lazy(() => import('./pages/admin/Compliance'));
 const AdminEEO              = lazy(() => import('./pages/admin/EEO'));
 const AdminPrivacy          = lazy(() => import('./pages/admin/Privacy'));
 const AdminIntegrations     = lazy(() => import('./pages/admin/Integrations'));
+const AdminAccessReview     = lazy(() => import('./pages/admin/AccessReview'));
 
 // Field Ops pages
 const FieldScan       = lazy(() => import('./pages/agrow/FieldScan'));
@@ -392,7 +393,8 @@ function AppRoutes() {
         <Route path="compliance"   element={<PrivateRoute adminOnly><Lazy><AdminCompliance /></Lazy></PrivateRoute>} />
         <Route path="eeo"          element={<PrivateRoute adminOnly><Lazy><AdminEEO /></Lazy></PrivateRoute>} />
         <Route path="privacy"      element={<PrivateRoute adminOnly><Lazy><AdminPrivacy /></Lazy></PrivateRoute>} />
-        <Route path="integrations" element={<PrivateRoute adminOnly><Lazy><AdminIntegrations /></Lazy></PrivateRoute>} />
+        <Route path="integrations"  element={<PrivateRoute adminOnly><Lazy><AdminIntegrations /></Lazy></PrivateRoute>} />
+        <Route path="access-review" element={<PrivateRoute adminOnly><Lazy><AdminAccessReview /></Lazy></PrivateRoute>} />
         <Route path="import"    element={<ModuleRoute moduleKey="hr_import"  adminOnly><Lazy><AdminImport /></Lazy></ModuleRoute>} />
         <Route path="settings" element={<PrivateRoute adminOnly><Lazy><AdminSettings /></Lazy></PrivateRoute>} />
 
