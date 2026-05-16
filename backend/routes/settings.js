@@ -126,4 +126,40 @@ router.get('/access-review', async (req, res) => {
   }
 });
 
+// ── GET /api/settings/locked-accounts ────────────────────────────────────────
+// SOC 2 CC6.1: List accounts currently locked out for this tenant.
+router.get('/locked-accounts', async (req, res) => {
+  try {
+    const result = await masterDb.query(`
+      SELECT email, attempts, locked_until, last_attempt_at
+      FROM login_attempts
+      WHERE tenant_slug = $1
+        AND locked_until IS NOT NULL
+        AND locked_until > NOW()
+      ORDER BY locked_until DESC
+    `, [req.user.tenantSlug]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[locked-accounts]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/settings/locked-accounts/:email ───────────────────────────────
+// Admin unlocks a specific account immediately.
+router.delete('/locked-accounts/:email', async (req, res) => {
+  try {
+    const email = decodeURIComponent(req.params.email).toLowerCase().trim();
+    await masterDb.query(
+      `UPDATE login_attempts SET locked_until = NULL, attempts = 0
+       WHERE email = $1 AND tenant_slug IS NOT DISTINCT FROM $2`,
+      [email, req.user.tenantSlug]
+    );
+    res.json({ message: `Account ${email} unlocked` });
+  } catch (err) {
+    console.error('[unlock-account]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

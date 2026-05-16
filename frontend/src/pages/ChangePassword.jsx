@@ -1,11 +1,58 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
 
+// SOC 2 CC6.1: mirrors backend validatePasswordComplexity()
+const RULES = [
+  { key: 'length',    label: 'At least 10 characters',      test: p => p.length >= 10 },
+  { key: 'upper',     label: 'One uppercase letter (A-Z)',   test: p => /[A-Z]/.test(p) },
+  { key: 'lower',     label: 'One lowercase letter (a-z)',   test: p => /[a-z]/.test(p) },
+  { key: 'number',    label: 'One number (0-9)',             test: p => /[0-9]/.test(p) },
+  { key: 'special',   label: 'One special character (!@#…)', test: p => /[^A-Za-z0-9]/.test(p) },
+];
+
+function PasswordStrengthMeter({ password }) {
+  const passed = RULES.filter(r => r.test(password)).length;
+  const pct    = (passed / RULES.length) * 100;
+  const color  = pct < 40 ? 'bg-red-400' : pct < 80 ? 'bg-amber-400' : 'bg-emerald-500';
+  const label  = pct < 40 ? 'Weak' : pct < 80 ? 'Fair' : pct < 100 ? 'Good' : 'Strong';
+
+  if (!password) return null;
+
+  return (
+    <div className="mt-2 space-y-2">
+      {/* Strength bar */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${color}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className={`text-xs font-medium ${pct < 40 ? 'text-red-500' : pct < 80 ? 'text-amber-500' : 'text-emerald-600'}`}>
+          {label}
+        </span>
+      </div>
+      {/* Rule checklist */}
+      <ul className="space-y-1">
+        {RULES.map(rule => {
+          const ok = rule.test(password);
+          return (
+            <li key={rule.key} className={`flex items-center gap-1.5 text-xs ${ok ? 'text-emerald-600' : 'text-gray-400'}`}>
+              <span className="text-base leading-none">{ok ? '✓' : '○'}</span>
+              {rule.label}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export default function ChangePassword() {
   const { user, logout, refreshUser } = useAuth();
-  const navigate         = useNavigate();
+  const navigate = useNavigate();
 
   const [form, setForm]       = useState({ currentPassword: '', newPassword: '', confirm: '' });
   const [error, setError]     = useState('');
@@ -13,12 +60,14 @@ export default function ChangePassword() {
 
   const handle = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
+  const allRulesPassed = useMemo(() => RULES.every(r => r.test(form.newPassword)), [form.newPassword]);
+
   const submit = async e => {
     e.preventDefault();
     setError('');
 
-    if (form.newPassword.length < 8) {
-      setError('New password must be at least 8 characters.');
+    if (!allRulesPassed) {
+      setError('Your new password does not meet the complexity requirements below.');
       return;
     }
     if (form.newPassword !== form.confirm) {
@@ -32,10 +81,7 @@ export default function ChangePassword() {
         currentPassword: form.currentPassword,
         newPassword: form.newPassword,
       });
-      // The backend issues a fresh JWT with mustChangePw: false and sets it
-      // as the session cookie. We must re-fetch /api/auth/me so the in-memory
-      // AuthContext state reflects the new token before navigating — otherwise
-      // PrivateRoute still sees mustChangePw: true and bounces us back here.
+      // Re-fetch /api/auth/me so in-memory AuthContext reflects new token
       await refreshUser();
       navigate('/dashboard', { replace: true });
     } catch (err) {
@@ -62,7 +108,7 @@ export default function ChangePassword() {
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
           <span className="text-amber-500 mt-0.5">⚠️</span>
           <p className="text-sm text-amber-800">
-            You must change your password before accessing Flow. This is required for account security.
+            You must change your password before accessing HireIQ. This is required for account security.
           </p>
         </div>
 
@@ -91,7 +137,7 @@ export default function ChangePassword() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              New password <span className="text-gray-400">(min. 8 characters)</span>
+              New password
             </label>
             <input
               type="password"
@@ -99,10 +145,10 @@ export default function ChangePassword() {
               value={form.newPassword}
               onChange={handle}
               required
-              minLength={8}
               autoComplete="new-password"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
+            <PasswordStrengthMeter password={form.newPassword} />
           </div>
 
           <div>
@@ -116,14 +162,21 @@ export default function ChangePassword() {
               onChange={handle}
               required
               autoComplete="new-password"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                form.confirm && form.newPassword !== form.confirm
+                  ? 'border-red-400 bg-red-50'
+                  : 'border-gray-300'
+              }`}
             />
+            {form.confirm && form.newPassword !== form.confirm && (
+              <p className="mt-1 text-xs text-red-500">Passwords do not match</p>
+            )}
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+            disabled={loading || !allRulesPassed || form.newPassword !== form.confirm}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
           >
             {loading ? 'Updating…' : 'Set New Password'}
           </button>

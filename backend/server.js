@@ -46,6 +46,7 @@ const payRulesRoutes         = require('./routes/payRules');
 const privacyRoutes          = require('./routes/privacy');
 const eeoRoutes              = require('./routes/eeo');
 const integrationsRoutes     = require('./routes/integrations');
+const gdprRoutes             = require('./routes/gdpr');
 const { auditLogViewer }     = require('./middleware/auditLog');
 const { startRetentionJob }  = require('./services/retentionJob');
 
@@ -218,6 +219,7 @@ app.use('/api/pay-rules',        payRulesRoutes);
 app.use('/api/privacy',          privacyRoutes);
 app.use('/api/eeo',              eeoRoutes);
 app.use('/api/integrations',     integrationsRoutes);
+app.use('/api/gdpr',             gdprRoutes);
 
 // ── Audit log viewer ──────────────────────────────────────────────────────────
 const { authenticate, requireAdmin, injectTenantDb } = require('./middleware/auth');

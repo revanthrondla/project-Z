@@ -705,6 +705,86 @@ const MIGRATIONS = [
     },
   },
   {
+    id: 17,
+    scope: 'tenant',
+    description: 'GDPR Art.30: Records of Processing Activities table',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS gdpr_processing_activities (
+          id               BIGSERIAL PRIMARY KEY,
+          name             TEXT NOT NULL,
+          purpose          TEXT NOT NULL,
+          lawful_basis     TEXT NOT NULL CHECK (lawful_basis IN (
+                             'consent','contract','legal_obligation','vital_interests',
+                             'public_task','legitimate_interests')),
+          data_categories  TEXT[],
+          data_subjects    TEXT[],
+          recipients       TEXT,
+          third_countries  TEXT,
+          retention_period TEXT,
+          security_measures TEXT,
+          created_by       BIGINT REFERENCES users(id) ON DELETE SET NULL,
+          created_at       TIMESTAMPTZ DEFAULT NOW(),
+          updated_at       TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_gdpr_ropa_lawful ON gdpr_processing_activities(lawful_basis);
+      `);
+    },
+  },
+  {
+    id: 18,
+    scope: 'tenant',
+    description: 'GDPR Art.33: Data breach register table',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS gdpr_breach_register (
+          id                   BIGSERIAL PRIMARY KEY,
+          title                TEXT NOT NULL,
+          discovered_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          reported_at          TIMESTAMPTZ,
+          severity             TEXT NOT NULL DEFAULT 'medium'
+                               CHECK (severity IN ('low','medium','high','critical')),
+          description          TEXT,
+          affected_records     INTEGER,
+          data_types_affected  TEXT[],
+          cause                TEXT,
+          containment_actions  TEXT,
+          dpa_notified         BOOLEAN DEFAULT FALSE,
+          dpa_notification_at  TIMESTAMPTZ,
+          individuals_notified BOOLEAN DEFAULT FALSE,
+          ind_notification_at  TIMESTAMPTZ,
+          status               TEXT NOT NULL DEFAULT 'open'
+                               CHECK (status IN ('open','investigating','contained','closed')),
+          resolution_notes     TEXT,
+          created_by           BIGINT REFERENCES users(id) ON DELETE SET NULL,
+          created_at           TIMESTAMPTZ DEFAULT NOW(),
+          updated_at           TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_gdpr_breach_status ON gdpr_breach_register(status);
+        CREATE INDEX IF NOT EXISTS idx_gdpr_breach_severity ON gdpr_breach_register(severity);
+      `);
+    },
+  },
+  {
+    id: 19,
+    scope: 'tenant',
+    description: 'GDPR Art.37/13: DPO + GDPR settings columns in org_profile',
+    async up(client) {
+      await client.query(`
+        ALTER TABLE org_profile
+          ADD COLUMN IF NOT EXISTS dpo_name              TEXT,
+          ADD COLUMN IF NOT EXISTS dpo_email             TEXT,
+          ADD COLUMN IF NOT EXISTS dpo_phone             TEXT,
+          ADD COLUMN IF NOT EXISTS lawful_basis_default  TEXT DEFAULT 'legitimate_interests',
+          ADD COLUMN IF NOT EXISTS consent_expiry_days   INTEGER DEFAULT 365,
+          ADD COLUMN IF NOT EXISTS cross_border_transfer BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS cross_border_details  TEXT,
+          ADD COLUMN IF NOT EXISTS privacy_notice_url    TEXT,
+          ADD COLUMN IF NOT EXISTS gdpr_enabled          BOOLEAN DEFAULT FALSE
+      `);
+    },
+  },
+  {
     id: 12,
     scope: 'tenant',
     description: 'Add client approval fields to time_entries',

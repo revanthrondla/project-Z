@@ -45,6 +45,7 @@ const adminNav = [
   { to: '/eeo',                    icon: '🏛️', label: 'EEO Reporting' },
   { to: '/privacy',                icon: '🔒', label: 'Privacy Center' },
   { to: '/access-review',         icon: '🛡️', label: 'Access Review' },
+  { to: '/audit-log',             icon: '📋', label: 'Audit Log' },
   { to: '/import',                icon: '📥', label: 'Import',                 moduleKey: 'hr_import' },
   // ── Payroll & Tools ─────────────────────────────────────────────────────────
   { to: '/payroll-reconciliation', icon: '💰', label: 'Payroll',        section: 'Payroll & Tools' },
@@ -69,6 +70,7 @@ const candidateNav = [
   { to: '/my-resume',       icon: '📋', label: 'My Resume' },
   { to: '/c2c-jobs',        icon: '🌐', label: 'C2C Jobs',  section: 'Job Search' },
   { to: '/documents',       icon: '📁', label: 'Documents',                         moduleKey: 'hr_documents' },
+  { to: '/my-data',         icon: '🔒', label: 'My Data',   section: 'Privacy' },
   { to: '/support',         icon: '🎫', label: 'Support',                           moduleKey: 'hr_support' },
 ];
 

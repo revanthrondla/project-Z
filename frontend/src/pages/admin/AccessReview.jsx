@@ -3,7 +3,7 @@
  * Periodic user access certification report for admins.
  * Lists all users with role, MFA status, last login, and flags dormant accounts.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 
 const ROLE_LABELS = {
@@ -56,6 +56,73 @@ function exportCsv(report) {
   a.download = `access-review-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function LockedAccountsPanel() {
+  const [locked,    setLocked]    = useState([]);
+  const [lLoading,  setLLoading]  = useState(true);
+  const [unlocking, setUnlocking] = useState(null);
+
+  const loadLocked = useCallback(() => {
+    setLLoading(true);
+    api.get('/settings/locked-accounts')
+      .then(r => setLocked(r.data))
+      .catch(() => {})
+      .finally(() => setLLoading(false));
+  }, []);
+
+  useEffect(() => { loadLocked(); }, [loadLocked]);
+
+  const unlock = async email => {
+    setUnlocking(email);
+    try {
+      await api.delete(`/settings/locked-accounts/${encodeURIComponent(email)}`);
+      loadLocked();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Failed to unlock account');
+    } finally {
+      setUnlocking(null);
+    }
+  };
+
+  if (lLoading) return <div className="py-6 text-center text-gray-400 text-sm">Loading locked accounts…</div>;
+
+  if (locked.length === 0) return (
+    <div className="py-6 text-center text-green-600 text-sm font-medium">✓ No accounts are currently locked out</div>
+  );
+
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="bg-red-50 border-b border-red-200 text-left text-xs text-red-700 uppercase tracking-wide">
+          <th className="px-4 py-3">Email</th>
+          <th className="px-4 py-3">Failed Attempts</th>
+          <th className="px-4 py-3">Locked Until</th>
+          <th className="px-4 py-3">Last Attempt</th>
+          <th className="px-4 py-3"></th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-100">
+        {locked.map(acc => (
+          <tr key={acc.email} className="hover:bg-red-50/50">
+            <td className="px-4 py-3 font-medium text-gray-900">{acc.email}</td>
+            <td className="px-4 py-3 text-red-600 font-semibold">{acc.attempts}</td>
+            <td className="px-4 py-3 text-gray-600">{fmtDate(acc.locked_until)}</td>
+            <td className="px-4 py-3 text-gray-500">{fmtDate(acc.last_attempt_at)}</td>
+            <td className="px-4 py-3">
+              <button
+                onClick={() => unlock(acc.email)}
+                disabled={unlocking === acc.email}
+                className="px-3 py-1 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {unlocking === acc.email ? 'Unlocking…' : 'Unlock'}
+              </button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 export default function AccessReview() {
@@ -216,6 +283,17 @@ export default function AccessReview() {
       <p className="mt-4 text-xs text-gray-400 text-center">
         This report is generated in real-time from your tenant's user directory. Review quarterly per SOC 2 CC6.3.
       </p>
+
+      {/* Locked Accounts */}
+      <div className="mt-8">
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">🔒 Locked Accounts</h2>
+        <p className="text-sm text-gray-500 mb-3">
+          Accounts locked after repeated failed login attempts. Admins can unlock early.
+        </p>
+        <div className="bg-white rounded-xl border border-red-200 overflow-hidden shadow-sm">
+          <LockedAccountsPanel />
+        </div>
+      </div>
     </div>
   );
 }

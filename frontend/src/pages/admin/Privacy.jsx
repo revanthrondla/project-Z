@@ -422,11 +422,453 @@ function CorrectionTab({ employees, onRefresh }) {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
+// ── GDPR Tab: Records of Processing Activities ────────────────────────────────
+function RopaTab() {
+  const [activities, setActivities] = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [showForm,   setShowForm]   = useState(false);
+  const [form,       setForm]       = useState({
+    name: '', purpose: '', lawful_basis: 'legitimate_interests',
+    data_categories: '', data_subjects: '', recipients: '',
+    third_countries: '', retention_period: '', security_measures: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [err,    setErr]    = useState(null);
+
+  const LAWFUL_BASIS_OPTIONS = [
+    { value: 'consent',               label: 'Consent' },
+    { value: 'contract',              label: 'Contract' },
+    { value: 'legal_obligation',      label: 'Legal Obligation' },
+    { value: 'vital_interests',       label: 'Vital Interests' },
+    { value: 'public_task',           label: 'Public Task' },
+    { value: 'legitimate_interests',  label: 'Legitimate Interests' },
+  ];
+
+  const LAWFUL_COLORS = {
+    consent: 'bg-blue-100 text-blue-700',
+    contract: 'bg-green-100 text-green-700',
+    legal_obligation: 'bg-red-100 text-red-700',
+    vital_interests: 'bg-orange-100 text-orange-700',
+    public_task: 'bg-indigo-100 text-indigo-700',
+    legitimate_interests: 'bg-purple-100 text-purple-700',
+  };
+
+  const load = () => {
+    setLoading(true);
+    api.get('/gdpr/ropa')
+      .then(r => setActivities(r.data))
+      .catch(e => setErr(e.response?.data?.error || e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const submit = async e => {
+    e.preventDefault(); setErr(null); setSaving(true);
+    try {
+      await api.post('/gdpr/ropa', {
+        ...form,
+        data_categories: form.data_categories.split(',').map(s => s.trim()).filter(Boolean),
+        data_subjects:   form.data_subjects.split(',').map(s => s.trim()).filter(Boolean),
+      });
+      setShowForm(false);
+      setForm({ name: '', purpose: '', lawful_basis: 'legitimate_interests', data_categories: '', data_subjects: '', recipients: '', third_countries: '', retention_period: '', security_measures: '' });
+      load();
+    } catch (e) {
+      setErr(e.response?.data?.error || e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const del = async id => {
+    if (!window.confirm('Delete this processing activity record?')) return;
+    try { await api.delete(`/gdpr/ropa/${id}`); load(); }
+    catch (e) { alert(e.response?.data?.error || 'Delete failed'); }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="font-semibold text-gray-900">Records of Processing Activities</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Art.30 GDPR — Document every data processing activity with its lawful basis.</p>
+        </div>
+        <button onClick={() => setShowForm(v => !v)} className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 font-medium">
+          + Add Activity
+        </button>
+      </div>
+      {err && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{err}</div>}
+
+      {showForm && (
+        <form onSubmit={submit} className="mb-6 bg-purple-50 border border-purple-200 rounded-xl p-5 space-y-3">
+          <h4 className="font-semibold text-purple-900 text-sm">New Processing Activity</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {[
+              { key: 'name',             label: 'Activity Name',         placeholder: 'e.g. Employee Payroll Processing' },
+              { key: 'purpose',          label: 'Purpose',               placeholder: 'Why is data processed?' },
+              { key: 'data_categories',  label: 'Data Categories (CSV)', placeholder: 'e.g. name, email, bank details' },
+              { key: 'data_subjects',    label: 'Data Subjects (CSV)',   placeholder: 'e.g. employees, contractors' },
+              { key: 'recipients',       label: 'Recipients',            placeholder: 'Who receives the data?' },
+              { key: 'third_countries',  label: 'Third Country Transfers', placeholder: 'Any non-EEA transfers?' },
+              { key: 'retention_period', label: 'Retention Period',      placeholder: 'e.g. 7 years' },
+              { key: 'security_measures',label: 'Security Measures',     placeholder: 'Technical/organisational measures' },
+            ].map(f => (
+              <div key={f.key}>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
+                <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder={f.placeholder}
+                  value={form[f.key]} onChange={e => setForm(v => ({ ...v, [f.key]: e.target.value }))} />
+              </div>
+            ))}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Lawful Basis</label>
+              <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                value={form.lawful_basis} onChange={e => setForm(v => ({ ...v, lawful_basis: e.target.value }))}>
+                {LAWFUL_BASIS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50">
+              {saving ? 'Saving…' : 'Save Activity'}
+            </button>
+            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="py-8 text-center text-gray-400">Loading…</div>
+      ) : activities.length === 0 ? (
+        <div className="py-8 text-center text-gray-400">No processing activities recorded yet. Add your first one above.</div>
+      ) : (
+        <div className="space-y-3">
+          {activities.map(a => (
+            <div key={a.id} className="border border-gray-200 rounded-xl p-4 bg-white">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-gray-900">{a.name}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${LAWFUL_COLORS[a.lawful_basis] || 'bg-gray-100 text-gray-600'}`}>
+                      {LAWFUL_BASIS_OPTIONS.find(o => o.value === a.lawful_basis)?.label || a.lawful_basis}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">{a.purpose}</p>
+                  <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-500">
+                    {a.data_categories?.length > 0 && <span>📂 {a.data_categories.join(', ')}</span>}
+                    {a.retention_period && <span>⏱ {a.retention_period}</span>}
+                    {a.third_countries  && <span>🌍 {a.third_countries}</span>}
+                    {a.recipients       && <span>📤 {a.recipients}</span>}
+                  </div>
+                </div>
+                <button onClick={() => del(a.id)} className="text-red-400 hover:text-red-600 text-sm shrink-0">🗑</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── GDPR Tab: Data Breach Register ────────────────────────────────────────────
+function BreachRegisterTab() {
+  const [breaches,  setBreaches]  = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [showForm,  setShowForm]  = useState(false);
+  const [selected,  setSelected]  = useState(null);
+  const [form,      setForm]      = useState({ title: '', discovered_at: '', severity: 'medium', description: '', affected_records: '', data_types_affected: '', cause: '', containment_actions: '' });
+  const [saving,    setSaving]    = useState(false);
+  const [err,       setErr]       = useState(null);
+
+  const SEV_COLORS = { low: 'bg-green-100 text-green-700', medium: 'bg-amber-100 text-amber-700', high: 'bg-orange-100 text-orange-700', critical: 'bg-red-100 text-red-700' };
+  const STATUS_COLORS = { open: 'bg-red-50 text-red-700 border-red-200', investigating: 'bg-amber-50 text-amber-700 border-amber-200', contained: 'bg-blue-50 text-blue-700 border-blue-200', closed: 'bg-green-50 text-green-700 border-green-200' };
+
+  const load = () => {
+    setLoading(true);
+    api.get('/gdpr/breaches')
+      .then(r => setBreaches(r.data))
+      .catch(e => setErr(e.response?.data?.error || e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  // Compute 72h DPA notification deadline
+  const dpaDeadline = breach => {
+    const discovered = new Date(breach.discovered_at);
+    const deadline   = new Date(discovered.getTime() + 72 * 3600 * 1000);
+    const hoursLeft  = (deadline - Date.now()) / 3600000;
+    return { deadline, hoursLeft, overdue: hoursLeft < 0 && !breach.dpa_notified };
+  };
+
+  const submit = async e => {
+    e.preventDefault(); setErr(null); setSaving(true);
+    try {
+      await api.post('/gdpr/breaches', {
+        ...form,
+        affected_records: form.affected_records ? parseInt(form.affected_records, 10) : null,
+        data_types_affected: form.data_types_affected.split(',').map(s => s.trim()).filter(Boolean),
+      });
+      setShowForm(false);
+      setForm({ title: '', discovered_at: '', severity: 'medium', description: '', affected_records: '', data_types_affected: '', cause: '', containment_actions: '' });
+      load();
+    } catch (e) { setErr(e.response?.data?.error || e.message); }
+    finally { setSaving(false); }
+  };
+
+  const markDpaNotified = async id => {
+    try { await api.patch(`/gdpr/breaches/${id}`, { dpa_notified: true, dpa_notification_at: new Date().toISOString() }); load(); }
+    catch (e) { alert(e.response?.data?.error || 'Failed'); }
+  };
+
+  const updateStatus = async (id, status) => {
+    try { await api.patch(`/gdpr/breaches/${id}`, { status }); load(); }
+    catch (e) { alert(e.response?.data?.error || 'Failed'); }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="font-semibold text-gray-900">Data Breach Register</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Art.33 GDPR — Log breaches and track 72-hour DPA notification deadline.</p>
+        </div>
+        <button onClick={() => setShowForm(v => !v)} className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 font-medium">
+          + Report Breach
+        </button>
+      </div>
+      {err && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{err}</div>}
+
+      {showForm && (
+        <form onSubmit={submit} className="mb-6 bg-red-50 border border-red-200 rounded-xl p-5 space-y-3">
+          <h4 className="font-semibold text-red-900 text-sm">Report New Breach</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Breach Title *</label>
+              <input required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Brief description of the breach"
+                value={form.title} onChange={e => setForm(v => ({ ...v, title: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Discovered At</label>
+              <input type="datetime-local" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                value={form.discovered_at} onChange={e => setForm(v => ({ ...v, discovered_at: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Severity</label>
+              <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                value={form.severity} onChange={e => setForm(v => ({ ...v, severity: e.target.value }))}>
+                {['low','medium','high','critical'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Affected Records</label>
+              <input type="number" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Estimated number"
+                value={form.affected_records} onChange={e => setForm(v => ({ ...v, affected_records: e.target.value }))} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Data Types Affected (CSV)</label>
+              <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. name, email, health data"
+                value={form.data_types_affected} onChange={e => setForm(v => ({ ...v, data_types_affected: e.target.value }))} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+              <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                value={form.description} onChange={e => setForm(v => ({ ...v, description: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50">
+              {saving ? 'Saving…' : 'Record Breach'}
+            </button>
+            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="py-8 text-center text-gray-400">Loading…</div>
+      ) : breaches.length === 0 ? (
+        <div className="py-8 text-center text-gray-400">No breaches recorded. 🎉</div>
+      ) : (
+        <div className="space-y-3">
+          {breaches.map(b => {
+            const { hoursLeft, overdue } = dpaDeadline(b);
+            return (
+              <div key={b.id} className={`border rounded-xl p-4 bg-white ${overdue ? 'border-red-400 shadow-red-100 shadow-md' : 'border-gray-200'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-900">{b.title}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SEV_COLORS[b.severity]}`}>{b.severity}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[b.status]}`}>{b.status}</span>
+                      {overdue && <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-xs font-bold animate-pulse">⚠ DPA DEADLINE OVERDUE</span>}
+                      {!b.dpa_notified && !overdue && hoursLeft < 24 && <span className="px-2 py-0.5 bg-amber-500 text-white rounded-full text-xs font-semibold">{Math.round(hoursLeft)}h until DPA deadline</span>}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-500">
+                      <span>📅 Discovered: {new Date(b.discovered_at).toLocaleDateString()}</span>
+                      {b.affected_records && <span>👥 {b.affected_records.toLocaleString()} records</span>}
+                      <span className={b.dpa_notified ? 'text-green-600' : 'text-red-500'}>
+                        {b.dpa_notified ? `✓ DPA notified ${new Date(b.dpa_notification_at).toLocaleDateString()}` : '✗ DPA not yet notified'}
+                      </span>
+                    </div>
+                    {b.description && <p className="text-xs text-gray-500 mt-1">{b.description}</p>}
+                  </div>
+                  <div className="flex flex-col gap-1 shrink-0">
+                    {!b.dpa_notified && (
+                      <button onClick={() => markDpaNotified(b.id)} className="px-3 py-1 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                        Mark DPA Notified
+                      </button>
+                    )}
+                    {b.status === 'open' && (
+                      <button onClick={() => updateStatus(b.id, 'investigating')} className="px-3 py-1 text-xs bg-amber-500 text-white rounded-lg hover:bg-amber-600">
+                        Start Investigation
+                      </button>
+                    )}
+                    {b.status === 'investigating' && (
+                      <button onClick={() => updateStatus(b.id, 'contained')} className="px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                        Mark Contained
+                      </button>
+                    )}
+                    {b.status === 'contained' && (
+                      <button onClick={() => updateStatus(b.id, 'closed')} className="px-3 py-1 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700">
+                        Close
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── GDPR Tab: DPO + Settings ──────────────────────────────────────────────────
+function GdprSettingsTab() {
+  const [settings, setSettings] = useState({});
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+  const [saved,    setSaved]    = useState(false);
+  const [err,      setErr]      = useState(null);
+
+  useEffect(() => {
+    api.get('/gdpr/settings')
+      .then(r => setSettings(r.data || {}))
+      .catch(e => setErr(e.response?.data?.error || e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const save = async e => {
+    e.preventDefault(); setErr(null); setSaving(true); setSaved(false);
+    try {
+      await api.put('/gdpr/settings', settings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) { setErr(e.response?.data?.error || e.message); }
+    finally { setSaving(false); }
+  };
+
+  const f = (key, label, type = 'text', placeholder = '') => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <input type={type} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
+        placeholder={placeholder}
+        value={settings[key] || ''}
+        onChange={e => setSettings(v => ({ ...v, [key]: e.target.value }))} />
+    </div>
+  );
+
+  if (loading) return <div className="py-8 text-center text-gray-400">Loading…</div>;
+
+  return (
+    <form onSubmit={save} className="space-y-6 max-w-2xl">
+      {err && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{err}</div>}
+      {saved && <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg">✓ GDPR settings saved</div>}
+
+      {/* DPO */}
+      <div>
+        <h4 className="font-semibold text-gray-900 mb-3">Data Protection Officer (Art.37)</h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {f('dpo_name',  'DPO Full Name',  'text', 'Jane Smith')}
+          {f('dpo_email', 'DPO Email',      'email', 'dpo@company.com')}
+          {f('dpo_phone', 'DPO Phone',      'tel',   '+44 20 1234 5678')}
+        </div>
+      </div>
+
+      {/* Lawful basis defaults */}
+      <div>
+        <h4 className="font-semibold text-gray-900 mb-3">Processing Defaults (Art.13)</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Default Lawful Basis</label>
+            <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              value={settings.lawful_basis_default || 'legitimate_interests'}
+              onChange={e => setSettings(v => ({ ...v, lawful_basis_default: e.target.value }))}>
+              {[
+                ['consent',              'Consent'],
+                ['contract',             'Contract'],
+                ['legal_obligation',     'Legal Obligation'],
+                ['vital_interests',      'Vital Interests'],
+                ['public_task',          'Public Task'],
+                ['legitimate_interests', 'Legitimate Interests'],
+              ].map(([val, lbl]) => <option key={val} value={val}>{lbl}</option>)}
+            </select>
+          </div>
+          {f('consent_expiry_days', 'Consent Expiry (days)', 'number', '365')}
+        </div>
+      </div>
+
+      {/* Cross-border transfers */}
+      <div>
+        <h4 className="font-semibold text-gray-900 mb-3">Cross-Border Transfers (Art.46)</h4>
+        <div className="flex items-center gap-3 mb-2">
+          <input type="checkbox" id="cbTransfer" checked={!!settings.cross_border_transfer}
+            onChange={e => setSettings(v => ({ ...v, cross_border_transfer: e.target.checked }))}
+            className="h-4 w-4 text-purple-600 rounded" />
+          <label htmlFor="cbTransfer" className="text-sm text-gray-700">Personal data is transferred to countries outside the EEA</label>
+        </div>
+        {settings.cross_border_transfer && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Transfer details and safeguards</label>
+            <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              placeholder="e.g. USA via Standard Contractual Clauses (SCCs)"
+              value={settings.cross_border_details || ''}
+              onChange={e => setSettings(v => ({ ...v, cross_border_details: e.target.value }))} />
+          </div>
+        )}
+      </div>
+
+      {/* Privacy notice */}
+      <div>
+        <h4 className="font-semibold text-gray-900 mb-3">Privacy Notice</h4>
+        {f('privacy_notice_url', 'Privacy Notice URL', 'url', 'https://company.com/privacy')}
+        <div className="mt-2 flex items-center gap-3">
+          <input type="checkbox" id="gdprEnabled" checked={!!settings.gdpr_enabled}
+            onChange={e => setSettings(v => ({ ...v, gdpr_enabled: e.target.checked }))}
+            className="h-4 w-4 text-purple-600 rounded" />
+          <label htmlFor="gdprEnabled" className="text-sm text-gray-700">GDPR mode enabled — show GDPR-specific notices to employees</label>
+        </div>
+      </div>
+
+      <button type="submit" disabled={saving}
+        className="px-6 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium text-sm">
+        {saving ? 'Saving…' : 'Save GDPR Settings'}
+      </button>
+    </form>
+  );
+}
+
 const TABS = [
-  { id: 'requests',   label: '📬 Requests Queue' },
-  { id: 'export',     label: '⬇ Data Export' },
-  { id: 'erasure',    label: '🗑 Right to Erase' },
-  { id: 'correction', label: '✏️ Data Correction' },
+  { id: 'requests',       label: '📬 Requests Queue' },
+  { id: 'export',         label: '⬇ Data Export' },
+  { id: 'erasure',        label: '🗑 Right to Erase' },
+  { id: 'correction',     label: '✏️ Data Correction' },
+  { id: 'ropa',           label: '📋 Processing Activities' },
+  { id: 'breaches',       label: '🚨 Breach Register' },
+  { id: 'gdpr_settings',  label: '⚙️ GDPR Settings' },
 ];
 
 export default function Privacy() {
@@ -479,10 +921,13 @@ export default function Privacy() {
           </div>
         </div>
         <div className="p-6">
-          {activeTab === 'requests'   && <RequestsTab />}
-          {activeTab === 'export'     && <ExportTab employees={employees} />}
-          {activeTab === 'erasure'    && <ErasureTab employees={employees} onRefresh={refresh} />}
-          {activeTab === 'correction' && <CorrectionTab employees={employees} onRefresh={refresh} />}
+          {activeTab === 'requests'      && <RequestsTab />}
+          {activeTab === 'export'        && <ExportTab employees={employees} />}
+          {activeTab === 'erasure'       && <ErasureTab employees={employees} onRefresh={refresh} />}
+          {activeTab === 'correction'    && <CorrectionTab employees={employees} onRefresh={refresh} />}
+          {activeTab === 'ropa'          && <RopaTab />}
+          {activeTab === 'breaches'      && <BreachRegisterTab />}
+          {activeTab === 'gdpr_settings' && <GdprSettingsTab />}
         </div>
       </div>
     </div>

@@ -161,6 +161,7 @@ const AdminEEO              = lazy(() => import('./pages/admin/EEO'));
 const AdminPrivacy          = lazy(() => import('./pages/admin/Privacy'));
 const AdminIntegrations     = lazy(() => import('./pages/admin/Integrations'));
 const AdminAccessReview     = lazy(() => import('./pages/admin/AccessReview'));
+const AdminAuditLog         = lazy(() => import('./pages/admin/AuditLog'));
 
 // Field Ops pages
 const FieldScan       = lazy(() => import('./pages/agrow/FieldScan'));
@@ -192,6 +193,9 @@ const AdminRecruiters    = lazy(() => import('./pages/admin/Recruiters'));
 
 // C2C Jobs for candidates
 const CandidateC2CJobs = lazy(() => import('./pages/candidate/C2CJobs'));
+
+// Employee self-service GDPR portal
+const MyData = lazy(() => import('./pages/employee/MyData'));
 
 // Super-admin pages
 const SuperAdminDashboard        = lazy(() => import('./pages/superadmin/Dashboard'));
@@ -395,6 +399,7 @@ function AppRoutes() {
         <Route path="privacy"      element={<PrivateRoute adminOnly><Lazy><AdminPrivacy /></Lazy></PrivateRoute>} />
         <Route path="integrations"  element={<PrivateRoute adminOnly><Lazy><AdminIntegrations /></Lazy></PrivateRoute>} />
         <Route path="access-review" element={<PrivateRoute adminOnly><Lazy><AdminAccessReview /></Lazy></PrivateRoute>} />
+        <Route path="audit-log"     element={<PrivateRoute adminOnly><Lazy><AdminAuditLog /></Lazy></PrivateRoute>} />
         <Route path="import"    element={<ModuleRoute moduleKey="hr_import"  adminOnly><Lazy><AdminImport /></Lazy></ModuleRoute>} />
         <Route path="settings" element={<PrivateRoute adminOnly><Lazy><AdminSettings /></Lazy></PrivateRoute>} />
 
@@ -419,6 +424,7 @@ function AppRoutes() {
         <Route path="my-absences"  element={<PrivateRoute><Lazy><MyAbsences /></Lazy></PrivateRoute>} />
         <Route path="my-invoices"  element={<PrivateRoute><Lazy><MyInvoices /></Lazy></PrivateRoute>} />
         <Route path="my-resume"    element={<PrivateRoute><Lazy><MyResume /></Lazy></PrivateRoute>} />
+        <Route path="my-data"      element={<PrivateRoute><Lazy><MyData /></Lazy></PrivateRoute>} />
 
         {/* Support */}
         <Route path="support"       element={<ModuleRoute moduleKey="hr_support"><Lazy><Support /></Lazy></ModuleRoute>} />
