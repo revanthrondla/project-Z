@@ -1920,38 +1920,64 @@ function OrgSetupTab() {
 
 // ── Tab: Custom Fields ────────────────────────────────────────────────────────
 
-const FIELD_TYPES = [
-  { value: 'text',           label: 'Text' },
-  { value: 'rich_text',      label: 'Rich Text' },
-  { value: 'number',         label: 'Number' },
-  { value: 'date',           label: 'Date' },
-  { value: 'select',         label: 'Dropdown (Select)' },
-  { value: 'radio',          label: 'Radio Buttons' },
-  { value: 'checkbox',       label: 'Single Checkbox' },
-  { value: 'multi_checkbox', label: 'Multiple Checkboxes' },
+const CF_MODULES = [
+  { key: 'employees',   label: '👥 Employees',   desc: 'Employee profiles & hire forms' },
+  { key: 'timesheets',  label: '⏱️ Timesheets',  desc: 'Time entry records' },
+  { key: 'absences',    label: '🏖️ Absences',    desc: 'Leave & absence records' },
+  { key: 'invoices',    label: '📄 Invoices',    desc: 'Invoice records' },
+  { key: 'clients',     label: '🏢 Clients',     desc: 'Client company profiles' },
+  { key: 'projects',    label: '📁 Projects',    desc: 'Project records' },
+  { key: 'expenses',    label: '🧾 Expenses',    desc: 'Expense claims' },
+  { key: 'contractors', label: '🤝 Contractors', desc: 'Contractor records' },
+  { key: 'jobs',        label: '💼 Jobs',        desc: 'Job postings' },
 ];
-const OPTION_TYPES = ['select', 'radio', 'multi_checkbox'];
+
+const FIELD_TYPES = [
+  { value: 'text',        label: '📝 Single-line Text',         group: 'Text' },
+  { value: 'textarea',    label: '📄 Multi-line Text',          group: 'Text' },
+  { value: 'number',      label: '🔢 Number',                   group: 'Numeric' },
+  { value: 'currency',    label: '💰 Currency / Money',         group: 'Numeric' },
+  { value: 'select',      label: '▽ Dropdown (Single Select)', group: 'Selection' },
+  { value: 'multiselect', label: '☑ Multi-select Dropdown',    group: 'Selection' },
+  { value: 'checkbox',    label: '✅ Checkbox (Yes / No)',      group: 'Selection' },
+  { value: 'date',        label: '📅 Date',                     group: 'Date & Time' },
+  { value: 'datetime',    label: '🕐 Date & Time',              group: 'Date & Time' },
+  { value: 'lookup',      label: '↗ Lookup / Relation',        group: 'Advanced' },
+  { value: 'formula',     label: 'ƒ Formula / Calculated',     group: 'Advanced' },
+];
+
+const LOOKUP_MODULES = [
+  { value: 'employees',   label: 'Employees' },
+  { value: 'clients',     label: 'Clients' },
+  { value: 'projects',    label: 'Projects' },
+  { value: 'jobs',        label: 'Jobs' },
+  { value: 'contractors', label: 'Contractors' },
+];
+
+const OPTION_TYPES = ['select', 'multiselect'];
 const MAX_CUSTOM_FIELDS = 10;
 
 const EMPTY_FIELD_FORM = {
   label: '', field_key: '', field_type: 'text',
   options: [],
+  lookup_config: { module: 'employees' },
   placeholder: '', help_text: '', formula: '',
   validation: { required: false, minLength: '', maxLength: '', min: '', max: '', pattern: '', patternMsg: '' },
 };
 
-function CustomFieldModal({ field, onSave, onClose }) {
+function CustomFieldModal({ field, module: cfModule, onSave, onClose }) {
   const isEdit = !!field?.id;
   const [form, setForm]   = useState(() => {
     if (!field) return EMPTY_FIELD_FORM;
     return {
-      label:       field.label       || '',
-      field_key:   field.field_key   || '',
-      field_type:  field.field_type  || 'text',
-      options:     Array.isArray(field.options) ? field.options : [],
-      placeholder: field.placeholder || '',
-      help_text:   field.help_text   || '',
-      formula:     field.formula     || '',
+      label:         field.label         || '',
+      field_key:     field.field_key     || '',
+      field_type:    field.field_type    || 'text',
+      options:       Array.isArray(field.options) ? field.options : [],
+      lookup_config: field.lookup_config || { module: 'employees' },
+      placeholder:   field.placeholder   || '',
+      help_text:     field.help_text     || '',
+      formula:       field.formula       || '',
       validation: {
         required:   field.validation?.required   || false,
         minLength:  field.validation?.minLength  || '',
@@ -1994,20 +2020,22 @@ function CustomFieldModal({ field, onSave, onClose }) {
       if (v.patternMsg!== '')      validation.patternMsg = v.patternMsg;
 
       const payload = {
-        label:       form.label.trim(),
-        field_key:   form.field_key.trim() || undefined,
-        field_type:  form.field_type,
-        options:     OPTION_TYPES.includes(form.field_type) ? form.options : [],
-        placeholder: form.placeholder.trim() || null,
-        help_text:   form.help_text.trim()   || null,
-        formula:     form.formula.trim()     || null,
+        label:         form.label.trim(),
+        field_key:     form.field_key.trim() || undefined,
+        field_type:    form.field_type,
+        options:       OPTION_TYPES.includes(form.field_type) ? form.options : [],
+        lookup_config: form.field_type === 'lookup' ? form.lookup_config : null,
+        placeholder:   form.placeholder.trim() || null,
+        help_text:     form.help_text.trim()   || null,
+        formula:       ['formula'].includes(form.field_type) || form.formula.trim()
+                         ? form.formula.trim() || null : null,
         validation,
       };
 
       if (isEdit) {
-        await api.put(`/api/custom-fields/${field.id}`, payload);
+        await api.put(`/api/custom-fields/${cfModule}/defs/${field.id}`, payload);
       } else {
-        await api.post('/api/custom-fields', payload);
+        await api.post(`/api/custom-fields/${cfModule}/defs`, payload);
       }
       onSave();
     } catch (err) {
@@ -2055,7 +2083,20 @@ function CustomFieldModal({ field, onSave, onClose }) {
               placeholder="auto_generated_from_label" pattern="[a-z][a-z0-9_]*" title="Lowercase letters, numbers, underscores only" />
           </div>
 
-          {/* Options (for select, radio, multi_checkbox) */}
+          {/* Lookup config */}
+          {form.field_type === 'lookup' && (
+            <div>
+              <label className="label">Lookup Module <span className="text-red-500">*</span></label>
+              <select className="input" value={form.lookup_config?.module || 'employees'}
+                onChange={e => set('lookup_config', { module: e.target.value })}
+              >
+                {LOOKUP_MODULES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Users will pick a record from this module.</p>
+            </div>
+          )}
+
+          {/* Options (for select, multiselect) */}
           {needsOptions && (
             <div>
               <label className="label">Options <span className="text-red-500">*</span></label>
@@ -2086,16 +2127,23 @@ function CustomFieldModal({ field, onSave, onClose }) {
             </div>
           </div>
 
-          {/* Formula */}
-          <div>
-            <label className="label">
-              Formula
-              <span className="text-xs text-gray-400 font-normal ml-1">(makes field computed / read-only)</span>
-            </label>
-            <input className="input font-mono text-sm" value={form.formula} onChange={e => set('formula', e.target.value)}
-              placeholder="e.g. {hours} * {hourly_rate}" />
-            <p className="text-xs text-gray-400 mt-1">Reference other field keys inside curly braces. Supports + − × ÷ and parentheses.</p>
-          </div>
+          {/* Formula (for formula type or any field with formula set) */}
+          {(form.field_type === 'formula' || form.formula) && (
+            <div>
+              <label className="label">
+                Formula expression
+                {form.field_type !== 'formula' && (
+                  <span className="text-xs text-gray-400 font-normal ml-1">(makes field computed / read-only)</span>
+                )}
+              </label>
+              <input className="input font-mono text-sm" value={form.formula} onChange={e => set('formula', e.target.value)}
+                placeholder="e.g. {hours} * {hourly_rate}" required={form.field_type === 'formula'} />
+              <p className="text-xs text-gray-400 mt-1">
+                Reference other field keys in curly braces. Supports +, −, ×, ÷, and parentheses.
+                Example: <code className="bg-gray-100 px-1 rounded">{'{hours}'} * {'{rate}'}</code>
+              </p>
+            </div>
+          )}
 
           {/* Validation */}
           <div className="bg-gray-50 rounded-xl p-4 space-y-3">
@@ -2156,57 +2204,51 @@ function CustomFieldModal({ field, onSave, onClose }) {
   );
 }
 
-function CustomFieldsTab() {
-  const [fields, setFields]     = useState([]);
-  const [loading, setLoading]   = useState(true);
+// ── Per-module field list ──────────────────────────────────────────────────────
+function ModuleFieldList({ module: cfModule }) {
+  const [fields,    setFields]    = useState([]);
+  const [loading,   setLoading]   = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing]   = useState(null);
-  const [error, setError]       = useState('');
-  const [success, setSuccess]   = useState('');
-  const [dragging, setDragging] = useState(null); // id being dragged
+  const [editing,   setEditing]   = useState(null);
+  const [error,     setError]     = useState('');
+  const [success,   setSuccess]   = useState('');
+  const [dragging,  setDragging]  = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    api.get('/api/custom-fields')
+    api.get(`/api/custom-fields/${cfModule}/defs`)
       .then(r => setFields(Array.isArray(r.data) ? r.data : []))
       .catch(() => setError('Failed to load custom fields'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [cfModule]);
 
   useEffect(() => { load(); }, [load]);
 
   const openCreate = () => { setEditing(null); setShowModal(true); };
-  const openEdit   = (f) => { setEditing(f);    setShowModal(true); };
+  const openEdit   = (f) => { setEditing(f);   setShowModal(true); };
 
   const handleSave = () => {
     setShowModal(false);
-    setSuccess('Custom field saved successfully');
-    setTimeout(() => setSuccess(''), 4000);
+    setSuccess('Saved');
+    setTimeout(() => setSuccess(''), 3000);
     load();
   };
 
   const handleToggle = async (field) => {
     try {
-      await api.put(`/api/custom-fields/${field.id}`, { is_active: !field.is_active });
+      await api.put(`/api/custom-fields/${cfModule}/defs/${field.id}`, { is_active: !field.is_active });
       load();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to update field');
-    }
+    } catch (err) { setError(err.response?.data?.error || 'Failed to update'); }
   };
 
   const handleDelete = async (field) => {
-    if (!confirm(`Deactivate "${field.label}"? Existing employee data for this field is preserved.`)) return;
+    if (!confirm(`Deactivate "${field.label}"? Existing data is preserved.`)) return;
     try {
-      await api.delete(`/api/custom-fields/${field.id}`);
-      setSuccess('Field deactivated');
-      setTimeout(() => setSuccess(''), 3000);
-      load();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to deactivate field');
-    }
+      await api.delete(`/api/custom-fields/${cfModule}/defs/${field.id}`);
+      setSuccess('Deactivated'); setTimeout(() => setSuccess(''), 3000); load();
+    } catch (err) { setError(err.response?.data?.error || 'Failed to deactivate'); }
   };
 
-  // Drag-and-drop reorder
   const handleDragStart = (e, id) => { setDragging(id); e.dataTransfer.effectAllowed = 'move'; };
   const handleDragOver  = (e, id) => {
     e.preventDefault();
@@ -2215,137 +2257,147 @@ function CustomFieldsTab() {
       const from = prev.findIndex(f => f.id === dragging);
       const to   = prev.findIndex(f => f.id === id);
       if (from < 0 || to < 0) return prev;
-      const next = [...prev];
-      const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
-      return next;
+      const next = [...prev]; const [item] = next.splice(from, 1); next.splice(to, 0, item); return next;
     });
   };
   const handleDragEnd = async () => {
     setDragging(null);
     try {
-      const order = fields.map((f, i) => ({ id: f.id, display_order: i }));
-      await api.patch('/api/custom-fields/reorder', { order });
-    } catch {
-      setError('Failed to save new order');
-      load();
-    }
+      await api.patch(`/api/custom-fields/${cfModule}/defs/reorder`,
+        { order: fields.map((f, i) => ({ id: f.id, display_order: i })) });
+    } catch { setError('Failed to save order'); load(); }
   };
 
-  const activeCount   = fields.filter(f => f.is_active).length;
-  const canAddMore    = activeCount < MAX_CUSTOM_FIELDS;
+  const activeCount = fields.filter(f => f.is_active).length;
+  const canAddMore  = activeCount < MAX_CUSTOM_FIELDS;
 
-  if (loading) return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"/></div>;
+  if (loading) return <div className="flex items-center justify-center h-32"><div className="animate-spin rounded-full h-7 w-7 border-b-2 border-emerald-600"/></div>;
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="space-y-4">
       <Banner type="error"   message={error}   onClose={() => setError('')} />
       <Banner type="success" message={success} />
 
-      {/* Header */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h2 className="text-base font-semibold text-gray-800">Custom Employee Fields</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Add up to {MAX_CUSTOM_FIELDS} custom fields that appear on all employee forms and in CSV import templates.
-              Drag rows to reorder.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className={`text-sm font-medium px-2.5 py-1 rounded-full ${activeCount >= MAX_CUSTOM_FIELDS ? 'bg-amber-100 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-              {activeCount} / {MAX_CUSTOM_FIELDS} active
-            </span>
-            <button
-              onClick={openCreate}
-              disabled={!canAddMore}
-              className="btn-primary px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              title={!canAddMore ? `Maximum ${MAX_CUSTOM_FIELDS} active fields reached` : ''}
-            >
-              + Add Field
-            </button>
-          </div>
-        </div>
+      <div className="flex items-center justify-between">
+        <span className={`text-sm font-medium px-2.5 py-1 rounded-full ${
+          activeCount >= MAX_CUSTOM_FIELDS ? 'bg-amber-100 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+        }`}>
+          {activeCount} / {MAX_CUSTOM_FIELDS} active fields
+        </span>
+        <button onClick={openCreate} disabled={!canAddMore}
+          className="btn-primary px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          title={!canAddMore ? `Maximum ${MAX_CUSTOM_FIELDS} fields reached` : ''}
+        >
+          + Add Field
+        </button>
+      </div>
 
-        {fields.length === 0 ? (
-          <div className="text-center py-10 text-gray-400">
-            <div className="text-4xl mb-2">🗂️</div>
-            <p className="text-sm">No custom fields yet. Click "Add Field" to create your first one.</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {fields.map(f => (
-              <div
-                key={f.id}
-                draggable
+      {fields.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <div className="text-4xl mb-2">🗂️</div>
+          <p className="text-sm">No custom fields yet. Click "Add Field" to create your first one.</p>
+          <p className="text-xs mt-1">These fields will appear on all {cfModule} forms automatically.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {fields.map(f => {
+            const typeInfo = FIELD_TYPES.find(t => t.value === f.field_type);
+            return (
+              <div key={f.id} draggable
                 onDragStart={e => handleDragStart(e, f.id)}
                 onDragOver={e  => handleDragOver(e, f.id)}
                 onDragEnd={handleDragEnd}
                 className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-grab active:cursor-grabbing ${
-                  dragging === f.id ? 'opacity-40 border-dashed' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                } ${!f.is_active ? 'bg-gray-50 opacity-60' : 'bg-white'}`}
+                  dragging === f.id ? 'opacity-40 border-dashed border-gray-400' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm bg-white'
+                } ${!f.is_active ? 'opacity-50' : ''}`}
               >
-                {/* Drag handle */}
                 <span className="text-gray-300 text-lg select-none">⠿</span>
-
-                {/* Field info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm text-gray-800 truncate">{f.label}</span>
-                    {!f.is_active && <span className="text-xs text-gray-400 shrink-0">inactive</span>}
-                    {f.formula && <span className="text-xs text-blue-500 shrink-0">ƒ formula</span>}
+                    {!f.is_active && <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">inactive</span>}
+                    {(f.field_type === 'formula' || f.formula) && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">ƒ formula</span>}
+                    {f.validation?.required && <span className="text-xs bg-red-50 text-red-500 px-1.5 py-0.5 rounded-full">required</span>}
                   </div>
                   <div className="flex items-center gap-3 mt-0.5">
-                    <span className="text-xs text-gray-400 font-mono">{f.field_key}</span>
-                    <span className="text-xs text-gray-500 capitalize">{FIELD_TYPES.find(t=>t.value===f.field_type)?.label || f.field_type}</span>
-                    {f.validation?.required && <span className="text-xs text-red-400">required</span>}
+                    <code className="text-xs text-gray-400">{f.field_key}</code>
+                    <span className="text-xs text-gray-500">{typeInfo?.label || f.field_type}</span>
+                    {f.lookup_config?.module && (
+                      <span className="text-xs text-purple-500">→ {f.lookup_config.module}</span>
+                    )}
                   </div>
                 </div>
-
-                {/* Actions */}
                 <div className="flex items-center gap-1 shrink-0">
-                  {/* Toggle active */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggle(f)}
-                    title={f.is_active ? 'Deactivate' : 'Activate'}
+                  <button type="button" onClick={() => handleToggle(f)}
                     className={`px-2 py-1 text-xs rounded-full border font-medium transition-colors ${
-                      f.is_active
-                        ? 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
-                        : 'border-gray-200  text-gray-500     hover:bg-gray-50'
+                      f.is_active ? 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                                  : 'border-gray-200 text-gray-500 hover:bg-gray-50'
                     }`}
-                  >
-                    {f.is_active ? 'Active' : 'Inactive'}
-                  </button>
+                  >{f.is_active ? 'Active' : 'Inactive'}</button>
                   <button type="button" onClick={() => openEdit(f)}
-                    className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
-                    ✏️
-                  </button>
+                    className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg" title="Edit">✏️</button>
                   <button type="button" onClick={() => handleDelete(f)}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Deactivate">
-                    🗑️
-                  </button>
+                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg" title="Deactivate">🗑️</button>
                 </div>
               </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showModal && (
+        <CustomFieldModal field={editing} module={cfModule} onSave={handleSave} onClose={() => setShowModal(false)} />
+      )}
+    </div>
+  );
+}
+
+function CustomFieldsTab() {
+  const [activeModule, setActiveModule] = useState('employees');
+  const mod = CF_MODULES.find(m => m.key === activeModule);
+
+  return (
+    <div className="max-w-4xl space-y-5">
+      {/* Header */}
+      <div>
+        <h2 className="text-base font-semibold text-gray-800">Custom Fields</h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Configure up to {MAX_CUSTOM_FIELDS} custom fields per module. Fields appear on every form and are available in reports.
+        </p>
+      </div>
+
+      {/* Module selector */}
+      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        {/* Module tabs — scrollable */}
+        <div className="overflow-x-auto border-b border-gray-200">
+          <div className="flex min-w-max">
+            {CF_MODULES.map(m => (
+              <button key={m.key} onClick={() => setActiveModule(m.key)}
+                className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                  activeModule === m.key
+                    ? 'border-emerald-500 text-emerald-700 bg-emerald-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {m.label}
+              </button>
             ))}
           </div>
-        )}
+        </div>
+
+        {/* Module description + field list */}
+        <div className="p-6">
+          <p className="text-xs text-gray-400 mb-4">{mod?.desc} — fields added here appear on every {activeModule.slice(0,-1)} record form.</p>
+          <ModuleFieldList key={activeModule} module={activeModule} />
+        </div>
       </div>
 
       {/* Usage hint */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
-        <strong>How custom fields work:</strong> these fields appear in the Add/Edit Employee form and in the CSV download template.
-        Multi-checkbox values are stored as pipe-separated values in CSV (e.g. <code className="bg-blue-100 px-1 rounded">value1|value2</code>).
-        Fields with a formula are automatically calculated and shown as read-only.
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700 leading-relaxed">
+        <strong>How custom fields work:</strong> once configured, fields render automatically in each module's add/edit forms.
+        Formula fields compute their value from other custom field keys using <code className="bg-blue-100 px-1 rounded">{'{field_key}'}</code> syntax.
+        Lookup fields let users pick a related record from another module. All custom field values are reportable via the Reports page.
       </div>
-
-      {showModal && (
-        <CustomFieldModal
-          field={editing}
-          onSave={handleSave}
-          onClose={() => setShowModal(false)}
-        />
-      )}
     </div>
   );
 }

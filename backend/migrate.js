@@ -785,6 +785,114 @@ const MIGRATIONS = [
     },
   },
   {
+    id: 20,
+    scope: 'tenant',
+    description: 'Multi-module custom fields: custom_field_defs + custom_field_values + migrate employee data',
+    async up(client) {
+      // ── New generic custom field definitions (module-scoped, up to 10 per module) ─
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS custom_field_defs (
+          id            BIGSERIAL PRIMARY KEY,
+          module        TEXT NOT NULL,
+          field_key     TEXT NOT NULL,
+          label         TEXT NOT NULL,
+          field_type    TEXT NOT NULL DEFAULT 'text'
+                        CHECK(field_type IN (
+                          'text','textarea','number','currency',
+                          'select','multiselect','checkbox',
+                          'date','datetime','lookup','formula'
+                        )),
+          options       JSONB NOT NULL DEFAULT '[]',
+          lookup_config JSONB,
+          formula       TEXT,
+          placeholder   TEXT,
+          help_text     TEXT,
+          validation    JSONB NOT NULL DEFAULT '{}',
+          display_order INTEGER NOT NULL DEFAULT 0,
+          is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at    TIMESTAMPTZ DEFAULT NOW(),
+          updated_at    TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(module, field_key)
+        )
+      `);
+
+      // ── New generic custom field values ──────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS custom_field_values (
+          id         BIGSERIAL PRIMARY KEY,
+          module     TEXT NOT NULL,
+          record_id  BIGINT NOT NULL,
+          field_key  TEXT NOT NULL,
+          value_text TEXT,
+          value_json JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(module, record_id, field_key)
+        )
+      `);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_cfd_module_active ON custom_field_defs(module, is_active)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_cfv_module_record ON custom_field_values(module, record_id)`);
+
+      // ── Migrate existing employee_custom_field_defs → custom_field_defs ─────────
+      // Map old field types to new ones; preserve all other columns.
+      const defsExist = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'employee_custom_field_defs'
+      `);
+      if (defsExist.rowCount > 0) {
+        await client.query(`
+          INSERT INTO custom_field_defs
+            (module, field_key, label, field_type, options, formula, placeholder,
+             help_text, validation, display_order, is_active, created_at, updated_at)
+          SELECT
+            'employees',
+            field_key,
+            label,
+            CASE field_type
+              WHEN 'rich_text'      THEN 'textarea'
+              WHEN 'radio'          THEN 'select'
+              WHEN 'multi_checkbox' THEN 'multiselect'
+              ELSE field_type
+            END,
+            COALESCE(options,    '[]'::jsonb),
+            formula,
+            placeholder,
+            help_text,
+            COALESCE(validation, '{}'::jsonb),
+            display_order,
+            is_active,
+            created_at,
+            updated_at
+          FROM employee_custom_field_defs
+          ON CONFLICT (module, field_key) DO NOTHING
+        `);
+
+        // ── Migrate existing employee_custom_field_values → custom_field_values ───
+        const valsExist = await client.query(`
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'employee_custom_field_values'
+        `);
+        if (valsExist.rowCount > 0) {
+          await client.query(`
+            INSERT INTO custom_field_values
+              (module, record_id, field_key, value_text, value_json, created_at, updated_at)
+            SELECT
+              'employees',
+              candidate_id,
+              v.field_key,
+              v.value_text,
+              v.value_json,
+              COALESCE(v.updated_at, NOW()),
+              COALESCE(v.updated_at, NOW())
+            FROM employee_custom_field_values v
+            ON CONFLICT (module, record_id, field_key) DO NOTHING
+          `);
+        }
+      }
+    },
+  },
+  {
     id: 12,
     scope: 'tenant',
     description: 'Add client approval fields to time_entries',

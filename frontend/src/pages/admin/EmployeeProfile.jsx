@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import api from '../../api';
+import CustomFieldsPanel from '../../components/CustomFieldsPanel';
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -2245,10 +2246,23 @@ function DocumentsPanel({ empId }) {
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
+// ── Custom Fields panel for employees ────────────────────────────────────────
+function EmployeeCustomFieldsPanel({ empId }) {
+  const numId = parseInt(empId, 10);
+  if (!numId) return null;
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-6">
+      <h3 className="text-sm font-semibold text-gray-800 mb-4">🗂️ Custom Fields</h3>
+      <CustomFieldsPanel module="employees" recordId={numId} />
+    </div>
+  );
+}
+
 const TABS = [
   { id: 'personal',    label: '🧑 Personal Info',    component: PersonalInfoPanel },
   { id: 'employment',  label: '💼 Employment Info',  component: EmploymentInfoPanel },
   { id: 'documents',   label: '📁 Documents',        component: DocumentsPanel },
+  { id: 'custom',      label: '🗂️ Custom Fields',    component: null }, // rendered separately
 ];
 
 export default function EmployeeProfile() {
@@ -2272,20 +2286,21 @@ export default function EmployeeProfile() {
     setSearchParams({ tab: tabId }, { replace: true });
   };
 
-  const TabComponent = TABS.find(t => t.id === activeTab)?.component || PersonalInfoPanel;
+  const activeTabDef = TABS.find(t => t.id === activeTab) || TABS[0];
+  const TabComponent = activeTabDef.component;
 
   return (
     <div className="space-y-6">
       <ProfileHeader empId={id} />
 
-      {/* Tab bar — 3 top-level groups */}
+      {/* Tab bar */}
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-gray-200 overflow-x-auto">
           {TABS.map(tab => (
             <button
               key={tab.id}
               onClick={() => switchTab(tab.id)}
-              className={`flex-1 px-6 py-3.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              className={`flex-1 px-5 py-3.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-green-500 text-green-700 bg-green-50'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -2296,7 +2311,10 @@ export default function EmployeeProfile() {
           ))}
         </div>
         <div className="p-6">
-          <TabComponent empId={id} />
+          {activeTab === 'custom'
+            ? <EmployeeCustomFieldsPanel empId={id} />
+            : TabComponent ? <TabComponent empId={id} /> : null
+          }
         </div>
       </div>
     </div>
