@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
+import CustomFieldsPanel from '../../components/CustomFieldsPanel';
 
 function StatusBadge({ status }) {
   return <span className={`badge-${status}`}>{status}</span>;
@@ -122,6 +123,13 @@ function EntryModal({ entry, employees = [], projects = [], onClose, onSaved }) 
               <label className="label">Billing Notes</label>
               <input type="text" className="input" value={form.billing_notes}
                 onChange={e => set('billing_notes', e.target.value)} placeholder="Optional billing note for invoice" />
+            </div>
+          )}
+
+          {isEdit && entry?.id && (
+            <div className="border-t border-gray-100 pt-4 mt-2">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Custom Fields</h4>
+              <CustomFieldsPanel module="timesheets" recordId={entry.id} />
             </div>
           )}
 

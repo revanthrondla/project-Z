@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api';
+import CustomFieldsPanel from '../../components/CustomFieldsPanel';
 
 const CONTRACT_TYPES = ['contractor', 'employee', 'part-time'];
 const STATUS_OPTIONS = ['open', 'draft', 'closed'];
@@ -296,6 +297,12 @@ export default function AdminJobs() {
                   <input type="number" min="0" step="0.01" value={form.hourly_rate_max} onChange={e => setForm(f => ({ ...f, hourly_rate_max: e.target.value }))} placeholder="120" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
                 </div>
               </div>
+              {editJob?.id && (
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-sm font-medium text-gray-500 mb-3">Custom Fields</p>
+                  <CustomFieldsPanel module="jobs" recordId={editJob.id} />
+                </div>
+              )}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
                 <button type="submit" disabled={saving} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60">

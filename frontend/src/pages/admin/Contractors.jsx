@@ -5,6 +5,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
+import CustomFieldsPanel from '../../components/CustomFieldsPanel';
 
 const CLASSIFICATION_COLORS = {
   contractor:     'bg-blue-100 text-blue-700',
@@ -202,6 +203,12 @@ function ContractorDrawer({ contractor, onClose, onSaved }) {
           <div>
             <label className="label">Internal Notes</label>
             <textarea className="input" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
+          </div>
+
+          {/* Custom Fields */}
+          <div className="border-t border-gray-100 pt-4">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Custom Fields</h4>
+            <CustomFieldsPanel module="contractors" recordId={contractor.id} />
           </div>
 
           <div className="flex justify-end gap-3 sticky bottom-0 bg-white pt-3 border-t border-gray-100">

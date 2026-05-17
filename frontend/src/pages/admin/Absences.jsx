@@ -1,5 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api';
+import CustomFieldsPanel from '../../components/CustomFieldsPanel';
+
+// ── Absence Custom Fields Modal ───────────────────────────────────────────────
+function AbsenceCustomFieldsModal({ absence, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Custom Fields</h2>
+            <p className="text-sm text-gray-500 mt-0.5">{absence.candidate_name} · {absence.start_date}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <div className="p-5">
+          <CustomFieldsPanel module="absences" recordId={absence.id} onSaved={onClose} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const ABSENCE_TYPES = { vacation: '🌴 Vacation', sick: '🤒 Sick', personal: '👤 Personal', public_holiday: '🎉 Public Holiday', other: '📌 Other' };
 
@@ -13,6 +34,7 @@ export default function AdminAbsences() {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ candidate_id: '', status: '', year: '' });
+  const [cfAbsence, setCfAbsence] = useState(null);
 
   const [error, setError] = useState('');
 
@@ -100,12 +122,15 @@ export default function AdminAbsences() {
                   <td className="px-4 py-3 text-gray-500 max-w-[200px] truncate">{a.notes || '—'}</td>
                   <td className="px-4 py-3"><span className={`badge-${a.status}`}>{a.status}</span></td>
                   <td className="px-4 py-3 text-right">
-                    {a.status === 'pending' ? (
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => approve(a.id)} className="text-green-600 hover:underline text-xs font-medium">Approve</button>
-                        <button onClick={() => reject(a.id)} className="text-red-500 hover:underline text-xs">Reject</button>
-                      </div>
-                    ) : <span className="text-xs text-gray-300">—</span>}
+                    <div className="flex items-center justify-end gap-2">
+                      {a.status === 'pending' ? (
+                        <>
+                          <button onClick={() => approve(a.id)} className="text-green-600 hover:underline text-xs font-medium">Approve</button>
+                          <button onClick={() => reject(a.id)} className="text-red-500 hover:underline text-xs">Reject</button>
+                        </>
+                      ) : null}
+                      <button onClick={() => setCfAbsence(a)} className="text-gray-400 hover:text-emerald-600 text-xs" title="Custom Fields">⚙️</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -113,6 +138,10 @@ export default function AdminAbsences() {
           </table>
         )}
       </div>
+
+      {cfAbsence && (
+        <AbsenceCustomFieldsModal absence={cfAbsence} onClose={() => setCfAbsence(null)} />
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
+import CustomFieldsPanel from '../../components/CustomFieldsPanel';
 
 function Modal({ title, onClose, children, size = 'md' }) {
   return (
@@ -265,6 +266,12 @@ export default function AdminClients() {
                 <option value="AUD">AUD</option>
               </select>
             </div>
+            {editing?.id && (
+              <div className="border-t border-gray-100 pt-4 mt-2">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Custom Fields</h4>
+                <CustomFieldsPanel module="clients" recordId={editing.id} />
+              </div>
+            )}
             <div className="flex gap-3 pt-2">
               <button type="submit" className="btn-primary flex-1">{editing ? 'Save Changes' : 'Add Client'}</button>
               <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>

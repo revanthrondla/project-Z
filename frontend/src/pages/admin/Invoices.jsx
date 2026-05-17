@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
+import CustomFieldsPanel from '../../components/CustomFieldsPanel';
 
 function Modal({ title, onClose, children, wide = false }) {
   return (
@@ -292,8 +293,9 @@ function InvoiceDetail({ invoice: initialInvoice, onClose, onStatusChange }) {
   };
 
   const TABS = [
-    { id: 'details',  label: '📋 Details' },
-    { id: 'payments', label: '💳 Payments' },
+    { id: 'details',       label: '📋 Details' },
+    { id: 'payments',      label: '💳 Payments' },
+    { id: 'custom_fields', label: '🗂️ Custom Fields' },
   ];
 
   return (
@@ -390,6 +392,10 @@ function InvoiceDetail({ invoice: initialInvoice, onClose, onStatusChange }) {
 
       {tab === 'payments' && (
         <PaymentsPanel invoice={invoice} onPaymentChange={reloadInvoice} />
+      )}
+
+      {tab === 'custom_fields' && (
+        <CustomFieldsPanel module="invoices" recordId={invoice.id} />
       )}
     </Modal>
   );
