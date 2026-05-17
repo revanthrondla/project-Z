@@ -523,4 +523,81 @@ router.get('/:id/unbilled', authenticate, injectTenantDb, async (req, res) => {
   }
 });
 
+// ─── Budget Alert ──────────────────────────────────────────────────────────
+// GET /api/projects/:id/budget-status
+// Returns current budget consumption % + whether alert threshold has been crossed
+router.get('/:id/budget-status', authenticate, injectTenantDb, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Invalid project ID' });
+
+    const projectResult = await req.db.query(
+      'SELECT id, name, budget_hours, budget_amount, billing_model, budget_alert_threshold, budget_alert_pct FROM projects WHERE id = $1',
+      [id]
+    );
+    if (!projectResult.rows[0]) return res.status(404).json({ error: 'Project not found' });
+    const p = projectResult.rows[0];
+
+    // Compute actual approved hours / amounts
+    const hoursResult = await req.db.query(
+      `SELECT COALESCE(SUM(hours), 0) AS actual_hours,
+              COALESCE(SUM(CASE WHEN is_billable THEN hours ELSE 0 END), 0) AS billable_hours
+       FROM time_entries WHERE project_id = $1 AND status = 'approved'`,
+      [id]
+    );
+    const { actual_hours, billable_hours } = hoursResult.rows[0];
+
+    let consumedPct = 0;
+    if (p.budget_hours && parseFloat(p.budget_hours) > 0) {
+      consumedPct = Math.round((parseFloat(actual_hours) / parseFloat(p.budget_hours)) * 100);
+    }
+
+    const threshold  = p.budget_alert_threshold || 80;
+    const alertState = consumedPct >= threshold ? 'alert' : consumedPct >= threshold - 10 ? 'warning' : 'ok';
+
+    // Persist the computed pct for quick access on project list
+    if (Math.abs(consumedPct - (p.budget_alert_pct || 0)) >= 1) {
+      await req.db.query(
+        `UPDATE projects SET budget_alert_pct = $1, budget_last_computed_at = NOW() WHERE id = $2`,
+        [consumedPct, id]
+      );
+    }
+
+    res.json({
+      project_id: id,
+      budget_hours: p.budget_hours,
+      actual_hours: parseFloat(actual_hours),
+      billable_hours: parseFloat(billable_hours),
+      consumed_pct: consumedPct,
+      threshold,
+      alert_state: alertState,
+      is_over_budget: consumedPct > 100,
+    });
+  } catch (err) {
+    console.error('GET /projects/:id/budget-status', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/projects/:id/alert-threshold  — admin update threshold
+router.put('/:id/alert-threshold', authenticate, requireAdmin, injectTenantDb, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { budget_alert_threshold } = req.body;
+    const threshold = parseInt(budget_alert_threshold, 10);
+    if (isNaN(threshold) || threshold < 1 || threshold > 100) {
+      return res.status(400).json({ error: 'budget_alert_threshold must be 1–100' });
+    }
+    const result = await req.db.query(
+      'UPDATE projects SET budget_alert_threshold = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [threshold, id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Project not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('PUT /projects/:id/alert-threshold', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

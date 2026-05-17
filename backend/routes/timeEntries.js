@@ -45,7 +45,7 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
 router.post('/', authenticate, injectTenantDb, async (req, res) => {
   const {
     candidate_id, date, hours, description, project,
-    project_id, task_id, is_billable, billing_notes
+    project_id, task_id, is_billable, billing_notes, break_minutes
   } = req.body;
 
   // Validate
@@ -75,14 +75,16 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
   const pid = project_id ? parseInt(project_id, 10) : null;
   const tid = task_id ? parseInt(task_id, 10) : null;
 
+  const brkMins = break_minutes !== undefined ? Math.max(0, parseInt(break_minutes) || 0) : 0;
+
   const insertResult = await req.db.query(`
     INSERT INTO time_entries (candidate_id, date, hours, description, project,
-                              project_id, task_id, is_billable, billing_notes, status)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                              project_id, task_id, is_billable, billing_notes, break_minutes, status)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     RETURNING id
   `, [
     cid, date, parsedHours, description || null, project || null,
-    pid, tid, is_billable !== false, billing_notes || null, 'pending'
+    pid, tid, is_billable !== false, billing_notes || null, brkMins, 'pending'
   ]);
 
   const entryId = insertResult.rows[0].id;
@@ -118,7 +120,8 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
   }
 
   const { date, hours, description, project, status,
-          project_id, task_id, is_billable, billing_notes, rejected_reason } = req.body;
+          project_id, task_id, is_billable, billing_notes, rejected_reason,
+          break_minutes } = req.body;
 
   if (req.user.role === 'admin' && status) {
     // Admin can approve/reject
@@ -151,6 +154,7 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
     if (hours && (hours <= 0 || hours > 24)) return res.status(400).json({ error: 'Hours must be between 0 and 24' });
     const pid = project_id !== undefined ? (project_id ? parseInt(project_id, 10) : null) : undefined;
     const tid = task_id !== undefined ? (task_id ? parseInt(task_id, 10) : null) : undefined;
+    const brkMins = break_minutes !== undefined ? Math.max(0, parseInt(break_minutes) || 0) : null;
     await req.db.query(`
       UPDATE time_entries SET
         date          = COALESCE($1, date),
@@ -160,7 +164,8 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
         project_id    = CASE WHEN $5::text IS NOT NULL THEN $5::bigint ELSE project_id END,
         task_id       = CASE WHEN $6::text IS NOT NULL THEN $6::bigint ELSE task_id END,
         is_billable   = COALESCE($7, is_billable),
-        billing_notes = COALESCE($8, billing_notes)
+        billing_notes = COALESCE($8, billing_notes),
+        break_minutes = COALESCE($10, break_minutes)
       WHERE id = $9
     `, [
       date || null, hours ? parseFloat(hours) : null,
@@ -170,7 +175,8 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
       tid !== undefined ? (tid !== null ? String(tid) : null) : null,
       is_billable !== undefined ? is_billable : null,
       billing_notes !== undefined ? billing_notes : null,
-      id
+      id,
+      brkMins
     ]);
   }
 

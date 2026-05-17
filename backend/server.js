@@ -49,6 +49,9 @@ const integrationsRoutes     = require('./routes/integrations');
 const gdprRoutes             = require('./routes/gdpr');
 const { auditLogViewer }     = require('./middleware/auditLog');
 const { startRetentionJob }  = require('./services/retentionJob');
+const attendanceRoutes       = require('./routes/attendance');
+const holidayRoutes          = require('./routes/holidays');
+const leaveBalanceRoutes     = require('./routes/leaveBalances');
 
 const app      = express();
 const PORT     = process.env.PORT || 3001;
@@ -220,6 +223,9 @@ app.use('/api/privacy',          privacyRoutes);
 app.use('/api/eeo',              eeoRoutes);
 app.use('/api/integrations',     integrationsRoutes);
 app.use('/api/gdpr',             gdprRoutes);
+app.use('/api/attendance',       attendanceRoutes);
+app.use('/api/holidays',         holidayRoutes);
+app.use('/api/leave-balances',   leaveBalanceRoutes);
 
 // ── Audit log viewer ──────────────────────────────────────────────────────────
 const { authenticate, requireAdmin, injectTenantDb } = require('./middleware/auth');

@@ -214,14 +214,16 @@ router.get('/', authenticate, injectTenantDb, async (req, res) => {
                d.name   AS department_name,
                l.name   AS location_name,
                le.legal_name AS legal_entity_name,
-               pr.name  AS pay_rule_name
+               pr.name  AS pay_rule_name,
+               mgr.name AS manager_name
         FROM employees c
-        LEFT JOIN clients           cl ON cl.id = c.client_id
-        LEFT JOIN users             u  ON u.id  = c.user_id
-        LEFT JOIN org_departments   d  ON d.id  = c.department_id
-        LEFT JOIN org_locations     l  ON l.id  = c.location_id
-        LEFT JOIN org_legal_entities le ON le.id = c.legal_entity_id
-        LEFT JOIN pay_rules         pr ON pr.id = c.pay_rule_id
+        LEFT JOIN clients           cl  ON cl.id  = c.client_id
+        LEFT JOIN users             u   ON u.id   = c.user_id
+        LEFT JOIN org_departments   d   ON d.id   = c.department_id
+        LEFT JOIN org_locations     l   ON l.id   = c.location_id
+        LEFT JOIN org_legal_entities le ON le.id  = c.legal_entity_id
+        LEFT JOIN pay_rules         pr  ON pr.id  = c.pay_rule_id
+        LEFT JOIN employees         mgr ON mgr.id = c.manager_id
         ORDER BY c.name
       `);
       return res.json(result.rows);
@@ -349,16 +351,18 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
         }
       }
 
-      const { department_id, location_id, legal_entity_id, pay_rule_id, pay_frequency } = req.body;
+      const { department_id, location_id, legal_entity_id, pay_rule_id, pay_frequency,
+              manager_id, secondary_approver } = req.body;
 
       const candidateResult = await tx.query(`
         INSERT INTO employees (
           user_id, name, email, phone, role, hourly_rate, client_id,
           start_date, end_date, status, contract_type,
           employee_number, ssn_hash, ssn_last4, date_of_birth,
-          department_id, location_id, legal_entity_id, pay_rule_id, pay_frequency
+          department_id, location_id, legal_entity_id, pay_rule_id, pay_frequency,
+          manager_id, secondary_approver
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
         RETURNING id
       `, [
         userId, name, email.toLowerCase().trim(), phone || null,
@@ -368,6 +372,7 @@ router.post('/', authenticate, requireAdmin, injectTenantDb, async (req, res) =>
         empNum, ssnHash, ssnLast4, date_of_birth || null,
         department_id || null, location_id || null,
         legal_entity_id || null, pay_rule_id || null, pay_frequency || null,
+        manager_id || null, secondary_approver || null,
       ]);
 
       const employeeId = candidateResult.rows[0].id;
@@ -440,7 +445,8 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
 
     const { name, email, phone, role, hourly_rate, client_id, start_date, end_date,
             status, contract_type, market_status, available_date, market_notes,
-            department_id, location_id, legal_entity_id, pay_rule_id, pay_frequency } = req.body;
+            department_id, location_id, legal_entity_id, pay_rule_id, pay_frequency,
+            manager_id, secondary_approver } = req.body;
     const validErr = validateCandidateInput({ name, email, hourly_rate, start_date, end_date });
     if (validErr) return res.status(400).json({ error: validErr });
 
@@ -466,6 +472,8 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
       if (legal_entity_id !== undefined) { updateFields.push(`legal_entity_id = $${paramCounter++}`); values.push(legal_entity_id || null); }
       if (pay_rule_id     !== undefined) { updateFields.push(`pay_rule_id     = $${paramCounter++}`); values.push(pay_rule_id     || null); }
       if (pay_frequency   !== undefined) { updateFields.push(`pay_frequency   = $${paramCounter++}`); values.push(pay_frequency   || null); }
+      if (manager_id      !== undefined) { updateFields.push(`manager_id      = $${paramCounter++}`); values.push(manager_id      || null); }
+      if (secondary_approver !== undefined) { updateFields.push(`secondary_approver = $${paramCounter++}`); values.push(secondary_approver || null); }
     }
 
     if (updateFields.length === 0) return res.status(400).json({ error: 'No fields to update' });

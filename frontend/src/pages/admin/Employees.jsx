@@ -139,6 +139,8 @@ const EMPTY_FORM = {
   employee_number: '', ssn: '', date_of_birth: '',
   // Org links
   department_id: '', location_id: '', legal_entity_id: '', pay_rule_id: '', pay_frequency: 'bi-weekly',
+  // Manager hierarchy
+  manager_id: '', secondary_approver: '',
 };
 
 export default function AdminCandidates() {
@@ -541,6 +543,24 @@ export default function AdminCandidates() {
                     <option value="monthly">Monthly</option>
                     <option value="quarterly">Quarterly</option>
                     <option value="annually">Annually</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Direct Manager</label>
+                  <select className="input" value={form.manager_id || ''} onChange={e => setForm(f => ({ ...f, manager_id: e.target.value }))}>
+                    <option value="">— No manager —</option>
+                    {employees
+                      .filter(e => e.id !== editing?.id)
+                      .map(e => <option key={e.id} value={e.id}>{e.name}{e.role ? ` (${e.role})` : ''}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Secondary Approver</label>
+                  <select className="input" value={form.secondary_approver || ''} onChange={e => setForm(f => ({ ...f, secondary_approver: e.target.value }))}>
+                    <option value="">— None —</option>
+                    {employees
+                      .filter(e => e.id !== editing?.id && e.id !== parseInt(form.manager_id))
+                      .map(e => <option key={e.id} value={e.id}>{e.name}{e.role ? ` (${e.role})` : ''}</option>)}
                   </select>
                 </div>
               </div>

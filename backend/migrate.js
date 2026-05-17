@@ -892,6 +892,132 @@ const MIGRATIONS = [
       }
     },
   },
+  // ── Migration 21: P1/P2/P3 — Attendance, Holidays, Manager chain, Partial-day leave ──
+  {
+    id: 21,
+    scope: 'tenant',
+    description: 'Clock-in/out attendance, public holidays, manager chain, partial-day leave, break tracking, budget alerts',
+    async up(client) {
+
+      // ── P2: Clock-in / clock-out attendance events ─────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS clock_events (
+          id            BIGSERIAL PRIMARY KEY,
+          employee_id   BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+          event_type    TEXT   NOT NULL CHECK (event_type IN ('clock_in','clock_out','break_start','break_end')),
+          event_time    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          latitude      NUMERIC(9,6),
+          longitude     NUMERIC(9,6),
+          accuracy_m    NUMERIC(7,2),
+          location_name TEXT,
+          device_info   TEXT,
+          ip_address    TEXT,
+          notes         TEXT,
+          created_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_employee ON clock_events(employee_id, event_time DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_date ON clock_events(DATE(event_time))`);
+
+      // ── P2: Public / bank holidays per org location ────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public_holidays (
+          id            BIGSERIAL PRIMARY KEY,
+          location_id   BIGINT REFERENCES org_locations(id) ON DELETE SET NULL,
+          holiday_date  DATE   NOT NULL,
+          name          TEXT   NOT NULL,
+          is_mandatory  BOOLEAN NOT NULL DEFAULT TRUE,
+          applies_to    TEXT   NOT NULL DEFAULT 'all'
+                          CHECK (applies_to IN ('all','full_time','part_time','contractors')),
+          created_at    TIMESTAMPTZ DEFAULT NOW(),
+          updated_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_holidays_date ON public_holidays(holiday_date)`);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_holidays_unique ON public_holidays(location_id, holiday_date, name)`);
+
+      // ── P3: Manager hierarchy on employees ────────────────────────────────
+      await client.query(`
+        ALTER TABLE employees
+          ADD COLUMN IF NOT EXISTS manager_id         BIGINT REFERENCES employees(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS secondary_approver BIGINT REFERENCES employees(id) ON DELETE SET NULL
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_employees_manager ON employees(manager_id)`);
+
+      // ── P1: Partial-day & hourly absence requests ─────────────────────────
+      await client.query(`
+        ALTER TABLE absences
+          ADD COLUMN IF NOT EXISTS is_partial_day  BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS partial_hours   NUMERIC(4,2),
+          ADD COLUMN IF NOT EXISTS rejection_reason TEXT,
+          ADD COLUMN IF NOT EXISTS approved_by     BIGINT REFERENCES employees(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS approved_at     TIMESTAMPTZ
+      `);
+
+      // ── P1: Break tracking in time entries ────────────────────────────────
+      await client.query(`
+        ALTER TABLE time_entries
+          ADD COLUMN IF NOT EXISTS break_minutes      INTEGER NOT NULL DEFAULT 0
+                                   CHECK (break_minutes >= 0),
+          ADD COLUMN IF NOT EXISTS billable_hours     NUMERIC(6,2)
+                                   GENERATED ALWAYS AS
+                                   (CASE WHEN is_billable THEN
+                                     GREATEST(0, ROUND(hours - break_minutes::NUMERIC / 60, 4))
+                                   ELSE 0 END) STORED
+      `);
+
+      // ── P1: Project budget alert thresholds ───────────────────────────────
+      await client.query(`
+        ALTER TABLE projects
+          ADD COLUMN IF NOT EXISTS budget_alert_threshold  INTEGER DEFAULT 80
+                                   CHECK (budget_alert_threshold BETWEEN 1 AND 100),
+          ADD COLUMN IF NOT EXISTS budget_alert_pct        NUMERIC(5,2) DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS budget_alert_sent_at    TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS budget_last_computed_at TIMESTAMPTZ
+      `);
+
+      // ── P1: Leave balance accrual tracking ───────────────────────────────
+      await client.query(`
+        ALTER TABLE leave_balances
+          ADD COLUMN IF NOT EXISTS accrued_days     NUMERIC(6,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS pending_days     NUMERIC(6,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS last_accrual_at  TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS carry_over_days  NUMERIC(6,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS expires_at       DATE
+      `);
+
+      await client.query(`
+        ALTER TABLE absence_policies
+          ADD COLUMN IF NOT EXISTS accrual_last_run   DATE,
+          ADD COLUMN IF NOT EXISTS carry_over_expiry_months INTEGER DEFAULT 3,
+          ADD COLUMN IF NOT EXISTS max_carry_over_days NUMERIC(6,2) DEFAULT 5,
+          ADD COLUMN IF NOT EXISTS max_balance_days   NUMERIC(6,2)
+      `);
+
+      // Attendance daily summary (computed/cached for dashboard performance)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS attendance_daily (
+          id            BIGSERIAL PRIMARY KEY,
+          employee_id   BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+          work_date     DATE   NOT NULL,
+          clock_in_time  TIMESTAMPTZ,
+          clock_out_time TIMESTAMPTZ,
+          total_minutes  INTEGER,
+          break_minutes  INTEGER NOT NULL DEFAULT 0,
+          net_minutes    INTEGER,
+          status        TEXT NOT NULL DEFAULT 'absent'
+                          CHECK (status IN ('present','absent','late','partial','on_leave','holiday')),
+          notes         TEXT,
+          created_at    TIMESTAMPTZ DEFAULT NOW(),
+          updated_at    TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(employee_id, work_date)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_attendance_daily_date ON attendance_daily(work_date DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_attendance_daily_emp ON attendance_daily(employee_id, work_date DESC)`);
+    },
+  },
+
   {
     id: 12,
     scope: 'tenant',

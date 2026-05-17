@@ -156,6 +156,8 @@ const EmployeeProfile       = lazy(() => import('./pages/admin/EmployeeProfile')
 const AdminProjects         = lazy(() => import('./pages/admin/Projects'));
 const AdminExpenses         = lazy(() => import('./pages/admin/Expenses'));
 const AdminContractors      = lazy(() => import('./pages/admin/Contractors'));
+const AdminAttendance       = lazy(() => import('./pages/admin/Attendance'));
+const AdminHolidays         = lazy(() => import('./pages/admin/Holidays'));
 const AdminCompliance       = lazy(() => import('./pages/admin/Compliance'));
 const AdminEEO              = lazy(() => import('./pages/admin/EEO'));
 const AdminPrivacy          = lazy(() => import('./pages/admin/Privacy'));
@@ -173,6 +175,7 @@ const Languages       = lazy(() => import('./pages/agrow/Languages'));
 
 // Candidate pages
 const CandidateDashboard = lazy(() => import('./pages/candidate/Dashboard'));
+const ClockPage          = lazy(() => import('./pages/candidate/Clock'));
 const LogHours           = lazy(() => import('./pages/candidate/LogHours'));
 const MyAbsences         = lazy(() => import('./pages/candidate/MyAbsences'));
 const MyInvoices         = lazy(() => import('./pages/candidate/MyInvoices'));
@@ -357,6 +360,8 @@ function AppRoutes() {
         <Route path="clients"      element={<ModuleRoute moduleKey="hr_clients"    adminOnly><Lazy><AdminClients /></Lazy></ModuleRoute>} />
         <Route path="recruiters"   element={<PrivateRoute adminOnly><Lazy><AdminRecruiters /></Lazy></PrivateRoute>} />
         <Route path="timesheets"   element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminTimesheets /></Lazy></ModuleRoute>} />
+        <Route path="attendance"   element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminAttendance /></Lazy></ModuleRoute>} />
+        <Route path="holidays"     element={<ModuleRoute moduleKey="hr_absences"   adminOnly><Lazy><AdminHolidays /></Lazy></ModuleRoute>} />
         <Route path="absences" element={
           user?.role === 'admin'
             ? <ModuleRoute moduleKey="hr_absences" adminOnly><Lazy><AdminAbsences /></Lazy></ModuleRoute>
@@ -420,6 +425,7 @@ function AppRoutes() {
         <Route path="client-timesheets" element={<PrivateRoute clientOnly><Lazy><ClientTimesheetApproval /></Lazy></PrivateRoute>} />
 
         {/* Candidate-only routes */}
+        <Route path="clock"        element={<ModuleRoute moduleKey="hr_timesheets"><Lazy><ClockPage /></Lazy></ModuleRoute>} />
         <Route path="log-hours"    element={<PrivateRoute><Lazy><LogHours /></Lazy></PrivateRoute>} />
         <Route path="my-absences"  element={<PrivateRoute><Lazy><MyAbsences /></Lazy></PrivateRoute>} />
         <Route path="my-invoices"  element={<PrivateRoute><Lazy><MyInvoices /></Lazy></PrivateRoute>} />

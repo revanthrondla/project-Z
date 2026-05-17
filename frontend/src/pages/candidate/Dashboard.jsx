@@ -1,7 +1,114 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useModules } from '../../contexts/ModulesContext';
 import api from '../../api';
+
+// ── Compact clock-in/out widget ───────────────────────────────────────────────
+function useElapsedMins(sinceTs) {
+  const [mins, setMins] = useState(0);
+  useEffect(() => {
+    if (!sinceTs) { setMins(0); return; }
+    const tick = () => setMins(Math.floor((Date.now() - new Date(sinceTs)) / 60000));
+    tick();
+    const id = setInterval(tick, 15000);
+    return () => clearInterval(id);
+  }, [sinceTs]);
+  return mins;
+}
+
+function ClockMiniWidget() {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const { hasModule } = useModules();
+
+  const load = useCallback(() => {
+    api.get('/api/attendance/status')
+      .then(r => setStatus(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const elapsedMins = useElapsedMins(status?.clocked_in_at);
+
+  const doAction = async (endpoint, body = {}) => {
+    setActionLoading(true);
+    try { await api.post(`/api/attendance/${endpoint}`, body); load(); }
+    catch { /* silent — user can go to full page */ }
+    finally { setActionLoading(false); }
+  };
+
+  if (!hasModule('hr_timesheets')) return null;
+  if (loading) return null;
+
+  const live = status?.live_status || 'not_started';
+  const isIn    = live === 'clocked_in';
+  const isBreak = live === 'on_break';
+  const isOut   = live === 'clocked_out' || live === 'not_started';
+
+  const h = String(Math.floor(elapsedMins / 60)).padStart(2, '0');
+  const m = String(elapsedMins % 60).padStart(2, '0');
+
+  return (
+    <div className={`card p-4 flex items-center gap-4 mb-6 border-l-4 ${
+      isIn ? 'border-emerald-500' : isBreak ? 'border-amber-400' : 'border-gray-200'
+    }`}>
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${
+        isIn ? 'bg-emerald-50' : isBreak ? 'bg-amber-50' : 'bg-gray-50'
+      }`}>
+        {isIn ? '🟢' : isBreak ? '⏸️' : '⭕'}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-gray-900">
+          {isIn ? `Clocked in — ${h}:${m}` : isBreak ? 'On break' : 'Not clocked in'}
+        </p>
+        <p className="text-xs text-gray-400">
+          {isIn && status?.clocked_in_at
+            ? `Since ${new Date(status.clocked_in_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+            : isOut ? 'Tap to start your day' : 'Break in progress'}
+        </p>
+      </div>
+      <div className="flex gap-2 shrink-0">
+        {isOut && (
+          <button
+            onClick={() => doAction('clock-in')}
+            disabled={actionLoading}
+            className="btn-primary text-xs px-3 py-1.5"
+          >
+            {actionLoading ? '…' : '🟢 Clock In'}
+          </button>
+        )}
+        {isIn && (
+          <>
+            <button
+              onClick={() => doAction('break-start')}
+              disabled={actionLoading}
+              className="btn-secondary text-xs px-3 py-1.5"
+            >Break</button>
+            <button
+              onClick={() => doAction('clock-out')}
+              disabled={actionLoading}
+              className="text-xs px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+            >Clock Out</button>
+          </>
+        )}
+        {isBreak && (
+          <button
+            onClick={() => doAction('break-end')}
+            disabled={actionLoading}
+            className="btn-primary text-xs px-3 py-1.5"
+          >End Break</button>
+        )}
+        <Link to="/clock" className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 hover:underline">
+          Full view →
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 function StatCard({ icon, label, value, color = 'blue' }) {
   const colors = { blue: 'bg-emerald-50 text-emerald-600', green: 'bg-green-50 text-green-600', yellow: 'bg-yellow-50 text-yellow-600', purple: 'bg-purple-50 text-purple-600' };
@@ -51,6 +158,8 @@ export default function CandidateDashboard() {
           {candidate?.role} · {candidate?.client_name ? `Placed at ${candidate.client_name}` : 'No client assigned'} · ${candidate?.hourly_rate}/hr
         </p>
       </div>
+
+      <ClockMiniWidget />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard icon="⏱️" label="Hours This Month" value={Number(stats?.monthlyHours || 0).toFixed(1)} color="blue" />

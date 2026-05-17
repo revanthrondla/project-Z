@@ -66,13 +66,14 @@ export default function LogHours() {
   const [showModal,   setShowModal]   = useState(false);
   const [editing,     setEditing]     = useState(null);
   const [form, setForm] = useState({
-    date:          new Date().toISOString().slice(0, 10),
-    hours:         '',
-    description:   '',
-    project_id:    '',
-    task_id:       '',
-    is_billable:   true,
-    billing_notes: '',
+    date:           new Date().toISOString().slice(0, 10),
+    hours:          '',
+    description:    '',
+    project_id:     '',
+    task_id:        '',
+    is_billable:    true,
+    billing_notes:  '',
+    break_minutes:  0,
   });
   const [error,       setError]       = useState('');
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -169,6 +170,7 @@ export default function LogHours() {
     task_id:       '',
     is_billable:   true,
     billing_notes: '',
+    break_minutes: 0,
   });
 
   const openCreate = () => {
@@ -189,6 +191,7 @@ export default function LogHours() {
       task_id:       e.task_id       || '',
       is_billable:   e.is_billable   !== false,
       billing_notes: e.billing_notes || '',
+      break_minutes: e.break_minutes || 0,
     });
     setError('');
     setShowModal(true);
@@ -384,12 +387,25 @@ export default function LogHours() {
                 onChange={e => setForm({...form, date: e.target.value})}
                 required max={new Date().toISOString().slice(0, 10)} />
             </div>
-            <div>
-              <label className="label">Hours Worked *</label>
-              <input type="number" step="0.25" min="0.25" max="24" className="input"
-                placeholder="e.g. 8 or 7.5" value={form.hours}
-                onChange={e => setForm({...form, hours: e.target.value})} required />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Hours Worked *</label>
+                <input type="number" step="0.25" min="0.25" max="24" className="input"
+                  placeholder="e.g. 8 or 7.5" value={form.hours}
+                  onChange={e => setForm({...form, hours: e.target.value})} required />
+              </div>
+              <div>
+                <label className="label">Break (mins)</label>
+                <input type="number" step="5" min="0" max="480" className="input"
+                  placeholder="e.g. 30" value={form.break_minutes}
+                  onChange={e => setForm({...form, break_minutes: parseInt(e.target.value) || 0})} />
+              </div>
             </div>
+            {form.hours && form.break_minutes > 0 && (
+              <p className="text-xs text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                Net billable: {Math.max(0, parseFloat(form.hours) - form.break_minutes / 60).toFixed(2)}h after {form.break_minutes} min break
+              </p>
+            )}
             <div>
               <label className="label">Project</label>
               <select className="input" value={form.project_id}

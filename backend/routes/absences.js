@@ -55,11 +55,17 @@ router.post('/', authenticate, injectTenantDb, async (req, res) => {
     if (req.user.role === 'candidate') cid = req.user.employeeId;
     if (!cid) return res.status(400).json({ error: 'Candidate ID required' });
 
+    const { is_partial_day, partial_hours } = req.body;
+    if (is_partial_day && (!partial_hours || partial_hours <= 0 || partial_hours > 24)) {
+      return res.status(400).json({ error: 'partial_hours required (1–24) when is_partial_day is true' });
+    }
+
     const insertResult = await req.db.query(`
-      INSERT INTO absences (candidate_id, start_date, end_date, type, status, notes)
-      VALUES ($1, $2, $3, $4, 'pending', $5)
+      INSERT INTO absences (candidate_id, start_date, end_date, type, status, notes, is_partial_day, partial_hours)
+      VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7)
       RETURNING id
-    `, [cid, start_date, end_date, type, notes || null]);
+    `, [cid, start_date, end_date, type, notes || null,
+        is_partial_day || false, is_partial_day ? partial_hours : null]);
 
     const absenceId = insertResult.rows[0].id;
 
@@ -87,12 +93,18 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
       if (absence.status !== 'pending') return res.status(400).json({ error: 'Cannot edit non-pending absence' });
     }
 
-    const { start_date, end_date, type, notes, status } = req.body;
+    const { start_date, end_date, type, notes, status, is_partial_day, partial_hours, rejection_reason } = req.body;
 
     if (req.user.role === 'admin' && status) {
       const approvedAt = (status === 'approved' || status === 'rejected') ? new Date().toISOString() : null;
-      await req.db.query('UPDATE absences SET status = $1, approved_by = $2, approved_at = $3 WHERE id = $4',
-        [status, req.user.id, approvedAt, id]);
+      await req.db.query(`
+        UPDATE absences SET
+          status           = $1,
+          approved_by      = $2,
+          approved_at      = $3,
+          rejection_reason = CASE WHEN $1 = 'rejected' THEN $5 ELSE NULL END
+        WHERE id = $4
+      `, [status, req.user.id, approvedAt, id, rejection_reason || null]);
 
       // Notify the candidate
       const candidateResult = await req.db.query('SELECT user_id FROM employees WHERE id = $1', [absence.candidate_id]);
@@ -112,12 +124,17 @@ router.put('/:id', authenticate, injectTenantDb, async (req, res) => {
     } else {
       await req.db.query(`
         UPDATE absences SET
-          start_date = COALESCE($1, start_date),
-          end_date = COALESCE($2, end_date),
-          type = COALESCE($3, type),
-          notes = COALESCE($4, notes)
+          start_date      = COALESCE($1, start_date),
+          end_date        = COALESCE($2, end_date),
+          type            = COALESCE($3, type),
+          notes           = COALESCE($4, notes),
+          is_partial_day  = COALESCE($6, is_partial_day),
+          partial_hours   = COALESCE($7, partial_hours)
         WHERE id = $5
-      `, [start_date || null, end_date || null, type || null, notes !== undefined ? notes : null, id]);
+      `, [start_date || null, end_date || null, type || null,
+          notes !== undefined ? notes : null, id,
+          is_partial_day !== undefined ? is_partial_day : null,
+          partial_hours !== undefined ? partial_hours : null]);
     }
 
     const result = await req.db.query(`
