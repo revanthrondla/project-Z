@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 import CustomFieldsPanel from '../../components/CustomFieldsPanel';
+import CustomFieldsCreateSection, { saveCFValues } from '../../components/CustomFieldsCreateSection';
 
 function Modal({ title, onClose, children, size = 'md' }) {
   return (
@@ -129,14 +130,15 @@ function RemoveLoginModal({ client, onClose, onDone }) {
 }
 
 export default function AdminClients() {
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [error, setError] = useState('');
-  const [createLoginFor, setCreateLoginFor] = useState(null);
-  const [removeLoginFor, setRemoveLoginFor] = useState(null);
+  const [clients,         setClients]         = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [showModal,       setShowModal]       = useState(false);
+  const [editing,         setEditing]         = useState(null);
+  const [form,            setForm]            = useState(EMPTY_FORM);
+  const [error,           setError]           = useState('');
+  const [cfValues,        setCfValues]        = useState({});
+  const [createLoginFor,  setCreateLoginFor]  = useState(null);
+  const [removeLoginFor,  setRemoveLoginFor]  = useState(null);
 
   const load = useCallback(() => {
     api.get('/api/clients')
@@ -147,15 +149,19 @@ export default function AdminClients() {
 
   useEffect(() => { load(); }, [load]);
 
-  const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setError(''); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setError(''); setCfValues({}); setShowModal(true); };
   const openEdit = (c) => { setEditing(c); setForm(c); setError(''); setShowModal(true); };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     try {
-      if (editing) await api.put(`/api/clients/${editing.id}`, form);
-      else await api.post('/api/clients', form);
+      if (editing) {
+        await api.put(`/api/clients/${editing.id}`, form);
+      } else {
+        const result = await api.post('/api/clients', form);
+        await saveCFValues(api, 'clients', result.data?.id, cfValues);
+      }
       setShowModal(false);
       load();
     } catch (err) {
@@ -266,12 +272,10 @@ export default function AdminClients() {
                 <option value="AUD">AUD</option>
               </select>
             </div>
-            {editing?.id && (
-              <div className="border-t border-gray-100 pt-4 mt-2">
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Custom Fields</h4>
-                <CustomFieldsPanel module="clients" recordId={editing.id} />
-              </div>
-            )}
+            {editing?.id
+              ? <CustomFieldsPanel module="clients" recordId={editing.id} />
+              : <CustomFieldsCreateSection module="clients" onValuesChange={setCfValues} />
+            }
             <div className="flex gap-3 pt-2">
               <button type="submit" className="btn-primary flex-1">{editing ? 'Save Changes' : 'Add Client'}</button>
               <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>

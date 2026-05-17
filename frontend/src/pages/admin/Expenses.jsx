@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import api from '../../api';
 import CustomFieldsPanel from '../../components/CustomFieldsPanel';
+import CustomFieldsCreateSection, { saveCFValues } from '../../components/CustomFieldsCreateSection';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -32,6 +34,7 @@ function fmtAmt(exp) {
 // ─── Expense Modal ──────────────────────────────────────────────────────────
 function ExpenseModal({ expense, employees = [], clients = [], projects = [], onSave, onClose, isAdmin }) {
   const isEdit = !!expense?.id;
+  const [cfValues, setCfValues] = useState({});
   const [form, setForm] = useState({
     candidate_id: expense?.candidate_id || '',
     client_id: expense?.client_id || '',
@@ -71,6 +74,7 @@ function ExpenseModal({ expense, employees = [], clients = [], projects = [], on
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
+      if (!isEdit && data.id) await saveCFValues(api, 'expenses', data.id, cfValues);
       onSave(data);
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
@@ -164,12 +168,12 @@ function ExpenseModal({ expense, employees = [], clients = [], projects = [], on
               </label>
             </div>
           </div>
-          {isEdit && expense?.id && (
-            <div className="w-full px-2 mb-3 border-t border-gray-100 pt-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Custom Fields</p>
-              <CustomFieldsPanel module="expenses" recordId={expense.id} />
-            </div>
-          )}
+          <div className="w-full px-2 mb-3">
+            {isEdit && expense?.id
+              ? <CustomFieldsPanel module="expenses" recordId={expense.id} />
+              : <CustomFieldsCreateSection module="expenses" onValuesChange={setCfValues} />
+            }
+          </div>
           <div className="flex gap-3 justify-end px-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded border text-gray-700 hover:bg-gray-50">Cancel</button>
             <button type="submit" disabled={saving} className="px-5 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50">

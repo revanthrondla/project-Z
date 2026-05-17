@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 import CustomFieldsPanel from '../../components/CustomFieldsPanel';
+import CustomFieldsCreateSection, { saveCFValues } from '../../components/CustomFieldsCreateSection';
 
 function StatusBadge({ status }) {
   return <span className={`badge-${status}`}>{status}</span>;
@@ -19,9 +20,10 @@ function EntryModal({ entry, employees = [], projects = [], onClose, onSaved }) 
     description:  entry?.description  || '',
     billing_notes: entry?.billing_notes || '',
   });
-  const [tasks, setTasks] = useState([]);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr]   = useState('');
+  const [tasks,    setTasks]    = useState([]);
+  const [saving,   setSaving]   = useState(false);
+  const [err,      setErr]      = useState('');
+  const [cfValues, setCfValues] = useState({});
 
   // Load tasks when project changes
   useEffect(() => {
@@ -47,11 +49,16 @@ function EntryModal({ entry, employees = [], projects = [], onClose, onSaved }) 
       const payload = {
         ...form,
         hours:      Number(form.hours),
-        project_id: form.project_id || null,
-        task_id:    form.task_id    || null,
+        project_id: form.project_id  || null,
+        task_id:    form.task_id     || null,
       };
-      if (isEdit) await api.put(`/api/time-entries/${entry.id}`, payload);
-      else        await api.post('/api/time-entries', payload);
+      let result;
+      if (isEdit) {
+        result = await api.put(`/api/time-entries/${entry.id}`, payload);
+      } else {
+        result = await api.post('/api/time-entries', payload);
+        await saveCFValues(api, 'timesheets', result.data?.id, cfValues);
+      }
       onSaved();
     } catch (e) {
       setErr(e.response?.data?.error || 'Save failed');
@@ -126,12 +133,10 @@ function EntryModal({ entry, employees = [], projects = [], onClose, onSaved }) 
             </div>
           )}
 
-          {isEdit && entry?.id && (
-            <div className="border-t border-gray-100 pt-4 mt-2">
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Custom Fields</h4>
-              <CustomFieldsPanel module="timesheets" recordId={entry.id} />
-            </div>
-          )}
+          {isEdit && entry?.id
+            ? <CustomFieldsPanel module="timesheets" recordId={entry.id} />
+            : <CustomFieldsCreateSection module="timesheets" onValuesChange={setCfValues} />
+          }
 
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>

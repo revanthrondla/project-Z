@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api';
 import CustomFieldsPanel from '../../components/CustomFieldsPanel';
+import CustomFieldsCreateSection, { saveCFValues } from '../../components/CustomFieldsCreateSection';
 
 const CONTRACT_TYPES = ['contractor', 'employee', 'part-time'];
 const STATUS_OPTIONS = ['open', 'draft', 'closed'];
@@ -23,17 +24,18 @@ const JOB_STATUS_COLORS = {
 const emptyForm = { title: '', description: '', skills: '', client_id: '', location: '', contract_type: 'contractor', hourly_rate_min: '', hourly_rate_max: '', status: 'open' };
 
 export default function AdminJobs() {
-  const [jobs, setJobs] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editJob, setEditJob] = useState(null);
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
-  const [selectedJob, setSelectedJob] = useState(null);
+  const [jobs,         setJobs]         = useState([]);
+  const [clients,      setClients]      = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [showForm,     setShowForm]     = useState(false);
+  const [editJob,      setEditJob]      = useState(null);
+  const [form,         setForm]         = useState(emptyForm);
+  const [saving,       setSaving]       = useState(false);
+  const [cfValues,     setCfValues]     = useState({});
+  const [selectedJob,  setSelectedJob]  = useState(null);
   const [applications, setApplications] = useState([]);
-  const [appsLoading, setAppsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [appsLoading,  setAppsLoading]  = useState(false);
+  const [error,        setError]        = useState('');
 
   useEffect(() => {
     fetchJobs();
@@ -76,6 +78,7 @@ export default function AdminJobs() {
   function openCreate() {
     setEditJob(null);
     setForm(emptyForm);
+    setCfValues({});
     setShowForm(true);
   }
 
@@ -109,7 +112,8 @@ export default function AdminJobs() {
       if (editJob) {
         await api.put(`/api/jobs/${editJob.id}`, payload);
       } else {
-        await api.post('/api/jobs', payload);
+        const result = await api.post('/api/jobs', payload);
+        await saveCFValues(api, 'jobs', result.data?.id, cfValues);
       }
       setShowForm(false);
       fetchJobs();
@@ -297,12 +301,10 @@ export default function AdminJobs() {
                   <input type="number" min="0" step="0.01" value={form.hourly_rate_max} onChange={e => setForm(f => ({ ...f, hourly_rate_max: e.target.value }))} placeholder="120" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
                 </div>
               </div>
-              {editJob?.id && (
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-sm font-medium text-gray-500 mb-3">Custom Fields</p>
-                  <CustomFieldsPanel module="jobs" recordId={editJob.id} />
-                </div>
-              )}
+              {editJob?.id
+                ? <CustomFieldsPanel module="jobs" recordId={editJob.id} />
+                : <CustomFieldsCreateSection module="jobs" onValuesChange={setCfValues} />
+              }
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
                 <button type="submit" disabled={saving} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-60">
