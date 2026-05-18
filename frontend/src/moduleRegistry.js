@@ -201,6 +201,14 @@ export const MODULE_REGISTRY = [
 
   // ── AI & Automation ────────────────────────────────────────────────────────
   {
+    key:         'hr_id_scan',
+    name:        'ID Scan Hiring',
+    category:    'AI',
+    description: 'Real-time OCR from government-issued ID documents — live camera or file upload — for rapid bulk employee on-boarding. Uses open-source Ollama/Tesseract or cloud AI.',
+    icon:        '🪪',
+    default:     false,
+  },
+  {
     key:         'ai_assistant',
     name:        'AI Assistant',
     category:    'AI',

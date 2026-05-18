@@ -1159,6 +1159,33 @@ const MIGRATIONS = [
       `);
     },
   },
+
+  {
+    id: 24,
+    scope: 'tenant',
+    description: 'ID scan audit logs for OCR-based bulk hiring (hr_id_scan module)',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS id_scan_logs (
+          id              BIGSERIAL PRIMARY KEY,
+          scanned_by      BIGINT REFERENCES users(id) ON DELETE SET NULL,
+          scan_time       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          id_type         TEXT,
+          id_number_hash  TEXT,
+          outcome         TEXT NOT NULL DEFAULT 'extracted'
+                            CHECK (outcome IN ('extracted','failed','hired','skipped')),
+          employee_id     BIGINT REFERENCES employees(id) ON DELETE SET NULL,
+          extracted_name  TEXT,
+          confidence      NUMERIC(4,3),
+          error_message   TEXT,
+          created_at      TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_id_scan_logs_time       ON id_scan_logs(scan_time DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_id_scan_logs_employee   ON id_scan_logs(employee_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_id_scan_logs_scanned_by ON id_scan_logs(scanned_by)`);
+    },
+  },
 ];
 
 // ── Core migration runner ─────────────────────────────────────────────────────

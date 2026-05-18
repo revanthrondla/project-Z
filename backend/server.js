@@ -53,6 +53,7 @@ const attendanceRoutes       = require('./routes/attendance');
 const holidayRoutes          = require('./routes/holidays');
 const leaveBalanceRoutes     = require('./routes/leaveBalances');
 const scheduledReportRoutes  = require('./routes/scheduledReports');
+const idScanRoutes           = require('./routes/idScan');
 
 const app      = express();
 const PORT     = process.env.PORT || 3001;
@@ -228,6 +229,7 @@ app.use('/api/attendance',         attendanceRoutes);
 app.use('/api/holidays',           holidayRoutes);
 app.use('/api/leave-balances',     leaveBalanceRoutes);
 app.use('/api/scheduled-reports',  scheduledReportRoutes);
+app.use('/api/id-scan',            idScanRoutes);
 
 // ── Audit log viewer ──────────────────────────────────────────────────────────
 const { authenticate, requireAdmin, injectTenantDb } = require('./middleware/auth');

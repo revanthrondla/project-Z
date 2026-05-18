@@ -29,7 +29,8 @@ const adminNav = [
   { to: '/agrow/custom-fields', icon: '🔧', label: 'Custom Fields',                            moduleKey: 'agrow_custom_fields' },
   { to: '/agrow/languages',     icon: '🌐', label: 'Languages',                                moduleKey: 'agrow_languages' },
   // ── HR/Staffing ─────────────────────────────────────────────────────────────
-  { to: '/employees',  icon: '👥', label: 'Employees',  section: 'Staffing', moduleKey: 'hr_candidates' },
+  { to: '/employees',       icon: '👥', label: 'Employees',     section: 'Staffing', moduleKey: 'hr_candidates' },
+  { to: '/id-scan-hire',   icon: '🪪', label: 'ID Scan Hire',                       moduleKey: 'hr_id_scan' },
   { to: '/recruiters', icon: '🕵️', label: 'Recruiters',                        moduleKey: 'hr_candidates' },
   { to: '/jobs',       icon: '💼', label: 'Jobs',                              moduleKey: 'hr_jobs' },
   { to: '/clients',    icon: '🏢', label: 'Clients',     section: 'Consulting', moduleKey: 'hr_clients' },
