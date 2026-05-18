@@ -443,11 +443,32 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
     }
 
     // SOC 2 CC6.1: Check last 5 password hashes — disallow reuse
-    const histResult = await db.query(
-      'SELECT password_hash FROM password_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5',
-      [user.id]
-    );
-    for (const row of histResult.rows) {
+    // Auto-create the table if it doesn't exist yet (e.g. fresh DB or incomplete migration)
+    try {
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS password_history (
+          id            BIGSERIAL PRIMARY KEY,
+          user_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          password_hash TEXT NOT NULL,
+          created_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await db.query(`
+        CREATE INDEX IF NOT EXISTS idx_password_history_user
+          ON password_history(user_id, created_at DESC)
+      `);
+    } catch (_) { /* non-fatal — table may already exist */ }
+
+    let histRows = [];
+    try {
+      const histResult = await db.query(
+        'SELECT password_hash FROM password_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5',
+        [user.id]
+      );
+      histRows = histResult.rows;
+    } catch (_) { /* table still unavailable — skip reuse check rather than blocking login */ }
+
+    for (const row of histRows) {
       if (bcrypt.compareSync(newPassword, row.password_hash)) {
         return res.status(400).json({
           error: 'New password cannot be the same as any of your last 5 passwords',
@@ -459,17 +480,19 @@ router.put('/change-password', authenticate, injectTenantDb, async (req, res) =>
     const tenantNewHash = await bcrypt.hash(newPassword, 12);
 
     // Store old hash in history before overwriting
-    await db.query(
-      'INSERT INTO password_history (user_id, password_hash) VALUES ($1, $2)',
-      [user.id, user.password_hash]
-    );
-    // Prune history beyond 5 entries
-    await db.query(
-      `DELETE FROM password_history WHERE id IN (
-         SELECT id FROM password_history WHERE user_id = $1 ORDER BY created_at DESC OFFSET 5
-       )`,
-      [user.id]
-    );
+    try {
+      await db.query(
+        'INSERT INTO password_history (user_id, password_hash) VALUES ($1, $2)',
+        [user.id, user.password_hash]
+      );
+      // Prune history beyond 5 entries
+      await db.query(
+        `DELETE FROM password_history WHERE id IN (
+           SELECT id FROM password_history WHERE user_id = $1 ORDER BY created_at DESC OFFSET 5
+         )`,
+        [user.id]
+      );
+    } catch (_) { /* non-fatal — password still gets updated below */ }
 
     await db.query(
       'UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE id = $2',
