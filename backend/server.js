@@ -643,6 +643,7 @@ async function start() {
           .prepare("SELECT slug FROM tenants WHERE status = 'active'")
           .all();
         return tenants.map(t => ({
+          slug: t.slug,
           db: {
             query: async (sql, params) => {
               const { wrapper, release } = await getTenantDb(t.slug);

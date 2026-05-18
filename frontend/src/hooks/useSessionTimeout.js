@@ -35,7 +35,7 @@ export function useSessionTimeout(isLoggedIn) {
     clearTimeout(idleTimer.current);
     clearInterval(heartbeatRef.current);
     try {
-      await api.post('/auth/logout');
+      await api.post('/api/auth/logout');
     } catch {}
     localStorage.removeItem('hireiq_user');
     navigate('/login?reason=session_timeout', { replace: true });
@@ -80,7 +80,7 @@ export function useSessionTimeout(isLoggedIn) {
     // Heartbeat — detect server-side revocation or expiry
     heartbeatRef.current = setInterval(async () => {
       try {
-        await api.post('/auth/heartbeat');
+        await api.post('/api/auth/heartbeat');
       } catch (err) {
         if (err.response?.status === 401) {
           doLogout();

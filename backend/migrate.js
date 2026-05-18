@@ -770,17 +770,28 @@ const MIGRATIONS = [
     scope: 'tenant',
     description: 'GDPR Art.37/13: DPO + GDPR settings columns in org_profile',
     async up(client) {
+      // Guard: some tenants were provisioned without org_profile — skip gracefully
       await client.query(`
-        ALTER TABLE org_profile
-          ADD COLUMN IF NOT EXISTS dpo_name              TEXT,
-          ADD COLUMN IF NOT EXISTS dpo_email             TEXT,
-          ADD COLUMN IF NOT EXISTS dpo_phone             TEXT,
-          ADD COLUMN IF NOT EXISTS lawful_basis_default  TEXT DEFAULT 'legitimate_interests',
-          ADD COLUMN IF NOT EXISTS consent_expiry_days   INTEGER DEFAULT 365,
-          ADD COLUMN IF NOT EXISTS cross_border_transfer BOOLEAN DEFAULT FALSE,
-          ADD COLUMN IF NOT EXISTS cross_border_details  TEXT,
-          ADD COLUMN IF NOT EXISTS privacy_notice_url    TEXT,
-          ADD COLUMN IF NOT EXISTS gdpr_enabled          BOOLEAN DEFAULT FALSE
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'org_profile'
+          ) THEN
+            ALTER TABLE org_profile
+              ADD COLUMN IF NOT EXISTS dpo_name              TEXT,
+              ADD COLUMN IF NOT EXISTS dpo_email             TEXT,
+              ADD COLUMN IF NOT EXISTS dpo_phone             TEXT,
+              ADD COLUMN IF NOT EXISTS lawful_basis_default  TEXT DEFAULT 'legitimate_interests',
+              ADD COLUMN IF NOT EXISTS consent_expiry_days   INTEGER DEFAULT 365,
+              ADD COLUMN IF NOT EXISTS cross_border_transfer BOOLEAN DEFAULT FALSE,
+              ADD COLUMN IF NOT EXISTS cross_border_details  TEXT,
+              ADD COLUMN IF NOT EXISTS privacy_notice_url    TEXT,
+              ADD COLUMN IF NOT EXISTS gdpr_enabled          BOOLEAN DEFAULT FALSE;
+          END IF;
+        END
+        $$
       `);
     },
   },
@@ -917,7 +928,7 @@ const MIGRATIONS = [
         )
       `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_employee ON clock_events(employee_id, event_time DESC)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_date ON clock_events(DATE(event_time))`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_date ON clock_events(event_time DESC)`);
 
       // ── P2: Public / bank holidays per org location ────────────────────────
       await client.query(`
@@ -1103,7 +1114,7 @@ const MIGRATIONS = [
         )
       `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_employee ON clock_events(employee_id, event_time DESC)`);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_date ON clock_events(DATE(event_time))`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_date ON clock_events(event_time DESC)`);
 
       await client.query(`
         CREATE TABLE IF NOT EXISTS public_holidays (

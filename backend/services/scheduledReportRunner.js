@@ -257,9 +257,16 @@ async function sendScheduledReport(db, schedule) {
 
 /* ─── Cron tick — called every 15 min from server.js ────────────────────── */
 async function runDueReports(getAllTenantDbs) {
+  let tenantDbs;
   try {
-    const tenantDbs = await getAllTenantDbs();
-    for (const { db } of tenantDbs) {
+    tenantDbs = await getAllTenantDbs();
+  } catch (err) {
+    console.error('[ScheduledReports] Failed to enumerate tenant DBs:', err.message);
+    return;
+  }
+
+  for (const { slug, db } of tenantDbs) {
+    try {
       const { rows: due } = await db.query(`
         SELECT * FROM scheduled_reports
         WHERE  is_active = TRUE
@@ -269,12 +276,13 @@ async function runDueReports(getAllTenantDbs) {
       `);
       for (const schedule of due) {
         await sendScheduledReport(db, schedule).catch(err =>
-          console.error(`[ScheduledReports] Failed for id=${schedule.id}:`, err.message),
+          console.error(`[ScheduledReports] Failed for tenant=${slug} id=${schedule.id}:`, err.message),
         );
       }
+    } catch (err) {
+      // Tenant schema may be incomplete (e.g. missing scheduled_reports table) — skip it
+      console.error(`[ScheduledReports] Skipping tenant ${slug || '?'}: ${err.message}`);
     }
-  } catch (err) {
-    console.error('[ScheduledReports] runDueReports error:', err.message);
   }
 }
 
