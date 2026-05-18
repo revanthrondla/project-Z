@@ -955,11 +955,16 @@ const MIGRATIONS = [
       `);
 
       // ── P1: Break tracking in time entries ────────────────────────────────
+      // Split into two separate ALTER TABLE statements: PostgreSQL cannot reference
+      // a column being added in the same statement from a GENERATED ALWAYS AS expression.
       await client.query(`
         ALTER TABLE time_entries
-          ADD COLUMN IF NOT EXISTS break_minutes      INTEGER NOT NULL DEFAULT 0
-                                   CHECK (break_minutes >= 0),
-          ADD COLUMN IF NOT EXISTS billable_hours     NUMERIC(6,2)
+          ADD COLUMN IF NOT EXISTS break_minutes INTEGER NOT NULL DEFAULT 0
+                                   CHECK (break_minutes >= 0)
+      `);
+      await client.query(`
+        ALTER TABLE time_entries
+          ADD COLUMN IF NOT EXISTS billable_hours NUMERIC(6,2)
                                    GENERATED ALWAYS AS
                                    (CASE WHEN is_billable THEN
                                      GREATEST(0, ROUND(hours - break_minutes::NUMERIC / 60, 4))
@@ -1067,6 +1072,90 @@ const MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_te_client_approval
           ON time_entries(client_approval_status)
           WHERE client_approval_status IS NOT NULL
+      `);
+    },
+  },
+
+  {
+    id: 23,
+    scope: 'tenant',
+    description: 'Recovery migration — ensure clock_events, public_holidays, attendance_daily tables exist (idempotent)',
+    async up(client) {
+      // Migration 21 could have failed on some tenant schemas due to the
+      // billable_hours GENERATED ALWAYS AS expression referencing break_minutes
+      // in the same ALTER TABLE statement. This migration ensures the three key
+      // tables from that transaction are created regardless.
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS clock_events (
+          id            BIGSERIAL PRIMARY KEY,
+          employee_id   BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+          event_type    TEXT   NOT NULL CHECK (event_type IN ('clock_in','clock_out','break_start','break_end')),
+          event_time    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          latitude      NUMERIC(9,6),
+          longitude     NUMERIC(9,6),
+          accuracy_m    NUMERIC(7,2),
+          location_name TEXT,
+          device_info   TEXT,
+          ip_address    TEXT,
+          notes         TEXT,
+          created_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_employee ON clock_events(employee_id, event_time DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_date ON clock_events(DATE(event_time))`);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public_holidays (
+          id            BIGSERIAL PRIMARY KEY,
+          location_id   BIGINT REFERENCES org_locations(id) ON DELETE SET NULL,
+          holiday_date  DATE   NOT NULL,
+          name          TEXT   NOT NULL,
+          is_mandatory  BOOLEAN NOT NULL DEFAULT TRUE,
+          applies_to    TEXT   NOT NULL DEFAULT 'all'
+                          CHECK (applies_to IN ('all','full_time','part_time','contractors')),
+          created_at    TIMESTAMPTZ DEFAULT NOW(),
+          updated_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_holidays_date ON public_holidays(holiday_date)`);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_holidays_unique ON public_holidays(location_id, holiday_date, name)`);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS attendance_daily (
+          id             BIGSERIAL PRIMARY KEY,
+          employee_id    BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+          work_date      DATE   NOT NULL,
+          clock_in_time  TIMESTAMPTZ,
+          clock_out_time TIMESTAMPTZ,
+          total_minutes  INTEGER,
+          break_minutes  INTEGER NOT NULL DEFAULT 0,
+          net_minutes    INTEGER,
+          status         TEXT NOT NULL DEFAULT 'absent'
+                           CHECK (status IN ('present','absent','late','partial','on_leave','holiday')),
+          notes          TEXT,
+          created_at     TIMESTAMPTZ DEFAULT NOW(),
+          updated_at     TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(employee_id, work_date)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_attendance_daily_date ON attendance_daily(work_date DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_attendance_daily_emp  ON attendance_daily(employee_id, work_date DESC)`);
+
+      // Also ensure break_minutes exists on time_entries (may have failed in migration 21)
+      await client.query(`
+        ALTER TABLE time_entries
+          ADD COLUMN IF NOT EXISTS break_minutes INTEGER NOT NULL DEFAULT 0
+                                   CHECK (break_minutes >= 0)
+      `);
+      // Add billable_hours only if break_minutes already exists (it does, from above)
+      await client.query(`
+        ALTER TABLE time_entries
+          ADD COLUMN IF NOT EXISTS billable_hours NUMERIC(6,2)
+                                   GENERATED ALWAYS AS
+                                   (CASE WHEN is_billable THEN
+                                     GREATEST(0, ROUND(hours - break_minutes::NUMERIC / 60, 4))
+                                   ELSE 0 END) STORED
       `);
     },
   },

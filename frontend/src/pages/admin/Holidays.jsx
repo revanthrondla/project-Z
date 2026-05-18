@@ -95,7 +95,9 @@ function BulkImportModal({ onClose, onImported }) {
   }, [country]);
 
   const handleImport = async () => {
-    const toImport = holidays.filter(h => selected.has(h.date));
+    const toImport = holidays
+      .filter(h => selected.has(h.date))
+      .map(h => ({ holiday_date: h.date, name: h.name })); // backend expects holiday_date
     if (!toImport.length) return setError('Select at least one holiday');
     setLoading(true); setError('');
     try {
@@ -154,10 +156,9 @@ function BulkImportModal({ onClose, onImported }) {
 // ── Add/Edit single holiday modal ─────────────────────────────────────────────
 function HolidayFormModal({ holiday, onClose, onSaved }) {
   const [form, setForm] = useState({
-    date: holiday?.date || '',
+    holiday_date: holiday?.holiday_date || '',
     name: holiday?.name || '',
-    description: holiday?.description || '',
-    is_recurring: holiday?.is_recurring ?? true,
+    is_mandatory: holiday?.is_mandatory ?? true,
     location_id: holiday?.location_id || '',
   });
   const [loading, setLoading] = useState(false);
@@ -188,8 +189,8 @@ function HolidayFormModal({ holiday, onClose, onSaved }) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="label">Date *</label>
-            <input type="date" className="input" required value={form.date}
-              onChange={e => setForm({ ...form, date: e.target.value })} />
+            <input type="date" className="input" required value={form.holiday_date}
+              onChange={e => setForm({ ...form, holiday_date: e.target.value })} />
           </div>
           <div>
             <label className="label">Name *</label>
@@ -197,16 +198,11 @@ function HolidayFormModal({ holiday, onClose, onSaved }) {
               onChange={e => setForm({ ...form, name: e.target.value })} />
           </div>
         </div>
-        <div>
-          <label className="label">Description (optional)</label>
-          <input type="text" className="input" placeholder="Brief description" value={form.description}
-            onChange={e => setForm({ ...form, description: e.target.value })} />
-        </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" className="w-4 h-4 rounded accent-emerald-600"
-            checked={form.is_recurring}
-            onChange={e => setForm({ ...form, is_recurring: e.target.checked })} />
-          <span className="text-sm text-gray-700">Recurring annually</span>
+            checked={form.is_mandatory}
+            onChange={e => setForm({ ...form, is_mandatory: e.target.checked })} />
+          <span className="text-sm text-gray-700">Mandatory (counts against leave balance)</span>
         </label>
         <div className="flex gap-3 pt-2">
           <button type="submit" className="btn-primary flex-1" disabled={loading}>
@@ -261,7 +257,7 @@ export default function AdminHolidays() {
 
   // Group by month
   const byMonth = filtered.reduce((acc, h) => {
-    const month = h.date.slice(0, 7); // YYYY-MM
+    const month = (h.holiday_date || '').slice(0, 7); // YYYY-MM
     if (!acc[month]) acc[month] = [];
     acc[month].push(h);
     return acc;
@@ -334,19 +330,19 @@ export default function AdminHolidays() {
                     <div key={h.id} className="flex items-center gap-4 px-5 py-4">
                       {/* Date badge */}
                       <div className="w-14 h-14 rounded-xl bg-emerald-50 flex flex-col items-center justify-center shrink-0 text-emerald-700">
-                        <p className="text-lg font-bold leading-none">{h.date.slice(8)}</p>
+                        <p className="text-lg font-bold leading-none">{(h.holiday_date || '').slice(8)}</p>
                         <p className="text-xs uppercase tracking-wide mt-0.5">
-                          {new Date(h.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short' })}
+                          {new Date((h.holiday_date || '') + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short' })}
                         </p>
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-gray-900">{h.name}</p>
-                          {h.is_recurring && (
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">🔁 Annual</span>
+                          {h.is_mandatory && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Mandatory</span>
                           )}
                         </div>
-                        {h.description && <p className="text-sm text-gray-500 mt-0.5">{h.description}</p>}
+                        {h.location_name && <p className="text-sm text-gray-500 mt-0.5">📍 {h.location_name}</p>}
                       </div>
                       <div className="flex gap-2 shrink-0">
                         <button
