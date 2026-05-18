@@ -360,8 +360,8 @@ function AppRoutes() {
         <Route path="clients"      element={<ModuleRoute moduleKey="hr_clients"    adminOnly><Lazy><AdminClients /></Lazy></ModuleRoute>} />
         <Route path="recruiters"   element={<PrivateRoute adminOnly><Lazy><AdminRecruiters /></Lazy></PrivateRoute>} />
         <Route path="timesheets"   element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminTimesheets /></Lazy></ModuleRoute>} />
-        <Route path="attendance"   element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminAttendance /></Lazy></ModuleRoute>} />
-        <Route path="holidays"     element={<ModuleRoute moduleKey="hr_absences"   adminOnly><Lazy><AdminHolidays /></Lazy></ModuleRoute>} />
+        <Route path="attendance"   element={<ModuleRoute moduleKey="hr_attendance" adminOnly><Lazy><AdminAttendance /></Lazy></ModuleRoute>} />
+        <Route path="holidays"     element={<ModuleRoute moduleKey="hr_attendance" adminOnly><Lazy><AdminHolidays /></Lazy></ModuleRoute>} />
         <Route path="absences" element={
           user?.role === 'admin'
             ? <ModuleRoute moduleKey="hr_absences" adminOnly><Lazy><AdminAbsences /></Lazy></ModuleRoute>
@@ -395,12 +395,12 @@ function AppRoutes() {
         } />
 
         {/* Admin: Reports + Import + Settings */}
-        <Route path="reports"     element={<ModuleRoute moduleKey="hr_reports" adminOnly><Lazy><AdminReports /></Lazy></ModuleRoute>} />
-        <Route path="projects"    element={<ModuleRoute moduleKey="hr_timesheets" adminOnly><Lazy><AdminProjects /></Lazy></ModuleRoute>} />
-        <Route path="expenses"    element={<PrivateRoute><Lazy><AdminExpenses /></Lazy></PrivateRoute>} />
-        <Route path="contractors"  element={<PrivateRoute adminOnly><Lazy><AdminContractors /></Lazy></PrivateRoute>} />
-        <Route path="compliance"   element={<PrivateRoute adminOnly><Lazy><AdminCompliance /></Lazy></PrivateRoute>} />
-        <Route path="eeo"          element={<PrivateRoute adminOnly><Lazy><AdminEEO /></Lazy></PrivateRoute>} />
+        <Route path="reports"     element={<ModuleRoute moduleKey="hr_reports"     adminOnly><Lazy><AdminReports /></Lazy></ModuleRoute>} />
+        <Route path="projects"    element={<ModuleRoute moduleKey="hr_projects"    adminOnly><Lazy><AdminProjects /></Lazy></ModuleRoute>} />
+        <Route path="expenses"    element={<ModuleRoute moduleKey="hr_expenses"    adminOnly><Lazy><AdminExpenses /></Lazy></ModuleRoute>} />
+        <Route path="contractors" element={<ModuleRoute moduleKey="hr_contractors" adminOnly><Lazy><AdminContractors /></Lazy></ModuleRoute>} />
+        <Route path="compliance"  element={<ModuleRoute moduleKey="hr_compliance"  adminOnly><Lazy><AdminCompliance /></Lazy></ModuleRoute>} />
+        <Route path="eeo"         element={<ModuleRoute moduleKey="hr_eeo"         adminOnly><Lazy><AdminEEO /></Lazy></ModuleRoute>} />
         <Route path="privacy"      element={<PrivateRoute adminOnly><Lazy><AdminPrivacy /></Lazy></PrivateRoute>} />
         <Route path="integrations"  element={<PrivateRoute adminOnly><Lazy><AdminIntegrations /></Lazy></PrivateRoute>} />
         <Route path="access-review" element={<PrivateRoute adminOnly><Lazy><AdminAccessReview /></Lazy></PrivateRoute>} />

@@ -54,7 +54,7 @@ router.get('/tenants', async (req, res) => {
             return res.rows[0];
           })(),
         ]);
-        return { ...t, candidate_count: employees.c, client_count: clients.c, user_count: users.c };
+        return { ...t, candidate_count: candidates.c, client_count: clients.c, user_count: users.c };
       } catch {
         return { ...t, candidate_count: 0, client_count: 0, user_count: 0 };
       } finally {
