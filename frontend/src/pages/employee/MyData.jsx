@@ -110,7 +110,7 @@ function SubmitModal({ type, employeeId, onClose, onSubmitted }) {
     setSaving(true);
     setError(null);
     try {
-      await api.post('/privacy/requests', {
+      await api.post('/api/privacy/requests', {
         candidate_id:  employeeId,
         request_type:  type.id,
         request_notes: notes || null,
@@ -262,7 +262,7 @@ export default function MyData() {
     setLoadingReqs(true);
     try {
       // The backend filters by employeeId when role !== admin
-      const r = await api.get('/privacy/requests');
+      const r = await api.get('/api/privacy/requests');
       // Filter to own requests only in case backend doesn't scope
       const mine = r.data.filter(req =>
         req.candidate_id === employeeId || req.employee_id === employeeId

@@ -62,7 +62,7 @@ export default function AuditLog() {
       if (filters.user_id)    params.user_id    = filters.user_id;
       if (filters.from)       params.from       = filters.from;
       if (filters.to)         params.to         = filters.to;
-      const r = await api.get('/audit-logs', { params });
+      const r = await api.get('/api/audit-logs', { params });
       setLogs(r.data.logs || []);
       setTotal(r.data.total || 0);
     } catch (e) {

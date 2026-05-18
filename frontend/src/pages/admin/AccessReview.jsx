@@ -65,7 +65,7 @@ function LockedAccountsPanel() {
 
   const loadLocked = useCallback(() => {
     setLLoading(true);
-    api.get('/settings/locked-accounts')
+    api.get('/api/settings/locked-accounts')
       .then(r => setLocked(r.data))
       .catch(() => {})
       .finally(() => setLLoading(false));
@@ -76,7 +76,7 @@ function LockedAccountsPanel() {
   const unlock = async email => {
     setUnlocking(email);
     try {
-      await api.delete(`/settings/locked-accounts/${encodeURIComponent(email)}`);
+      await api.delete(`/api/settings/locked-accounts/${encodeURIComponent(email)}`);
       loadLocked();
     } catch (e) {
       alert(e.response?.data?.error || 'Failed to unlock account');
@@ -132,7 +132,7 @@ export default function AccessReview() {
   const [filter,  setFilter]  = useState('all'); // all | no_mfa | dormant | must_change
 
   useEffect(() => {
-    api.get('/settings/access-review')
+    api.get('/api/settings/access-review')
       .then(r => setReport(r.data))
       .catch(e => setError(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));

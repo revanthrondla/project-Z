@@ -44,7 +44,7 @@ function RequestsTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get('/privacy/requests', { params: filter !== 'all' ? { status: filter } : {} });
+      const r = await api.get('/api/privacy/requests', { params: filter !== 'all' ? { status: filter } : {} });
       setRequests(Array.isArray(r.data) ? r.data : []);
     } catch (e) {
       setErr(e.response?.data?.error || e.message);
@@ -455,7 +455,7 @@ function RopaTab() {
 
   const load = () => {
     setLoading(true);
-    api.get('/gdpr/ropa')
+    api.get('/api/gdpr/ropa')
       .then(r => setActivities(r.data))
       .catch(e => setErr(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
@@ -466,7 +466,7 @@ function RopaTab() {
   const submit = async e => {
     e.preventDefault(); setErr(null); setSaving(true);
     try {
-      await api.post('/gdpr/ropa', {
+      await api.post('/api/gdpr/ropa', {
         ...form,
         data_categories: form.data_categories.split(',').map(s => s.trim()).filter(Boolean),
         data_subjects:   form.data_subjects.split(',').map(s => s.trim()).filter(Boolean),
@@ -586,7 +586,7 @@ function BreachRegisterTab() {
 
   const load = () => {
     setLoading(true);
-    api.get('/gdpr/breaches')
+    api.get('/api/gdpr/breaches')
       .then(r => setBreaches(r.data))
       .catch(e => setErr(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
@@ -605,7 +605,7 @@ function BreachRegisterTab() {
   const submit = async e => {
     e.preventDefault(); setErr(null); setSaving(true);
     try {
-      await api.post('/gdpr/breaches', {
+      await api.post('/api/gdpr/breaches', {
         ...form,
         affected_records: form.affected_records ? parseInt(form.affected_records, 10) : null,
         data_types_affected: form.data_types_affected.split(',').map(s => s.trim()).filter(Boolean),
@@ -755,7 +755,7 @@ function GdprSettingsTab() {
   const [err,      setErr]      = useState(null);
 
   useEffect(() => {
-    api.get('/gdpr/settings')
+    api.get('/api/gdpr/settings')
       .then(r => setSettings(r.data || {}))
       .catch(e => setErr(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
@@ -764,7 +764,7 @@ function GdprSettingsTab() {
   const save = async e => {
     e.preventDefault(); setErr(null); setSaving(true); setSaved(false);
     try {
-      await api.put('/gdpr/settings', settings);
+      await api.put('/api/gdpr/settings', settings);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) { setErr(e.response?.data?.error || e.message); }

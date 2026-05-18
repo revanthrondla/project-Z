@@ -101,7 +101,7 @@ function OrgConfigTab() {
   const [err,     setErr]     = useState(null);
 
   useEffect(() => {
-    api.get('/eeo/profile')
+    api.get('/api/eeo/profile')
       .then(r => setForm(r.data))
       .catch(e => setErr(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
@@ -113,7 +113,7 @@ function OrgConfigTab() {
     setSaving(true); setErr(null); setSaved(false);
     try {
       const { _labels, ...body } = form;
-      await api.put('/eeo/profile', body);
+      await api.put('/api/eeo/profile', body);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
@@ -302,7 +302,7 @@ function WorkforceStatsTab() {
   const [err,     setErr]     = useState(null);
 
   useEffect(() => {
-    api.get('/eeo/workforce-stats')
+    api.get('/api/eeo/workforce-stats')
       .then(r => setStats(r.data))
       .catch(e => setErr(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
@@ -412,7 +412,7 @@ function ReportsTab() {
   const loadReports = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get('/eeo/reports');
+      const r = await api.get('/api/eeo/reports');
       setReports(Array.isArray(r.data) ? r.data : []);
     } catch (e) {
       setErr(e.response?.data?.error || e.message);
@@ -426,7 +426,7 @@ function ReportsTab() {
   const generate = async () => {
     setGenerating(true); setErr(null); setGenMsg(null);
     try {
-      const r = await api.post('/eeo/reports/generate', { snapshot_date: snapDate, report_year: repYear });
+      const r = await api.post('/api/eeo/reports/generate', { snapshot_date: snapDate, report_year: repYear });
       setGenMsg(`✓ Generated ${r.data.rows_generated} rows for ${repYear} (snapshot: ${snapDate})`);
       await loadReports();
     } catch (e) {
@@ -606,7 +606,7 @@ function WorkforceTableTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get('/eeo/employees', { params: { page, limit: LIMIT, missing_only: missingOnly } });
+      const r = await api.get('/api/eeo/employees', { params: { page, limit: LIMIT, missing_only: missingOnly } });
       setData(Array.isArray(r.data?.data) ? r.data.data : []);
       setTotal(r.data?.total ?? 0);
     } catch (e) {
