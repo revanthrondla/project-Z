@@ -52,6 +52,7 @@ const { startRetentionJob }  = require('./services/retentionJob');
 const attendanceRoutes       = require('./routes/attendance');
 const holidayRoutes          = require('./routes/holidays');
 const leaveBalanceRoutes     = require('./routes/leaveBalances');
+const scheduledReportRoutes  = require('./routes/scheduledReports');
 
 const app      = express();
 const PORT     = process.env.PORT || 3001;
@@ -223,9 +224,10 @@ app.use('/api/privacy',          privacyRoutes);
 app.use('/api/eeo',              eeoRoutes);
 app.use('/api/integrations',     integrationsRoutes);
 app.use('/api/gdpr',             gdprRoutes);
-app.use('/api/attendance',       attendanceRoutes);
-app.use('/api/holidays',         holidayRoutes);
-app.use('/api/leave-balances',   leaveBalanceRoutes);
+app.use('/api/attendance',         attendanceRoutes);
+app.use('/api/holidays',           holidayRoutes);
+app.use('/api/leave-balances',     leaveBalanceRoutes);
+app.use('/api/scheduled-reports',  scheduledReportRoutes);
 
 // ── Audit log viewer ──────────────────────────────────────────────────────────
 const { authenticate, requireAdmin, injectTenantDb } = require('./middleware/auth');
@@ -626,6 +628,39 @@ async function start() {
 
     // SOC 2 CC9.1: Start nightly data retention enforcement job
     startRetentionJob();
+
+    // ── Scheduled report delivery (every 15 min) ──────────────────────────
+    (function startScheduledReportJob() {
+      const cron = require('node-cron');
+      const { runDueReports } = require('./services/scheduledReportRunner');
+      const { getTenantDb }   = require('./database');
+      const { masterDb: srMasterDb } = require('./masterDatabase');
+
+      async function getAllTenantDbs() {
+        const tenants = await srMasterDb
+          .prepare("SELECT slug FROM tenants WHERE status = 'active'")
+          .all();
+        return tenants.map(t => ({
+          db: {
+            query: async (sql, params) => {
+              const { wrapper, release } = await getTenantDb(t.slug);
+              try {
+                return await wrapper.query(sql, params);
+              } finally {
+                release();
+              }
+            },
+          },
+        }));
+      }
+
+      cron.schedule('*/15 * * * *', () => {
+        runDueReports(getAllTenantDbs).catch(err =>
+          console.error('[ScheduledReports] Cron error:', err.message)
+        );
+      });
+      console.log('📅 Scheduled report delivery job started (checks every 15 min)');
+    })();
 
   } catch (err) {
     console.error('[FATAL] DB initialisation failed:', err.message);

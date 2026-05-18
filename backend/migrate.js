@@ -1019,6 +1019,34 @@ const MIGRATIONS = [
   },
 
   {
+    id: 22,
+    scope: 'tenant',
+    description: 'Scheduled reports table for weekly/monthly email delivery',
+    async up(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS scheduled_reports (
+          id            BIGSERIAL PRIMARY KEY,
+          name          TEXT    NOT NULL,
+          report_type   TEXT    NOT NULL CHECK (report_type IN ('hours','absences','revenue','labor_cost','utilization','payroll')),
+          frequency     TEXT    NOT NULL CHECK (frequency IN ('daily','weekly','monthly')),
+          day_of_week   INTEGER CHECK (day_of_week BETWEEN 0 AND 6),   -- for weekly (0=Sun)
+          day_of_month  INTEGER CHECK (day_of_month BETWEEN 1 AND 28), -- for monthly
+          recipients    TEXT[]  NOT NULL DEFAULT '{}',
+          format        TEXT    NOT NULL DEFAULT 'csv' CHECK (format IN ('csv','pdf')),
+          period        TEXT    NOT NULL DEFAULT 'last_period' CHECK (period IN ('last_period','last_month','last_week','last_quarter','last_year')),
+          is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+          last_sent_at  TIMESTAMPTZ,
+          next_run_at   TIMESTAMPTZ,
+          created_by    BIGINT  REFERENCES users(id) ON DELETE SET NULL,
+          created_at    TIMESTAMPTZ DEFAULT NOW(),
+          updated_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_sched_reports_active ON scheduled_reports(is_active, next_run_at)`);
+    },
+  },
+
+  {
     id: 12,
     scope: 'tenant',
     description: 'Add client approval fields to time_entries',

@@ -193,10 +193,27 @@ router.get('/absences', async (req, res) => {
       WHERE ${whereClause}
     `, params);
 
+    // Monthly absence trend (for chart)
+    const monthlyResult = await req.db.query(`
+      SELECT
+        TO_CHAR(a.start_date, 'YYYY-MM') AS month,
+        COALESCE(SUM(a.end_date::date - a.start_date::date + 1), 0)::int AS total_days,
+        COALESCE(SUM(CASE WHEN a.type='sick'     THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int AS sick_days,
+        COALESCE(SUM(CASE WHEN a.type='vacation' THEN a.end_date::date - a.start_date::date + 1 ELSE 0 END), 0)::int AS vacation_days,
+        COUNT(a.id)::int AS absence_count
+      FROM absences a
+      JOIN employees c ON a.candidate_id = c.id
+      WHERE ${whereClause}
+        AND a.status = 'approved'
+      GROUP BY TO_CHAR(a.start_date, 'YYYY-MM')
+      ORDER BY month ASC
+    `, params);
+
     res.json({
       summary: summaryResult.rows,
       detail:  detailResult.rows,
       totals:  totalsResult.rows[0] || null,
+      monthly: monthlyResult.rows,
     });
   } catch (err) {
     console.error('[reports/absences]', err.message);
@@ -279,10 +296,40 @@ router.get('/revenue', async (req, res) => {
       WHERE ${invWhere}
     `, invParams);
 
+    // Per-client revenue (for bar chart)
+    const byClientResult = await req.db.query(`
+      SELECT
+        cl.name  AS client_name,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS approved_amount,
+        ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float AS total_amount,
+        ROUND(COALESCE(SUM(te.hours), 0)::numeric, 2)::float AS total_hours
+      FROM time_entries te
+      JOIN employees c  ON te.candidate_id = c.id
+      LEFT JOIN clients cl ON c.client_id = cl.id
+      WHERE ${teWhere}
+      GROUP BY cl.name
+      ORDER BY approved_amount DESC
+    `, teParams);
+
+    // Monthly revenue trend (for line chart)
+    const monthlyRevResult = await req.db.query(`
+      SELECT
+        TO_CHAR(te.date, 'YYYY-MM') AS month,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS approved_amount,
+        ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float AS total_amount
+      FROM time_entries te
+      JOIN employees c ON te.candidate_id = c.id
+      WHERE ${teWhere}
+      GROUP BY TO_CHAR(te.date, 'YYYY-MM')
+      ORDER BY month ASC
+    `, teParams);
+
     res.json({
       billable:  billableResult.rows,
       invoices:  invoicesResult.rows,
       invTotals: invTotalsResult.rows[0] || null,
+      byClient:  byClientResult.rows,
+      monthly:   monthlyRevResult.rows,
     });
   } catch (err) {
     console.error('[reports/revenue]', err.message);
@@ -816,6 +863,239 @@ router.get('/export/payroll.csv', async (req, res) => {
     res.send(csv);
   } catch (err) {
     console.error('GET /reports/export/payroll.csv', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GET /api/reports/labor-cost
+// Cost per project / client, absence cost, profitability
+// ═══════════════════════════════════════════════════════════════════════════
+router.get('/labor-cost', async (req, res) => {
+  try {
+    const start_date   = sanitizeQueryDate(req.query.start_date, 'start_date');
+    const end_date     = sanitizeQueryDate(req.query.end_date,   'end_date');
+    const candidate_id = sanitizeQueryInt(req.query.candidate_id, 'candidate_id');
+    const client_id    = sanitizeQueryInt(req.query.client_id,    'client_id');
+
+    const { whereClause: teWhere, params: teParams } = buildWherePg([
+      { fragment: 'te.date >= ?',        value: start_date   },
+      { fragment: 'te.date <= ?',        value: end_date     },
+      { fragment: 'te.candidate_id = ?', value: candidate_id },
+      { fragment: 'c.client_id = ?',     value: client_id    },
+    ]);
+
+    // ── Cost per project ───────────────────────────────────────────────────
+    const projectCostResult = await req.db.query(`
+      SELECT
+        p.id          AS project_id,
+        p.name        AS project_name,
+        cl.name       AS client_name,
+        p.billing_model,
+        ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float           AS labor_cost,
+        ROUND(COALESCE(SUM(te.hours), 0)::numeric, 2)::float                           AS total_hours,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS approved_cost,
+        ROUND(COALESCE((
+          SELECT SUM(i.total_amount) FROM invoices i WHERE i.project_id = p.id
+            AND (start_date IS NULL OR i.period_start >= start_date)
+            AND (end_date IS NULL   OR i.period_end   <= end_date)
+        ), 0)::numeric, 2)::float AS invoiced_revenue,
+        p.budget_hours,
+        p.retainer_amount
+      FROM time_entries te
+      JOIN employees c  ON te.candidate_id = c.id
+      LEFT JOIN clients cl ON c.client_id = cl.id
+      LEFT JOIN projects p ON te.project_id = p.id
+      WHERE ${teWhere} AND te.project_id IS NOT NULL
+      GROUP BY p.id, p.name, cl.name, p.billing_model, p.budget_hours, p.retainer_amount
+      ORDER BY labor_cost DESC
+    `, teParams);
+
+    // ── Cost per client ────────────────────────────────────────────────────
+    const clientCostResult = await req.db.query(`
+      SELECT
+        cl.id         AS client_id,
+        COALESCE(cl.name, 'No Client') AS client_name,
+        ROUND(COALESCE(SUM(te.hours * c.hourly_rate), 0)::numeric, 2)::float           AS labor_cost,
+        ROUND(COALESCE(SUM(te.hours), 0)::numeric, 2)::float                           AS total_hours,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS approved_cost,
+        ROUND(COALESCE((
+          SELECT SUM(i.total_amount) FROM invoices i
+          JOIN employees ec ON ec.id = i.candidate_id
+          WHERE ec.client_id = cl.id
+            AND (start_date IS NULL OR i.period_start >= start_date)
+            AND (end_date IS NULL   OR i.period_end   <= end_date)
+        ), 0)::numeric, 2)::float AS invoiced_revenue
+      FROM time_entries te
+      JOIN employees c  ON te.candidate_id = c.id
+      LEFT JOIN clients cl ON c.client_id = cl.id
+      WHERE ${teWhere}
+      GROUP BY cl.id, cl.name
+      ORDER BY labor_cost DESC
+    `, teParams);
+
+    // ── Absence cost (approved absence days × daily rate) ──────────────────
+    const { whereClause: absWhere, params: absParams } = buildWherePg([
+      { fragment: 'a.start_date >= ?',   value: start_date   },
+      { fragment: 'a.end_date <= ?',     value: end_date     },
+      { fragment: 'a.candidate_id = ?',  value: candidate_id },
+      { fragment: 'c.client_id = ?',     value: client_id    },
+    ]);
+
+    const absenceCostResult = await req.db.query(`
+      SELECT
+        c.id          AS employee_id,
+        c.name        AS employee_name,
+        c.hourly_rate::float,
+        COALESCE(SUM(a.end_date::date - a.start_date::date + 1), 0)::int           AS absence_days,
+        ROUND(COALESCE(SUM((a.end_date::date - a.start_date::date + 1) * c.hourly_rate * 8), 0)::numeric, 2)::float AS absence_cost
+      FROM absences a
+      JOIN employees c ON a.candidate_id = c.id
+      WHERE ${absWhere} AND a.status = 'approved'
+      GROUP BY c.id, c.name, c.hourly_rate
+      ORDER BY absence_cost DESC
+    `, absParams);
+
+    // ── Employee-level cost vs revenue ─────────────────────────────────────
+    const employeePLResult = await req.db.query(`
+      SELECT
+        c.id          AS employee_id,
+        c.name        AS employee_name,
+        c.hourly_rate::float,
+        cl.name       AS client_name,
+        ROUND(COALESCE(SUM(te.hours), 0)::numeric, 2)::float                                           AS total_hours,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS labor_cost,
+        ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS billable_revenue
+      FROM time_entries te
+      JOIN employees c  ON te.candidate_id = c.id
+      LEFT JOIN clients cl ON c.client_id = cl.id
+      WHERE ${teWhere}
+      GROUP BY c.id, c.name, c.hourly_rate, cl.name
+      ORDER BY billable_revenue DESC
+    `, teParams);
+
+    // ── Totals ─────────────────────────────────────────────────────────────
+    const totalLaborCost   = projectCostResult.rows.reduce((s, r) => s + Number(r.labor_cost),   0);
+    const totalRevenue     = clientCostResult.rows.reduce((s, r) => s + Number(r.invoiced_revenue), 0);
+    const totalAbsenceCost = absenceCostResult.rows.reduce((s, r) => s + Number(r.absence_cost), 0);
+    const grossMargin      = totalRevenue - totalLaborCost;
+    const marginPct        = totalRevenue > 0 ? Math.round((grossMargin / totalRevenue) * 100) : 0;
+
+    // Add profitability to project rows
+    const projectsWithProfit = projectCostResult.rows.map(p => ({
+      ...p,
+      gross_profit:  Math.round((Number(p.invoiced_revenue) - Number(p.labor_cost)) * 100) / 100,
+      margin_pct:    Number(p.invoiced_revenue) > 0
+        ? Math.round(((Number(p.invoiced_revenue) - Number(p.labor_cost)) / Number(p.invoiced_revenue)) * 100)
+        : null,
+    }));
+
+    const clientsWithProfit = clientCostResult.rows.map(c => ({
+      ...c,
+      gross_profit: Math.round((Number(c.invoiced_revenue) - Number(c.labor_cost)) * 100) / 100,
+      margin_pct:   Number(c.invoiced_revenue) > 0
+        ? Math.round(((Number(c.invoiced_revenue) - Number(c.labor_cost)) / Number(c.invoiced_revenue)) * 100)
+        : null,
+    }));
+
+    res.json({
+      totals: {
+        total_labor_cost:   Math.round(totalLaborCost   * 100) / 100,
+        total_revenue:      Math.round(totalRevenue     * 100) / 100,
+        total_absence_cost: Math.round(totalAbsenceCost * 100) / 100,
+        gross_margin:       Math.round(grossMargin      * 100) / 100,
+        margin_pct,
+      },
+      byProject:  projectsWithProfit,
+      byClient:   clientsWithProfit,
+      absenceCost: absenceCostResult.rows,
+      byEmployee: employeePLResult.rows,
+    });
+  } catch (err) {
+    console.error('GET /reports/labor-cost', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GET /api/reports/comparison
+// Returns totals for current period + previous period for period-over-period
+// ═══════════════════════════════════════════════════════════════════════════
+router.get('/comparison', async (req, res) => {
+  try {
+    const start      = sanitizeQueryDate(req.query.start_date,      'start_date');
+    const end        = sanitizeQueryDate(req.query.end_date,         'end_date');
+    const cmpStart   = sanitizeQueryDate(req.query.compare_start,    'compare_start');
+    const cmpEnd     = sanitizeQueryDate(req.query.compare_end,      'compare_end');
+    const client_id  = sanitizeQueryInt(req.query.client_id,         'client_id');
+    const emp_id     = sanitizeQueryInt(req.query.candidate_id,      'candidate_id');
+
+    async function getPeriodTotals(s, e) {
+      const { whereClause, params } = buildWherePg([
+        { fragment: 'te.date >= ?',        value: s        },
+        { fragment: 'te.date <= ?',        value: e        },
+        { fragment: 'c.client_id = ?',     value: client_id },
+        { fragment: 'te.candidate_id = ?', value: emp_id    },
+      ]);
+      const r = await req.db.query(`
+        SELECT
+          ROUND(COALESCE(SUM(te.hours), 0)::numeric, 2)::float                                                AS total_hours,
+          ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours ELSE 0 END), 0)::numeric, 2)::float AS approved_hours,
+          ROUND(COALESCE(SUM(CASE WHEN te.status='approved' THEN te.hours * c.hourly_rate ELSE 0 END), 0)::numeric, 2)::float AS approved_revenue,
+          COUNT(te.id)::int AS entry_count
+        FROM time_entries te
+        JOIN employees c ON te.candidate_id = c.id
+        WHERE ${whereClause}
+      `, params);
+
+      const { whereClause: absWhere, params: absParams } = buildWherePg([
+        { fragment: 'a.start_date >= ?',  value: s        },
+        { fragment: 'a.end_date <= ?',    value: e        },
+        { fragment: 'c.client_id = ?',    value: client_id },
+        { fragment: 'a.candidate_id = ?', value: emp_id    },
+      ]);
+      const absR = await req.db.query(`
+        SELECT COALESCE(SUM(a.end_date::date - a.start_date::date + 1), 0)::int AS absence_days
+        FROM absences a
+        JOIN employees c ON a.candidate_id = c.id
+        WHERE ${absWhere} AND a.status = 'approved'
+      `, absParams);
+
+      return {
+        start: s, end: e,
+        ...r.rows[0],
+        absence_days: absR.rows[0]?.absence_days ?? 0,
+      };
+    }
+
+    const [current, previous] = await Promise.all([
+      getPeriodTotals(start, end),
+      getPeriodTotals(cmpStart, cmpEnd),
+    ]);
+
+    function delta(cur, prev) {
+      const c = Number(cur  || 0);
+      const p = Number(prev || 0);
+      return {
+        current: c,
+        previous: p,
+        change: Math.round((c - p) * 100) / 100,
+        pct_change: p !== 0 ? Math.round(((c - p) / p) * 100) : null,
+      };
+    }
+
+    res.json({
+      current,
+      previous,
+      deltas: {
+        total_hours:     delta(current.total_hours,     previous.total_hours),
+        approved_hours:  delta(current.approved_hours,  previous.approved_hours),
+        approved_revenue: delta(current.approved_revenue, previous.approved_revenue),
+        absence_days:    delta(current.absence_days,    previous.absence_days),
+      },
+    });
+  } catch (err) {
+    console.error('GET /reports/comparison', err);
     res.status(500).json({ error: err.message });
   }
 });

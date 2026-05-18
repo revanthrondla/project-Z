@@ -30,7 +30,7 @@ const FROM_ADDRESS = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@
  * Send an email.
  * Falls back to console.log in development if SMTP is not configured.
  */
-async function sendEmail({ to, subject, html, text }) {
+async function sendEmail({ to, subject, html, text, attachments }) {
   const transporter = createTransporter();
 
   if (!transporter) {
@@ -38,18 +38,16 @@ async function sendEmail({ to, subject, html, text }) {
     console.log('\n📧 [EMAIL SERVICE — no SMTP configured]');
     console.log(`   To:      ${to}`);
     console.log(`   Subject: ${subject}`);
+    if (attachments?.length) console.log(`   Attachments: ${attachments.map(a => a.filename).join(', ')}`);
     console.log(`   Body:    ${text || '(html only)'}`);
     console.log('');
     return { messageId: 'dev-console' };
   }
 
-  const result = await transporter.sendMail({
-    from: `"Flow" <${FROM_ADDRESS}>`,
-    to,
-    subject,
-    html,
-    text,
-  });
+  const mailOpts = { from: `"HireIQ" <${FROM_ADDRESS}>`, to, subject, html, text };
+  if (attachments?.length) mailOpts.attachments = attachments;
+
+  const result = await transporter.sendMail(mailOpts);
   return result;
 }
 
