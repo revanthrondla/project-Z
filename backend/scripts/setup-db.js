@@ -54,6 +54,24 @@ async function main() {
     process.exit(1);
   }
 
+  // ── Step 1b: Reset any previously-failed migrations so they re-run ────────
+  // Migration 6 previously failed with "relation candidates does not exist"
+  // (table was renamed to employees). Remove its record so it runs cleanly.
+  try {
+    const pool = require('../db/pool');
+    const { rows: tenantSchemas } = await pool.query(`
+      SELECT schema_name FROM information_schema.schemata
+      WHERE schema_name LIKE 'tenant_%'
+    `);
+    for (const { schema_name } of tenantSchemas) {
+      await pool.query(
+        `DELETE FROM ${schema_name}.schema_migrations WHERE id = ANY($1)`,
+        [[6, 7, 10]]  // re-run migrations that referenced candidates(id)
+      ).catch(() => {}); // ignore if schema_migrations doesn't exist yet
+    }
+    console.log('  ✅ Failed migration records cleared (will re-run)');
+  } catch (_) {}
+
   // ── Step 2: Run all migrations ────────────────────────────────────────────
   console.log('Step 2/3 — Running migrations…');
   try {

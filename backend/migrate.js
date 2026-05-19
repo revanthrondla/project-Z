@@ -106,7 +106,7 @@ const MIGRATIONS = [
         CREATE TABLE IF NOT EXISTS payroll_items (
           id               BIGSERIAL PRIMARY KEY,
           payroll_run_id   BIGINT NOT NULL REFERENCES payroll_runs(id) ON DELETE CASCADE,
-          candidate_id     BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+          candidate_id     BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
           hours_worked     NUMERIC(8,2) DEFAULT 0,
           hourly_rate      NUMERIC(10,2) DEFAULT 0,
           gross_pay        NUMERIC(12,2) DEFAULT 0,
@@ -140,8 +140,9 @@ const MIGRATIONS = [
       `);
 
       // List of tables that need updated_at triggers
+      // Note: 'candidates' was renamed to 'employees' — use employees here
       const tables = [
-        'users', 'candidates', 'clients', 'time_entries',
+        'users', 'employees', 'clients', 'time_entries',
         'invoices', 'absences', 'payroll_runs',
       ];
 
@@ -170,7 +171,7 @@ const MIGRATIONS = [
         -- Emergency contacts
         CREATE TABLE IF NOT EXISTS emergency_contacts (
           id              BIGSERIAL PRIMARY KEY,
-          candidate_id    BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+          candidate_id    BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
           name            TEXT NOT NULL,
           relationship    TEXT NOT NULL,
           phone           TEXT NOT NULL,
@@ -184,7 +185,7 @@ const MIGRATIONS = [
         -- Bank / payment details
         CREATE TABLE IF NOT EXISTS bank_details (
           id              BIGSERIAL PRIMARY KEY,
-          candidate_id    BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+          candidate_id    BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
           bank_name       TEXT NOT NULL,
           account_name    TEXT NOT NULL,
           account_number  TEXT NOT NULL,
@@ -200,7 +201,7 @@ const MIGRATIONS = [
         -- Documents / attachments
         CREATE TABLE IF NOT EXISTS candidate_documents (
           id              BIGSERIAL PRIMARY KEY,
-          candidate_id    BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+          candidate_id    BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
           document_type   TEXT NOT NULL,
           file_name       TEXT NOT NULL,
           file_path       TEXT NOT NULL,
@@ -217,7 +218,7 @@ const MIGRATIONS = [
         -- effective_to = NULL means the record is current
         CREATE TABLE IF NOT EXISTS employment_history (
           id               BIGSERIAL PRIMARY KEY,
-          candidate_id     BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+          candidate_id     BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
           effective_from   DATE NOT NULL,
           effective_to     DATE,
           job_title        TEXT,
@@ -228,7 +229,7 @@ const MIGRATIONS = [
           annual_salary    NUMERIC(14,2),
           currency         TEXT NOT NULL DEFAULT 'GBP',
           work_location    TEXT,
-          manager_id       BIGINT REFERENCES candidates(id) ON DELETE SET NULL,
+          manager_id       BIGINT REFERENCES employees(id) ON DELETE SET NULL,
           client_id        BIGINT REFERENCES clients(id) ON DELETE SET NULL,
           notes            TEXT,
           changed_by       BIGINT REFERENCES users(id) ON DELETE SET NULL,
@@ -242,7 +243,7 @@ const MIGRATIONS = [
         -- Salary / rate history (separate from employment for granularity)
         CREATE TABLE IF NOT EXISTS salary_history (
           id             BIGSERIAL PRIMARY KEY,
-          candidate_id   BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+          candidate_id   BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
           effective_from DATE NOT NULL,
           effective_to   DATE,
           hourly_rate    NUMERIC(10,2),
@@ -350,7 +351,7 @@ const MIGRATIONS = [
 
         CREATE TABLE IF NOT EXISTS absence_balances (
           id              BIGSERIAL PRIMARY KEY,
-          candidate_id    BIGINT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+          candidate_id    BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
           policy_id       BIGINT NOT NULL REFERENCES absence_policies(id) ON DELETE CASCADE,
           year            INTEGER NOT NULL,
           entitlement     NUMERIC(6,2) NOT NULL DEFAULT 0,

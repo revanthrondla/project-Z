@@ -178,7 +178,7 @@ function matchInvoice(db, parsed) {
   const invoices = db.prepare(`
     SELECT i.*, c.name AS candidate_name, cl.name AS client_name
     FROM invoices i
-    JOIN candidates c ON i.candidate_id = c.id
+    JOIN employees c ON i.candidate_id = c.id
     LEFT JOIN clients cl ON i.client_id = cl.id
     WHERE i.status IN ('sent', 'client_approved', 'draft', 'overdue')
     ORDER BY i.created_at DESC

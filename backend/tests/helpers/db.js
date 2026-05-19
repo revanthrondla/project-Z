@@ -85,7 +85,7 @@ const TENANT_SCHEMA = `
     user_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-  CREATE TABLE candidates (
+  CREATE TABLE employees (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id       INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     name          TEXT NOT NULL,
@@ -103,7 +103,7 @@ const TENANT_SCHEMA = `
   );
   CREATE TABLE time_entries (
     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-    candidate_id          INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id          INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     date                  TEXT NOT NULL,
     hours                 REAL NOT NULL,
     description           TEXT,
@@ -121,7 +121,7 @@ const TENANT_SCHEMA = `
   CREATE TABLE invoices (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     invoice_number TEXT UNIQUE NOT NULL,
-    candidate_id   INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    candidate_id   INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     client_id      INTEGER REFERENCES clients(id) ON DELETE SET NULL,
     period_start   TEXT NOT NULL,
     period_end     TEXT NOT NULL,
@@ -245,7 +245,7 @@ function seedTenantData(db) {
   ).run('Alice Smith', 'alice@test.com', candHash, 'candidate');
 
   const cand1 = db.prepare(
-    `INSERT INTO candidates (user_id, name, email, role, hourly_rate, client_id, status)
+    `INSERT INTO employees (user_id, name, email, role, hourly_rate, client_id, status)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(cu1.lastInsertRowid, 'Alice Smith', 'alice@test.com', 'Developer', 100, c1.lastInsertRowid, 'active');
 
@@ -255,7 +255,7 @@ function seedTenantData(db) {
   ).run('Bob Jones', 'bob@test.com', candHash, 'candidate');
 
   const cand2 = db.prepare(
-    `INSERT INTO candidates (user_id, name, email, role, hourly_rate, client_id, status)
+    `INSERT INTO employees (user_id, name, email, role, hourly_rate, client_id, status)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(cu2.lastInsertRowid, 'Bob Jones', 'bob@test.com', 'Designer', 80, c2.lastInsertRowid, 'active');
 
