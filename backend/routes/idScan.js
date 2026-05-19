@@ -331,14 +331,13 @@ async function extractWithOpenAI(apiKey, fileBuffer, mimeType) {
 // ── Provider resolution ───────────────────────────────────────────────────────
 
 async function resolveOcr(db, fileBuffer, mimeType) {
-  // 1. Ollama (open-source, self-hosted) — check env var or tenant settings
-  const ollamaUrl   = process.env.OLLAMA_URL;
   const ollamaModel = process.env.OLLAMA_VISION_MODEL || 'llama3.2-vision';
+
+  // 1. Ollama (open-source, self-hosted) — best quality, zero cost
+  const ollamaUrl = process.env.OLLAMA_URL;
   if (ollamaUrl) {
     return extractWithOllama(ollamaUrl, ollamaModel, fileBuffer, mimeType);
   }
-
-  // Check tenant settings for Ollama config
   try {
     const r = await db.query('SELECT ollama_url, ollama_model FROM ai_settings WHERE id=1');
     const row = r.rows[0];
@@ -347,32 +346,40 @@ async function resolveOcr(db, fileBuffer, mimeType) {
     }
   } catch { /* ai_settings may not exist yet */ }
 
-  // 2. Tesseract.js — always available, zero-config (skip for PDFs, use cloud for those)
-  if (mimeType.startsWith('image/')) {
-    try {
-      return await extractWithTesseract(fileBuffer, mimeType);
-    } catch (tessErr) {
-      console.warn('[id-scan] Tesseract fallback failed:', tessErr.message);
-    }
-  }
-
-  // 3. Anthropic (cloud, if configured)
+  // 2. Anthropic Claude Vision — far more accurate than Tesseract for ID docs
+  //    Check env var first, then tenant settings, then platform config
   try {
     const anthropicKey = await getCloudKey(db, 'anthropic');
-    if (anthropicKey) return await extractWithClaude(anthropicKey, fileBuffer, mimeType);
+    if (anthropicKey) {
+      console.log('[id-scan] Using Claude Vision');
+      return await extractWithClaude(anthropicKey, fileBuffer, mimeType);
+    }
   } catch (err) {
     console.warn('[id-scan] Claude fallback failed:', err.message);
   }
 
-  // 4. OpenAI (cloud, if configured)
+  // 3. OpenAI GPT-4o Vision
   try {
     const openaiKey = await getCloudKey(db, 'openai');
-    if (openaiKey) return await extractWithOpenAI(openaiKey, fileBuffer, mimeType);
+    if (openaiKey) {
+      console.log('[id-scan] Using OpenAI Vision');
+      return await extractWithOpenAI(openaiKey, fileBuffer, mimeType);
+    }
   } catch (err) {
     console.warn('[id-scan] OpenAI fallback failed:', err.message);
   }
 
-  throw new Error('No OCR provider available. Set OLLAMA_URL for open-source local OCR, or configure an AI API key in Settings.');
+  // 4. Tesseract.js — last resort, text-only OCR (limited accuracy for IDs)
+  if (mimeType.startsWith('image/')) {
+    console.log('[id-scan] Falling back to Tesseract.js (limited accuracy — configure an AI key for better results)');
+    try {
+      return await extractWithTesseract(fileBuffer, mimeType);
+    } catch (tessErr) {
+      console.warn('[id-scan] Tesseract failed:', tessErr.message);
+    }
+  }
+
+  throw new Error('No OCR provider available. Configure ANTHROPIC_API_KEY or OLLAMA_URL in Railway environment variables for accurate ID extraction.');
 }
 
 async function getCloudKey(db, provider) {

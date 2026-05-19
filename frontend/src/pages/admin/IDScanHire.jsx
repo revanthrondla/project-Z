@@ -276,9 +276,17 @@ export default function IDScanHire() {
   const [dragOver, setDragOver]   = useState(false);
 
   // Refs
-  const videoRef    = useRef(null);
-  const streamRef   = useRef(null);
-  const fileInputRef = useRef(null);
+  const videoRef         = useRef(null);
+  const streamRef        = useRef(null);
+  const fileInputRef     = useRef(null);
+  const autoCapTimerRef  = useRef(null);   // holds setTimeout for auto-capture countdown
+  const lastFrameDataRef = useRef(null);   // pixel hash of previous frame for stability check
+
+  // Auto-capture state
+  const [autoCapState, setAutoCapState]   = useState('idle');  // idle | stable | countdown | captured
+  const [autoCapCount, setAutoCapCount]   = useState(0);       // 3…2…1
+  const [capturedPreview, setCapturedPreview] = useState(null); // data-URL for preview
+  const [capturedBlob,    setCapturedBlob]    = useState(null); // blob waiting for approval
 
   // ── Load clients + OCR config ───────────────────────────────────────────────
   useEffect(() => {
@@ -311,9 +319,7 @@ export default function IDScanHire() {
     }
   }, []);
 
-  // Attach the stream to the <video> element after React renders it.
-  // This runs every time cameraActive flips to true, by which point
-  // videoRef.current is guaranteed to exist.
+  // Attach stream to <video> after React renders it (cameraActive flip)
   useEffect(() => {
     if (cameraActive && videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -322,9 +328,13 @@ export default function IDScanHire() {
   }, [cameraActive]);
 
   const stopCamera = useCallback(() => {
+    clearTimeout(autoCapTimerRef.current);
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
     setCameraActive(false);
+    setAutoCapState('idle');
+    setCapturedPreview(null);
+    setCapturedBlob(null);
   }, []);
 
   useEffect(() => {
@@ -333,22 +343,135 @@ export default function IDScanHire() {
     return stopCamera;
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Capture frame from video ────────────────────────────────────────────────
-  const captureFrame = useCallback(async () => {
-    if (!videoRef.current) return;
+  // ── Grab a canvas snapshot from the live video ─────────────────────────────
+  const grabFrame = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || video.videoWidth === 0) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    return canvas;
+  }, []);
+
+  // Compute a cheap perceptual hash (average brightness of a 16×16 downsample)
+  const frameHash = useCallback((canvas) => {
+    const small = document.createElement('canvas');
+    small.width = small.height = 16;
+    small.getContext('2d').drawImage(canvas, 0, 0, 16, 16);
+    const px = small.getContext('2d').getImageData(0, 0, 16, 16).data;
+    let sum = 0;
+    for (let i = 0; i < px.length; i += 4) sum += (px[i] + px[i+1] + px[i+2]) / 3;
+    return Math.round(sum / 256);
+  }, []);
+
+  // ── Auto-capture: poll every 600ms, trigger when frame is stable ──────────
+  useEffect(() => {
+    if (!cameraActive || capturedPreview) return; // don't poll while previewing
+
+    const STABLE_THRESHOLD = 4;    // max brightness delta between frames
+    const COUNTDOWN_SECS   = 3;
+
+    let stableFrames = 0;
+    let counting     = false;
+    let countVal     = COUNTDOWN_SECS;
+    let countInterval = null;
+
+    const poll = setInterval(() => {
+      const canvas = grabFrame();
+      if (!canvas) return;
+
+      const hash = frameHash(canvas);
+      const prev = lastFrameDataRef.current;
+      lastFrameDataRef.current = hash;
+
+      const isStable = prev !== null && Math.abs(hash - prev) <= STABLE_THRESHOLD;
+
+      if (isStable) {
+        stableFrames++;
+      } else {
+        stableFrames = 0;
+        if (counting) {
+          counting = false;
+          clearInterval(countInterval);
+          setAutoCapState('idle');
+          setAutoCapCount(0);
+        }
+      }
+
+      // After 2 stable frames (~1.2s) start the countdown
+      if (stableFrames >= 2 && !counting) {
+        counting  = true;
+        countVal  = COUNTDOWN_SECS;
+        setAutoCapState('countdown');
+        setAutoCapCount(countVal);
+
+        countInterval = setInterval(() => {
+          countVal--;
+          setAutoCapCount(countVal);
+          if (countVal <= 0) {
+            clearInterval(countInterval);
+            counting = false;
+            // Snap the frame
+            const snapCanvas = grabFrame();
+            if (!snapCanvas) return;
+            snapCanvas.toBlob(blob => {
+              if (!blob) return;
+              const url = URL.createObjectURL(blob);
+              setCapturedPreview(url);
+              setCapturedBlob(blob);
+              setAutoCapState('captured');
+            }, 'image/jpeg', 0.95);
+          }
+        }, 1000);
+
+        autoCapTimerRef.current = countInterval;
+      }
+    }, 600);
+
+    return () => {
+      clearInterval(poll);
+      clearInterval(countInterval);
+    };
+  }, [cameraActive, capturedPreview, grabFrame, frameHash]);
+
+  // ── Manual capture (shutter button) ────────────────────────────────────────
+  const captureFrame = useCallback(() => {
+    clearTimeout(autoCapTimerRef.current);
+    setAutoCapState('idle');
+    const canvas = grabFrame();
+    if (!canvas) return;
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      setCapturedPreview(url);
+      setCapturedBlob(blob);
+      setAutoCapState('captured');
+    }, 'image/jpeg', 0.95);
+  }, [grabFrame]);
+
+  // ── Confirm preview → send to OCR ──────────────────────────────────────────
+  const confirmCapture = useCallback(async () => {
+    if (!capturedBlob) return;
+    setCapturedPreview(null);
+    setCapturedBlob(null);
+    setAutoCapState('idle');
     setCapturing(true);
     try {
-      const video  = videoRef.current;
-      const canvas = document.createElement('canvas');
-      canvas.width  = video.videoWidth  || 1280;
-      canvas.height = video.videoHeight || 720;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
-      await sendForExtraction(blob, 'image/jpeg');
+      await sendForExtraction(capturedBlob, 'image/jpeg');
     } finally {
       setCapturing(false);
     }
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [capturedBlob]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Retake — discard preview, go back to live feed ─────────────────────────
+  const retakeCapture = useCallback(() => {
+    if (capturedPreview) URL.revokeObjectURL(capturedPreview);
+    setCapturedPreview(null);
+    setCapturedBlob(null);
+    setAutoCapState('idle');
+    lastFrameDataRef.current = null;
+  }, [capturedPreview]);
 
   // ── Handle file drop / upload ───────────────────────────────────────────────
   const handleFile = useCallback(async (file) => {
@@ -618,46 +741,100 @@ export default function IDScanHire() {
           {/* ── Camera view ─────────────────────────────────────────────────── */}
           {mode === 'camera' && (
             <div className="bg-black rounded-2xl overflow-hidden relative" style={{ aspectRatio: '16/9' }}>
-              {cameraError ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white bg-gray-900 p-6">
+
+              {/* ── Error state ──────────────────────────────────────────────── */}
+              {cameraError && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white bg-gray-900 p-6 z-10">
                   <span className="text-4xl">📷</span>
                   <p className="text-center text-sm">{cameraError}</p>
                   <button onClick={startCamera} className="px-4 py-2 bg-white text-gray-900 rounded-lg text-sm font-medium">Retry</button>
                 </div>
-              ) : cameraActive ? (
+              )}
+
+              {/* ── Preview state: captured image awaiting user confirm ───────── */}
+              {capturedPreview && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black">
+                  <img
+                    src={capturedPreview}
+                    alt="Captured ID"
+                    className="max-h-full max-w-full object-contain rounded-xl"
+                  />
+                  {/* Overlay: Use this / Retake */}
+                  <div className="absolute bottom-5 flex gap-3">
+                    <button
+                      onClick={retakeCapture}
+                      className="px-5 py-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl text-sm font-medium backdrop-blur"
+                    >
+                      🔄 Retake
+                    </button>
+                    <button
+                      onClick={confirmCapture}
+                      disabled={capturing || processing}
+                      className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold shadow-lg disabled:opacity-50"
+                    >
+                      {capturing || processing ? '⏳ Scanning…' : '✅ Use this photo'}
+                    </button>
+                  </div>
+                  <div className="absolute top-3 left-0 right-0 text-center">
+                    <span className="bg-black/60 text-white text-xs px-3 py-1 rounded-full">
+                      Preview — does the ID look clear?
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Live video feed ───────────────────────────────────────────── */}
+              {cameraActive && (
                 <>
-                  {/* Live video */}
                   <video
                     ref={videoRef}
                     autoPlay playsInline muted
                     className="w-full h-full object-cover"
                   />
-                  {/* ID document framing guide */}
+
+                  {/* ID framing guide — colour changes when stable */}
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="border-2 border-white/60 rounded-xl w-[75%] h-[65%] shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
+                    <div className={`border-2 rounded-xl w-[75%] h-[65%] shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] transition-colors duration-300 ${
+                      autoCapState === 'countdown' ? 'border-emerald-400' :
+                      autoCapState === 'stable'    ? 'border-yellow-300'  :
+                                                     'border-white/60'
+                    }`} />
                   </div>
-                  {/* Instruction */}
-                  <div className="absolute top-3 left-0 right-0 text-center">
-                    <span className="bg-black/60 text-white text-xs px-3 py-1 rounded-full">
-                      Centre the ID document in the frame
-                    </span>
+
+                  {/* Top instruction / countdown */}
+                  <div className="absolute top-3 left-0 right-0 text-center pointer-events-none">
+                    {autoCapState === 'countdown' ? (
+                      <span className="bg-emerald-500/90 text-white text-sm px-4 py-1.5 rounded-full font-semibold">
+                        📸 Auto-capturing in {autoCapCount}…
+                      </span>
+                    ) : (
+                      <span className="bg-black/60 text-white text-xs px-3 py-1 rounded-full">
+                        {autoCapState === 'stable'
+                          ? '✅ ID detected — hold still'
+                          : 'Centre the ID document in the frame'}
+                      </span>
+                    )}
                   </div>
-                  {/* Capture button */}
+
+                  {/* Manual shutter button */}
                   <div className="absolute bottom-5 left-0 right-0 flex justify-center">
                     <button
                       onClick={captureFrame}
-                      disabled={capturing || processing}
-                      className="w-16 h-16 bg-white rounded-full shadow-lg border-4 border-gray-200 flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50"
-                      title="Capture"
+                      disabled={capturing || processing || !!capturedPreview}
+                      className="w-14 h-14 bg-white/90 hover:bg-white rounded-full shadow-lg border-4 border-gray-200 flex items-center justify-center transition-transform hover:scale-105 disabled:opacity-40"
+                      title="Capture manually"
                     >
                       {capturing || processing
-                        ? <span className="animate-spin text-xl">⏳</span>
-                        : <span className="text-2xl">📷</span>
+                        ? <span className="animate-spin text-lg">⏳</span>
+                        : <span className="text-xl">📷</span>
                       }
                     </button>
                   </div>
                 </>
-              ) : (
+              )}
+
+              {/* ── Loading spinner while camera initialises ─────────────────── */}
+              {!cameraActive && !cameraError && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" />
                 </div>
