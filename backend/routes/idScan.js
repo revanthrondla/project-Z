@@ -5,12 +5,19 @@
  * POST  /api/id-scan/confirm         — link scan log to a newly-hired employee
  * PUT   /api/id-scan/logs/:id/skip   — mark a scan as skipped (no hire)
  * GET   /api/id-scan/logs            — admin: paginated scan audit log
+ * GET   /api/id-scan/supported-docs  — list supported countries + ID types
+ * GET   /api/id-scan/config          — which OCR provider is active
  *
  * ── Vision provider resolution order ────────────────────────────────────────
  *  1. Ollama   — open-source, self-hosted (set OLLAMA_URL in env or tenant settings)
- *  2. Tesseract.js — zero-config local OCR + smart MRZ/pattern parsing (always available)
- *  3. Anthropic Claude — cloud (if ANTHROPIC_API_KEY / tenant api_key configured)
- *  4. OpenAI   — cloud (if OPENAI_API_KEY / tenant api_key configured)
+ *  2. Anthropic Claude — cloud vision AI (if ANTHROPIC_API_KEY configured)
+ *  3. OpenAI   — cloud vision AI (if OPENAI_API_KEY configured)
+ *  4. Tesseract.js — zero-config local OCR with Sharp preprocessing + country templates
+ *
+ * ── Tesseract pipeline ────────────────────────────────────────────────────────
+ *  Raw image → Sharp preprocess (grayscale/contrast/upscale) → initial Tesseract
+ *  pass (eng) → detectTemplate() → re-run Tesseract with country language hint →
+ *  applyTemplate() for country-specific field extraction → MRZ parse if present
  *
  * ── Security ─────────────────────────────────────────────────────────────────
  *  ID number is NEVER stored — only a SHA-256 hash is kept in id_scan_logs.
@@ -24,6 +31,7 @@ const multer   = require('multer');
 const crypto   = require('crypto');
 const { authenticate, requireAdmin, injectTenantDb, requireModule } = require('../middleware/auth');
 const { masterDb } = require('../masterDatabase');
+const { detectTemplate, applyTemplate, getTessLang, getSupportedDocuments } = require('../services/idTemplates');
 
 const router = express.Router();
 router.use(authenticate, injectTenantDb, requireModule('hr_id_scan'));
@@ -261,24 +269,181 @@ async function extractWithOllama(baseUrl, model, fileBuffer, mimeType) {
   return JSON.parse(cleanJson(raw));
 }
 
-/** 2. Tesseract.js — always available, zero-config, open-source */
+// ── Sharp image preprocessing ─────────────────────────────────────────────────
+// Dramatically improves Tesseract accuracy on ID photos taken with a camera.
+// Pipeline: resize-to-min-300dpi-equivalent → grayscale → normalise → sharpen →
+//           adaptive threshold (binarise text) → output as PNG for Tesseract.
+
+async function preprocessImageForOcr(fileBuffer) {
+  try {
+    const sharp = require('sharp');
+    const metadata = await sharp(fileBuffer).metadata();
+    const w = metadata.width || 0;
+    const h = metadata.height || 0;
+
+    // Scale up if the image is smaller than ~1200px on the longest axis
+    // (typical ID photo from a phone at ≥300dpi will be ~1800×1200)
+    const minDim = Math.max(w, h);
+    const scaleFactor = minDim < 1200 ? Math.min(3, 1200 / minDim) : 1;
+
+    const processed = await sharp(fileBuffer)
+      .resize(
+        Math.round(w * scaleFactor),
+        Math.round(h * scaleFactor),
+        { fit: 'fill', kernel: 'lanczos3' }
+      )
+      .grayscale()
+      .normalise()                          // auto-levels: boost contrast
+      .sharpen({ sigma: 1.5 })             // crisp text edges
+      .threshold(128)                       // binarise — pure B&W is faster for Tesseract
+      .png()
+      .toBuffer();
+
+    console.log(`[id-scan/preprocess] ${w}×${h} → ${Math.round(w*scaleFactor)}×${Math.round(h*scaleFactor)}, scale=${scaleFactor.toFixed(2)}`);
+    return processed;
+  } catch (err) {
+    console.warn('[id-scan/preprocess] Sharp preprocessing failed, using raw buffer:', err.message);
+    return fileBuffer;   // fall back to unprocessed image
+  }
+}
+
+/** 4. Tesseract.js — local OCR with Sharp preprocessing + country-aware templates */
 async function extractWithTesseract(fileBuffer, mimeType) {
   if (mimeType === 'application/pdf') {
     throw new Error('Tesseract mode does not support PDFs directly. Please upload a JPEG or PNG image.');
   }
+
   const { createWorker } = require('tesseract.js');
-  const worker = await createWorker('eng', 1, { logger: () => {} });
+
+  // ── Step 1: Preprocess image for better OCR quality ──────────────────────────
+  const preprocessed = await preprocessImageForOcr(fileBuffer);
+
+  // ── Step 2: Initial pass with English to detect country / ID type ─────────────
+  let rawText = '';
+  let tessConfidence = 0;
+  const workerEng = await createWorker('eng', 1, { logger: () => {} });
   try {
-    const { data: { text, confidence } } = await worker.recognize(fileBuffer);
-    const fields = extractFieldsFromText(text);
-    // Tesseract returns confidence 0–100; normalise to 0–1
-    if (!fields.confidence || fields.confidence < 0.1) {
-      fields.confidence = Math.round((confidence / 100) * 0.8 * 100) / 100; // cap at 0.8 for text-only
-    }
-    return fields;
+    const { data } = await workerEng.recognize(preprocessed);
+    rawText       = data.text;
+    tessConfidence = data.confidence;
   } finally {
-    await worker.terminate();
+    await workerEng.terminate();
   }
+
+  console.log(`[id-scan/tesseract] Initial pass confidence: ${tessConfidence.toFixed(1)}%`);
+
+  // ── Step 3: Detect country + ID type template ─────────────────────────────────
+  const templateMatch = detectTemplate(rawText);
+  if (templateMatch) {
+    console.log(`[id-scan/tesseract] Detected template: ${templateMatch.countryCode} / ${templateMatch.idType}`);
+  } else {
+    console.log('[id-scan/tesseract] No country template matched — using generic extraction');
+  }
+
+  // ── Step 4: Re-run Tesseract with country-specific language (if different) ─────
+  const tessLang = templateMatch ? templateMatch.tessLang : 'eng';
+  let finalText = rawText;
+  if (tessLang !== 'eng') {
+    try {
+      const workerLang = await createWorker(tessLang, 1, { logger: () => {} });
+      try {
+        const { data } = await workerLang.recognize(preprocessed);
+        if (data.confidence > tessConfidence) {
+          finalText      = data.text;
+          tessConfidence = data.confidence;
+          console.log(`[id-scan/tesseract] Language-specific pass (${tessLang}) improved confidence to ${tessConfidence.toFixed(1)}%`);
+        }
+      } finally {
+        await workerLang.terminate();
+      }
+    } catch (langErr) {
+      console.warn(`[id-scan/tesseract] Language ${tessLang} not available, sticking with eng:`, langErr.message);
+    }
+  }
+
+  // ── Step 5: Apply template or generic extraction ──────────────────────────────
+  let fields;
+  if (templateMatch) {
+    // Template-driven extraction — country-specific regexes with correct date formats
+    const templateFields = applyTemplate(finalText, templateMatch);
+
+    // Normalise dates using the template's declared format
+    const dateFormat = templateFields._dateFormat || 'DD/MM/YYYY';
+    for (const dateKey of ['date_of_birth', 'expiry_date', 'issue_date']) {
+      if (templateFields[dateKey]) {
+        templateFields[dateKey] = normaliseDateWithFormat(templateFields[dateKey], dateFormat);
+      }
+    }
+
+    // Run generic extraction as a fallback to fill any null fields
+    const genericFields = extractFieldsFromText(finalText);
+
+    // Merge: template wins, generic fills gaps
+    fields = {
+      ...genericFields,
+      ...Object.fromEntries(Object.entries(templateFields).filter(([, v]) => v !== null && v !== undefined)),
+    };
+
+    // Clean up internal template metadata fields
+    delete fields._dateFormat;
+    delete fields._hasMrz;
+
+    // Boost confidence because template matched
+    const normalised = Math.round((tessConfidence / 100) * 0.85 * 100) / 100;
+    fields.confidence = Math.max(normalised, 0.6);  // template match implies at least 0.6
+
+  } else {
+    // No template — fall back to generic regex extraction
+    fields = extractFieldsFromText(finalText);
+    fields.confidence = Math.round((tessConfidence / 100) * 0.75 * 100) / 100;
+  }
+
+  return fields;
+}
+
+/**
+ * Normalise a date string given a known source format.
+ * Falls back to the generic normaliser when format-specific parse fails.
+ */
+function normaliseDateWithFormat(str, format) {
+  if (!str) return null;
+  str = String(str).trim();
+
+  try {
+    if (format === 'DD/MM/YYYY' || format === 'DD-MM-YYYY') {
+      const m = str.match(/^(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})$/);
+      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    }
+    if (format === 'MM/DD/YYYY') {
+      const m = str.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+      if (m) return `${m[3]}-${m[1]}-${m[2]}`;
+    }
+    if (format === 'YYYY-MM-DD') {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    }
+    if (format === 'DD MMM YYYY') {
+      const MONTHS = { JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12 };
+      const m = str.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+      if (m) {
+        const mo = MONTHS[m[2].toUpperCase()];
+        if (mo) return `${m[3]}-${String(mo).padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+      }
+    }
+    if (format === 'DD.MM.YYYY') {
+      const m = str.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    }
+    if (format === 'YYMMDD') {
+      const m = str.match(/^(\d{2})(\d{2})(\d{2})$/);
+      if (m) {
+        const yy = parseInt(m[1], 10);
+        const year = yy <= new Date().getFullYear() % 100 ? 2000 + yy : 1900 + yy;
+        return `${year}-${m[2]}-${m[3]}`;
+      }
+    }
+  } catch {}
+
+  return normaliseDate(str);   // generic fallback
 }
 
 /** 3. Anthropic Claude Vision */
@@ -369,9 +534,11 @@ async function resolveOcr(db, fileBuffer, mimeType) {
     console.warn('[id-scan] OpenAI fallback failed:', err.message);
   }
 
-  // 4. Tesseract.js — last resort, text-only OCR (limited accuracy for IDs)
+  // 4. Tesseract.js — local OCR with Sharp preprocessing + country ID templates
+  //    Much better than raw Tesseract, but still less accurate than vision AI for
+  //    poor-quality photos. Always available for image uploads with no API cost.
   if (mimeType.startsWith('image/')) {
-    console.log('[id-scan] Falling back to Tesseract.js (limited accuracy — configure an AI key for better results)');
+    console.log('[id-scan] Using Tesseract.js with Sharp preprocessing + country templates');
     try {
       return await extractWithTesseract(fileBuffer, mimeType);
     } catch (tessErr) {
@@ -517,6 +684,18 @@ router.get('/logs', requireAdmin, async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// GET /api/id-scan/supported-docs
+// Returns all countries + ID types known to the template engine
+// ═════════════════════════════════════════════════════════════════════════════
+router.get('/supported-docs', requireAdmin, (req, res) => {
+  try {
+    res.json({ documents: getSupportedDocuments() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // GET /api/id-scan/config — which OCR provider is active
 // ═════════════════════════════════════════════════════════════════════════════
 router.get('/config', requireAdmin, async (req, res) => {
@@ -534,9 +713,14 @@ router.get('/config', requireAdmin, async (req, res) => {
 
     const providers = [];
     if (ollamaUrl || tenantOllamaUrl) providers.push({ name: 'Ollama (open-source)', status: 'active', url: ollamaUrl || tenantOllamaUrl });
-    providers.push({ name: 'Tesseract.js (open-source, local)', status: 'active', note: 'Always available for image files' });
     if (anthropicKey) providers.push({ name: 'Claude Vision', status: 'configured' });
     if (openaiKey)    providers.push({ name: 'OpenAI GPT-4o', status: 'configured' });
+    providers.push({
+      name: 'Tesseract.js (open-source, local)',
+      status: 'active',
+      note: 'Always available for image files — uses Sharp preprocessing + country ID templates',
+      supportedCountries: getSupportedDocuments().map(d => d.countryCode),
+    });
 
     res.json({ providers, active: providers[0]?.name });
   } catch (err) {
