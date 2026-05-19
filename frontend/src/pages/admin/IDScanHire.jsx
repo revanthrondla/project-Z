@@ -298,7 +298,8 @@ export default function IDScanHire() {
         },
       });
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
+      // setCameraActive(true) causes React to render the <video> element.
+      // The srcObject is attached in the useEffect below once the element exists.
       setCameraActive(true);
     } catch (err) {
       setCameraError(
@@ -309,6 +310,16 @@ export default function IDScanHire() {
       );
     }
   }, []);
+
+  // Attach the stream to the <video> element after React renders it.
+  // This runs every time cameraActive flips to true, by which point
+  // videoRef.current is guaranteed to exist.
+  useEffect(() => {
+    if (cameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [cameraActive]);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop());
