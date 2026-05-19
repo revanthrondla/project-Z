@@ -31,7 +31,15 @@ const multer   = require('multer');
 const crypto   = require('crypto');
 const { authenticate, requireAdmin, injectTenantDb, requireModule } = require('../middleware/auth');
 const { masterDb } = require('../masterDatabase');
-const { detectTemplate, applyTemplate, getTessLang, getSupportedDocuments } = require('../services/idTemplates');
+const {
+  detectTemplate,
+  detectTemplateWithRegion,
+  applyTemplate,
+  getTessLang,
+  getSupportedDocuments,
+  getSupportedDocumentsWithRegions,
+  getRegionCodes,
+} = require('../services/idTemplates');
 
 const router = express.Router();
 router.use(authenticate, injectTenantDb, requireModule('hr_id_scan'));
@@ -459,32 +467,20 @@ async function extractWithTesseract(fileBuffer, mimeType, hints = {}) {
 
   console.log(`[id-scan/tesseract] Initial pass (${startLang}) confidence: ${tessConfidence.toFixed(1)}%`);
 
-  // ── Step 3: Template detection ────────────────────────────────────────────────
-  // Use frontend hint if provided — otherwise auto-detect from OCR text.
-  let templateMatch;
-  if (hints.countryCode) {
-    const { TEMPLATES } = require('../services/idTemplates');
-    const country = TEMPLATES[hints.countryCode.toUpperCase()];
-    if (country) {
-      const idType = hints.idType && country.idTypes[hints.idType]
-        ? hints.idType
-        : Object.keys(country.idTypes)[0];
-      templateMatch = {
-        countryCode: hints.countryCode.toUpperCase(),
-        idType,
-        template:   country.idTypes[idType],
-        tessLang:   country.tessLang,
-      };
-      console.log(`[id-scan/tesseract] Using hinted template: ${templateMatch.countryCode} / ${templateMatch.idType}`);
-    }
-  }
-  if (!templateMatch) {
-    templateMatch = detectTemplate(rawText);
-    if (templateMatch) {
-      console.log(`[id-scan/tesseract] Auto-detected template: ${templateMatch.countryCode} / ${templateMatch.idType}`);
-    } else {
-      console.log('[id-scan/tesseract] No template matched — using generic extraction');
-    }
+  // ── Step 3: Template + region detection ──────────────────────────────────────
+  // detectTemplateWithRegion() handles both country-level template selection and
+  // state/province-level refinement (ID number format, date format, Tesseract lang).
+  const templateMatch = detectTemplateWithRegion(rawText, {
+    countryCode: hints.countryCode,
+    idType:      hints.idType,
+    regionCode:  hints.regionCode,
+  });
+
+  if (templateMatch) {
+    const regionLabel = templateMatch.regionCode ? ` / ${templateMatch.regionCode}` : '';
+    console.log(`[id-scan/tesseract] Template: ${templateMatch.countryCode}${regionLabel} / ${templateMatch.idType}`);
+  } else {
+    console.log('[id-scan/tesseract] No template matched — using generic extraction');
   }
 
   const finalText = rawText;
@@ -571,6 +567,123 @@ function normaliseDateWithFormat(str, format) {
   return normaliseDate(str);   // generic fallback
 }
 
+// ── AWS Textract AnalyzeID ────────────────────────────────────────────────────
+// Purpose-built, AWS-trained model for government ID documents.
+// Returns labeled structured fields (FIRST_NAME, LAST_NAME, DATE_OF_BIRTH, etc.)
+// with per-field confidence scores. Works for DLs + passports from all countries.
+//
+// Required env vars: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+
+// Map Textract field type → our field names
+const TEXTRACT_FIELD_MAP = {
+  FIRST_NAME:        'first_name',
+  LAST_NAME:         'last_name',
+  MIDDLE_NAME:       'middle_name',
+  SUFFIX:            null,
+  DATE_OF_BIRTH:     'date_of_birth',
+  DATE_OF_EXPIRY:    'expiry_date',
+  DATE_OF_ISSUE:     'issue_date',
+  DOCUMENT_NUMBER:   'id_number',
+  ID_TYPE:           null,   // handled separately
+  ADDRESS:           'address_line1',
+  COUNTY:            'state',
+  PLACE_OF_BIRTH:    null,
+  GENDER:            'gender',
+  EYE_COLOR:         null,
+  HEIGHT:            null,
+  WEIGHT:            null,
+  RACE:              null,
+  ENDORSEMENTS:      null,
+  RESTRICTIONS:      null,
+  VEHICLE_RESTRICTIONS: null,
+  CLASS:             null,
+  MRZ_CODE:          'mrz_line1',
+};
+
+async function extractWithTextract(fileBuffer) {
+  const { TextractClient, AnalyzeIDCommand } = require('@aws-sdk/client-textract');
+
+  const client = new TextractClient({
+    region:      process.env.AWS_REGION || 'us-east-1',
+    credentials: {
+      accessKeyId:     process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    },
+  });
+
+  const command = new AnalyzeIDCommand({
+    DocumentPages: [{ Bytes: fileBuffer }],
+  });
+
+  const response = await client.send(command);
+  const doc = response.IdentityDocuments?.[0];
+  if (!doc) throw new Error('Textract returned no identity document');
+
+  const fields = {
+    id_type: null, full_name: null, first_name: null, middle_name: null, last_name: null,
+    date_of_birth: null, gender: null, id_number: null, expiry_date: null, issue_date: null,
+    issuing_country: null, nationality: null,
+    address_line1: null, address_line2: null, city: null, state: null, postcode: null, country: null,
+    mrz_line1: null, mrz_line2: null,
+  };
+
+  let totalConf = 0, confCount = 0;
+
+  for (const f of (doc.IdentityDocumentFields || [])) {
+    const typeKey  = f.Type?.Text;
+    const value    = f.ValueDetection?.Text;
+    const conf     = f.ValueDetection?.Confidence ?? 0;
+    if (!typeKey || !value) continue;
+
+    const ourKey = TEXTRACT_FIELD_MAP[typeKey];
+    if (ourKey) {
+      fields[ourKey] = value.trim();
+      totalConf += conf;
+      confCount++;
+    }
+
+    // ID type from Textract
+    if (typeKey === 'ID_TYPE') {
+      const v = value.toUpperCase();
+      if (v.includes('PASSPORT'))    fields.id_type = 'passport';
+      else if (v.includes('DRIVER')) fields.id_type = 'drivers_license';
+      else if (v.includes('ID'))     fields.id_type = 'national_id';
+    }
+  }
+
+  // Normalise gender
+  if (fields.gender) {
+    const g = fields.gender.toUpperCase();
+    fields.gender = g === 'M' || g === 'MALE' ? 'male'
+                  : g === 'F' || g === 'FEMALE' ? 'female' : 'other';
+  }
+
+  // Normalise dates
+  for (const dk of ['date_of_birth', 'expiry_date', 'issue_date']) {
+    if (fields[dk]) fields[dk] = normaliseDate(fields[dk]) ?? fields[dk];
+  }
+
+  // Build full_name
+  if (fields.first_name || fields.last_name) {
+    fields.full_name = [fields.first_name, fields.middle_name, fields.last_name].filter(Boolean).join(' ');
+  }
+
+  // Try MRZ if Textract found one
+  if (fields.mrz_line1 && fields.mrz_line1.includes('<')) {
+    const lines = fields.mrz_line1.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length >= 2) {
+      const mrzParsed = parseMrz(lines[0], lines[1]);
+      if (mrzParsed) Object.assign(fields, mrzParsed);
+    }
+  }
+
+  const avgConf = confCount > 0 ? (totalConf / confCount) / 100 : 0.7;
+  fields.confidence = Math.round(avgConf * 100) / 100;
+
+  console.log(`[id-scan/textract] Extracted ${confCount} fields, avg confidence ${(avgConf*100).toFixed(1)}%`);
+  return fields;
+}
+
 /** 3. Anthropic Claude Vision */
 async function extractWithClaude(apiKey, fileBuffer, mimeType) {
   const Anthropic = require('@anthropic-ai/sdk');
@@ -639,7 +752,19 @@ async function resolveOcr(db, fileBuffer, mimeType, hints = {}) {
     }
   } catch { /* ai_settings may not exist yet */ }
 
-  // 2. Anthropic Claude Vision
+  // 2. AWS Textract AnalyzeID — purpose-built trained model for identity documents
+  //    Highest accuracy for DL + passport, all countries. Configure via Railway env vars:
+  //    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+  if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && mimeType.startsWith('image/')) {
+    try {
+      console.log('[id-scan] Using AWS Textract AnalyzeID');
+      return await extractWithTextract(fileBuffer);
+    } catch (err) {
+      console.warn('[id-scan] Textract failed, trying next provider:', err.message);
+    }
+  }
+
+  // 3. Anthropic Claude Vision
   try {
     const anthropicKey = await getCloudKey(db, 'anthropic');
     if (anthropicKey) {
@@ -650,7 +775,7 @@ async function resolveOcr(db, fileBuffer, mimeType, hints = {}) {
     console.warn('[id-scan] Claude fallback failed:', err.message);
   }
 
-  // 3. OpenAI GPT-4o Vision
+  // 4. OpenAI GPT-4o Vision
   try {
     const openaiKey = await getCloudKey(db, 'openai');
     if (openaiKey) {
@@ -661,7 +786,7 @@ async function resolveOcr(db, fileBuffer, mimeType, hints = {}) {
     console.warn('[id-scan] OpenAI fallback failed:', err.message);
   }
 
-  // 4. Tesseract.js — local OCR with Sharp preprocessing + country ID templates
+  // 5. Tesseract.js — local OCR with Sharp preprocessing + country/state ID templates
   if (mimeType.startsWith('image/')) {
     console.log('[id-scan] Using Tesseract.js with Sharp preprocessing + country templates'
       + (hints.countryCode ? ` (hint: ${hints.countryCode}/${hints.idType || 'auto'})` : ''));
@@ -704,8 +829,9 @@ router.post('/extract', requireAdmin, upload.single('id_image'), async (req, res
 
     // Optional hints from the frontend document-type picker
     const hints = {
-      countryCode: (req.body?.country_hint || '').trim().toUpperCase() || null,
-      idType:      (req.body?.id_type_hint || '').trim().toLowerCase() || null,
+      countryCode: (req.body?.country_hint  || '').trim().toUpperCase() || null,
+      idType:      (req.body?.id_type_hint  || '').trim().toLowerCase() || null,
+      regionCode:  (req.body?.region_hint   || '').trim().toUpperCase() || null,
     };
 
     let extracted;
@@ -821,7 +947,7 @@ router.get('/logs', requireAdmin, async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 router.get('/supported-docs', requireAdmin, (req, res) => {
   try {
-    res.json({ documents: getSupportedDocuments() });
+    res.json({ documents: getSupportedDocumentsWithRegions() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -843,14 +969,16 @@ router.get('/config', requireAdmin, async (req, res) => {
       tenantOllamaUrl = r.rows[0]?.ollama_url || null;
     } catch { /* ignore */ }
 
+    const textractKey = process.env.AWS_ACCESS_KEY_ID;
     const providers = [];
-    if (ollamaUrl || tenantOllamaUrl) providers.push({ name: 'Ollama (open-source)', status: 'active', url: ollamaUrl || tenantOllamaUrl });
-    if (anthropicKey) providers.push({ name: 'Claude Vision', status: 'configured' });
-    if (openaiKey)    providers.push({ name: 'OpenAI GPT-4o', status: 'configured' });
+    if (ollamaUrl || tenantOllamaUrl)  providers.push({ name: 'Ollama (open-source)', status: 'active', url: ollamaUrl || tenantOllamaUrl });
+    if (textractKey)                   providers.push({ name: 'AWS Textract AnalyzeID', status: 'configured', note: 'Purpose-built trained model for government IDs' });
+    if (anthropicKey)                  providers.push({ name: 'Claude Vision', status: 'configured' });
+    if (openaiKey)                     providers.push({ name: 'OpenAI GPT-4o', status: 'configured' });
     providers.push({
-      name: 'Tesseract.js (open-source, local)',
+      name: 'Tesseract.js (local)',
       status: 'active',
-      note: 'Always available for image files — uses Sharp preprocessing + country ID templates',
+      note: 'Always available — Sharp preprocessing + country/state templates',
       supportedCountries: getSupportedDocuments().map(d => d.countryCode),
     });
 

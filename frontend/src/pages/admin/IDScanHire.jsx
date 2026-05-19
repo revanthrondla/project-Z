@@ -29,7 +29,6 @@ const ID_TYPES = [
 const ROLES = ['employee', 'admin', 'recruiter'];
 
 // Supported countries for the document-type picker
-// Mirrors backend/services/idTemplates.js
 const SUPPORTED_COUNTRIES = [
   { code: 'AU', flag: '🇦🇺', name: 'Australia',            idTypes: ['drivers_license','passport'] },
   { code: 'GB', flag: '🇬🇧', name: 'United Kingdom',       idTypes: ['drivers_license','passport'] },
@@ -51,6 +50,43 @@ const ID_TYPE_LABELS = {
   national_id:    '🪪 National ID Card',
   residence_card: '🏠 Residence Card',
   other:          '📄 Other',
+};
+
+// States / provinces for countries that have region-level templates
+const COUNTRY_REGIONS = {
+  US: [
+    { code:'AL',name:'Alabama' },{ code:'AK',name:'Alaska' },{ code:'AZ',name:'Arizona' },
+    { code:'AR',name:'Arkansas' },{ code:'CA',name:'California' },{ code:'CO',name:'Colorado' },
+    { code:'CT',name:'Connecticut' },{ code:'DE',name:'Delaware' },{ code:'FL',name:'Florida' },
+    { code:'GA',name:'Georgia' },{ code:'HI',name:'Hawaii' },{ code:'ID',name:'Idaho' },
+    { code:'IL',name:'Illinois' },{ code:'IN',name:'Indiana' },{ code:'IA',name:'Iowa' },
+    { code:'KS',name:'Kansas' },{ code:'KY',name:'Kentucky' },{ code:'LA',name:'Louisiana' },
+    { code:'ME',name:'Maine' },{ code:'MD',name:'Maryland' },{ code:'MA',name:'Massachusetts' },
+    { code:'MI',name:'Michigan' },{ code:'MN',name:'Minnesota' },{ code:'MS',name:'Mississippi' },
+    { code:'MO',name:'Missouri' },{ code:'MT',name:'Montana' },{ code:'NE',name:'Nebraska' },
+    { code:'NV',name:'Nevada' },{ code:'NH',name:'New Hampshire' },{ code:'NJ',name:'New Jersey' },
+    { code:'NM',name:'New Mexico' },{ code:'NY',name:'New York' },{ code:'NC',name:'North Carolina' },
+    { code:'ND',name:'North Dakota' },{ code:'OH',name:'Ohio' },{ code:'OK',name:'Oklahoma' },
+    { code:'OR',name:'Oregon' },{ code:'PA',name:'Pennsylvania' },{ code:'RI',name:'Rhode Island' },
+    { code:'SC',name:'South Carolina' },{ code:'SD',name:'South Dakota' },{ code:'TN',name:'Tennessee' },
+    { code:'TX',name:'Texas' },{ code:'UT',name:'Utah' },{ code:'VT',name:'Vermont' },
+    { code:'VA',name:'Virginia' },{ code:'WA',name:'Washington' },{ code:'WV',name:'West Virginia' },
+    { code:'WI',name:'Wisconsin' },{ code:'WY',name:'Wyoming' },{ code:'DC',name:'Washington D.C.' },
+  ],
+  AU: [
+    { code:'NSW',name:'New South Wales' },{ code:'VIC',name:'Victoria' },
+    { code:'QLD',name:'Queensland' },{ code:'WA',name:'Western Australia' },
+    { code:'SA',name:'South Australia' },{ code:'TAS',name:'Tasmania' },
+    { code:'ACT',name:'Australian Capital Territory' },{ code:'NT',name:'Northern Territory' },
+  ],
+  CA: [
+    { code:'ON',name:'Ontario' },{ code:'BC',name:'British Columbia' },
+    { code:'AB',name:'Alberta' },{ code:'QC',name:'Québec' },
+    { code:'MB',name:'Manitoba' },{ code:'SK',name:'Saskatchewan' },
+    { code:'NS',name:'Nova Scotia' },{ code:'NB',name:'New Brunswick' },
+    { code:'NL',name:'Newfoundland & Labrador' },{ code:'PE',name:'Prince Edward Island' },
+    { code:'NT',name:'Northwest Territories' },{ code:'YT',name:'Yukon' },{ code:'NU',name:'Nunavut' },
+  ],
 };
 
 const EMPTY_FORM = {
@@ -261,6 +297,7 @@ function HireModal({ item, clients, onConfirm, onClose, hiring }) {
 export default function IDScanHire() {
   // Document type hints (guide the OCR backend)
   const [hintCountry, setHintCountry] = useState('');   // e.g. 'AU'
+  const [hintRegion,  setHintRegion]  = useState('');   // e.g. 'NSW', 'CA', 'TX'
   const [hintIdType,  setHintIdType]  = useState('');   // e.g. 'drivers_license'
 
   // capture mode
@@ -528,6 +565,7 @@ export default function IDScanHire() {
     // Pass document-type hints so the backend can skip detection and go straight
     // to the correct country template
     if (hintCountry) formData.append('country_hint', hintCountry);
+    if (hintRegion)  formData.append('region_hint',  hintRegion);
     if (hintIdType)  formData.append('id_type_hint', hintIdType);
 
     try {
@@ -567,7 +605,7 @@ export default function IDScanHire() {
     } finally {
       setProcessing(false);
     }
-  }, [hintCountry, hintIdType]);
+  }, [hintCountry, hintRegion, hintIdType]);
 
   // ── Add reviewed item to queue ──────────────────────────────────────────────
   const addToQueue = useCallback((item) => {
@@ -759,14 +797,15 @@ export default function IDScanHire() {
               <span className="text-lg">🌍</span>
               <p className="font-semibold text-gray-800 text-sm">Select document type <span className="text-gray-400 font-normal">(optional — improves accuracy)</span></p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            {/* Responsive grid: 2 cols normally, 3 cols when state picker is shown */}
+            <div className={`grid gap-3 ${COUNTRY_REGIONS[hintCountry] ? 'grid-cols-3' : 'grid-cols-2'}`}>
               {/* Country */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Country</label>
                 <select
                   className="input text-sm"
                   value={hintCountry}
-                  onChange={e => { setHintCountry(e.target.value); setHintIdType(''); }}
+                  onChange={e => { setHintCountry(e.target.value); setHintRegion(''); setHintIdType(''); }}
                 >
                   <option value="">— Auto detect —</option>
                   {SUPPORTED_COUNTRIES.map(c => (
@@ -774,7 +813,27 @@ export default function IDScanHire() {
                   ))}
                 </select>
               </div>
-              {/* ID type */}
+
+              {/* State / Province — only shown for US, AU, CA */}
+              {COUNTRY_REGIONS[hintCountry] && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    {hintCountry === 'US' ? 'State' : hintCountry === 'CA' ? 'Province' : 'State / Territory'}
+                  </label>
+                  <select
+                    className="input text-sm"
+                    value={hintRegion}
+                    onChange={e => setHintRegion(e.target.value)}
+                  >
+                    <option value="">— Auto detect —</option>
+                    {COUNTRY_REGIONS[hintCountry].map(r => (
+                      <option key={r.code} value={r.code}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Document type */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Document type</label>
                 <select
@@ -790,10 +849,15 @@ export default function IDScanHire() {
                 </select>
               </div>
             </div>
+
             {hintCountry && (
               <p className="text-xs text-teal-700 bg-teal-50 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
                 <span>✓</span>
-                <span>Using <strong>{SUPPORTED_COUNTRIES.find(c=>c.code===hintCountry)?.flag} {SUPPORTED_COUNTRIES.find(c=>c.code===hintCountry)?.name}</strong> {hintIdType ? `/ ${ID_TYPE_LABELS[hintIdType]}` : ''} template — OCR will extract fields precisely for this document type.</span>
+                <span>
+                  Using <strong>{SUPPORTED_COUNTRIES.find(c=>c.code===hintCountry)?.flag} {SUPPORTED_COUNTRIES.find(c=>c.code===hintCountry)?.name}{hintRegion ? ` / ${COUNTRY_REGIONS[hintCountry]?.find(r=>r.code===hintRegion)?.name || hintRegion}` : ''}</strong>
+                  {hintIdType ? ` — ${ID_TYPE_LABELS[hintIdType]}` : ''} template.
+                  {COUNTRY_REGIONS[hintCountry] && !hintRegion ? ' Select a state/province for even higher accuracy.' : ''}
+                </span>
               </p>
             )}
           </div>

@@ -548,4 +548,76 @@ function getSupportedDocuments() {
   }));
 }
 
-module.exports = { detectTemplate, applyTemplate, getTessLang, getSupportedDocuments, TEMPLATES };
+const { getRegionCodes, detectRegion, applyRegion } = require('./regionTemplates');
+
+/**
+ * Like detectTemplate(), but also attempts regional (state/province) detection.
+ * Accepts optional { countryCode, idType, regionCode } hints.
+ */
+function detectTemplateWithRegion(ocrText, hints = {}) {
+  const match = hints.countryCode
+    ? (() => {
+        const country = TEMPLATES[hints.countryCode.toUpperCase()];
+        if (!country) return null;
+        const idType = hints.idType && country.idTypes[hints.idType]
+          ? hints.idType
+          : Object.keys(country.idTypes)[0];
+        return {
+          countryCode: hints.countryCode.toUpperCase(),
+          idType,
+          template:   country.idTypes[idType],
+          tessLang:   country.tessLang,
+        };
+      })()
+    : detectTemplate(ocrText);
+
+  if (!match) return null;
+
+  // Apply region refinements if regionCode hint given or auto-detect
+  const mergedTemplate = applyRegion(
+    match.template,
+    match.countryCode,
+    hints.regionCode || null,
+    ocrText
+  );
+
+  // Use region's tessLang override if present
+  const tessLang = mergedTemplate._tessLangOverride || match.tessLang;
+
+  return {
+    ...match,
+    template: mergedTemplate,
+    tessLang,
+    regionCode: mergedTemplate._regionCode || null,
+    regionName: mergedTemplate._regionName || null,
+  };
+}
+
+/**
+ * Returns all supported countries + regions + ID types for the admin UI.
+ */
+function getSupportedDocumentsWithRegions() {
+  return Object.entries(TEMPLATES).map(([code, c]) => ({
+    countryCode: code,
+    countryName: c.countryName,
+    regions:     getRegionCodes(code) || [],
+    idTypes: Object.entries(c.idTypes).map(([type, tpl]) => ({
+      type,
+      names:      tpl.names,
+      dateFormat: tpl.dateFormat,
+      hasMrz:     tpl.hasMrz,
+      fieldCount: Object.keys(tpl.fields).length,
+    })),
+  }));
+}
+
+module.exports = {
+  detectTemplate,
+  detectTemplateWithRegion,
+  applyTemplate,
+  getTessLang,
+  getSupportedDocuments,
+  getSupportedDocumentsWithRegions,
+  getRegionCodes,
+  TEMPLATES,
+};
