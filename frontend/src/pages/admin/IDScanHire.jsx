@@ -2,18 +2,15 @@
  * ID Scan Hire — module: hr_id_scan
  *
  * Two capture modes:
- *   • Camera   — live WebRTC video feed, tap/click to capture a frame
+ *   • Camera   — live WebRTC video feed with auto-capture detection
  *   • Upload   — drag-and-drop or file picker (JPEG, PNG, WEBP, PDF)
  *
  * Workflow:
- *   1. Capture / upload ID document
- *   2. Backend runs OCR (Ollama → Tesseract → Cloud AI fallback)
- *   3. Review & edit extracted fields
- *   4. Add to Scan Queue
- *   5. Hire individually or "Hire All" to batch-onboard everyone in the queue
- *
- * Each hired employee fires POST /api/employees then POST /api/id-scan/confirm
- * to link the scan audit log to the new employee record.
+ *   1. Select country + document type (guides OCR templates)
+ *   2. Capture / upload ID document
+ *   3. Backend runs OCR (Ollama → Claude → OpenAI → Tesseract+templates)
+ *   4. Review & edit extracted fields
+ *   5. Add to Scan Queue → Hire individually or "Hire All"
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -30,6 +27,31 @@ const ID_TYPES = [
 ];
 
 const ROLES = ['employee', 'admin', 'recruiter'];
+
+// Supported countries for the document-type picker
+// Mirrors backend/services/idTemplates.js
+const SUPPORTED_COUNTRIES = [
+  { code: 'AU', flag: '🇦🇺', name: 'Australia',            idTypes: ['drivers_license','passport'] },
+  { code: 'GB', flag: '🇬🇧', name: 'United Kingdom',       idTypes: ['drivers_license','passport'] },
+  { code: 'US', flag: '🇺🇸', name: 'United States',        idTypes: ['drivers_license','passport'] },
+  { code: 'NZ', flag: '🇳🇿', name: 'New Zealand',          idTypes: ['drivers_license','passport'] },
+  { code: 'IN', flag: '🇮🇳', name: 'India',                idTypes: ['national_id','drivers_license','passport'] },
+  { code: 'CA', flag: '🇨🇦', name: 'Canada',               idTypes: ['drivers_license','passport'] },
+  { code: 'SG', flag: '🇸🇬', name: 'Singapore',            idTypes: ['national_id','passport'] },
+  { code: 'AE', flag: '🇦🇪', name: 'UAE',                  idTypes: ['national_id','passport'] },
+  { code: 'PH', flag: '🇵🇭', name: 'Philippines',          idTypes: ['national_id','passport'] },
+  { code: 'DE', flag: '🇩🇪', name: 'Germany',              idTypes: ['national_id','passport'] },
+  { code: 'FR', flag: '🇫🇷', name: 'France',               idTypes: ['national_id','passport'] },
+  { code: 'ZA', flag: '🇿🇦', name: 'South Africa',         idTypes: ['national_id','passport'] },
+];
+
+const ID_TYPE_LABELS = {
+  passport:       '🛂 Passport',
+  drivers_license:'🚗 Driver\'s Licence',
+  national_id:    '🪪 National ID Card',
+  residence_card: '🏠 Residence Card',
+  other:          '📄 Other',
+};
 
 const EMPTY_FORM = {
   // From OCR
@@ -237,6 +259,10 @@ function HireModal({ item, clients, onConfirm, onClose, hiring }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function IDScanHire() {
+  // Document type hints (guide the OCR backend)
+  const [hintCountry, setHintCountry] = useState('');   // e.g. 'AU'
+  const [hintIdType,  setHintIdType]  = useState('');   // e.g. 'drivers_license'
+
   // capture mode
   const [mode, setMode]         = useState('camera'); // 'camera' | 'upload'
   const [cameraActive, setCameraActive]   = useState(false);
@@ -499,6 +525,10 @@ export default function IDScanHire() {
 
     const formData = new FormData();
     formData.append('id_image', fileOrBlob, mimeType === 'application/pdf' ? 'document.pdf' : 'capture.jpg');
+    // Pass document-type hints so the backend can skip detection and go straight
+    // to the correct country template
+    if (hintCountry) formData.append('country_hint', hintCountry);
+    if (hintIdType)  formData.append('id_type_hint', hintIdType);
 
     try {
       const { data } = await api.post('/api/id-scan/extract', formData, {
@@ -537,7 +567,7 @@ export default function IDScanHire() {
     } finally {
       setProcessing(false);
     }
-  }, []);
+  }, [hintCountry, hintIdType]);
 
   // ── Add reviewed item to queue ──────────────────────────────────────────────
   const addToQueue = useCallback((item) => {
@@ -723,6 +753,51 @@ export default function IDScanHire() {
         {/* ── Left: Capture panel ─────────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-4">
 
+          {/* ── Document type picker ─────────────────────────────────────────── */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🌍</span>
+              <p className="font-semibold text-gray-800 text-sm">Select document type <span className="text-gray-400 font-normal">(optional — improves accuracy)</span></p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Country */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Country</label>
+                <select
+                  className="input text-sm"
+                  value={hintCountry}
+                  onChange={e => { setHintCountry(e.target.value); setHintIdType(''); }}
+                >
+                  <option value="">— Auto detect —</option>
+                  {SUPPORTED_COUNTRIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
+                  ))}
+                </select>
+              </div>
+              {/* ID type */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Document type</label>
+                <select
+                  className="input text-sm"
+                  value={hintIdType}
+                  onChange={e => setHintIdType(e.target.value)}
+                  disabled={!hintCountry}
+                >
+                  <option value="">— Auto detect —</option>
+                  {(SUPPORTED_COUNTRIES.find(c => c.code === hintCountry)?.idTypes || []).map(t => (
+                    <option key={t} value={t}>{ID_TYPE_LABELS[t] || t}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {hintCountry && (
+              <p className="text-xs text-teal-700 bg-teal-50 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                <span>✓</span>
+                <span>Using <strong>{SUPPORTED_COUNTRIES.find(c=>c.code===hintCountry)?.flag} {SUPPORTED_COUNTRIES.find(c=>c.code===hintCountry)?.name}</strong> {hintIdType ? `/ ${ID_TYPE_LABELS[hintIdType]}` : ''} template — OCR will extract fields precisely for this document type.</span>
+              </p>
+            )}
+          </div>
+
           {/* Mode toggle */}
           <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
             {[['camera','📷 Camera'], ['upload','📁 Upload']].map(([m, label]) => (
@@ -897,13 +972,6 @@ export default function IDScanHire() {
             </div>
           )}
 
-          {/* ── OCR Warnings ────────────────────────────────────────────────── */}
-          {warnings.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm space-y-1">
-              {warnings.map((w, i) => <p key={i} className="flex gap-2"><span>⚠️</span>{w}</p>)}
-            </div>
-          )}
-
           {/* ── Review Panel ─────────────────────────────────────────────────── */}
           {reviewed && (
             <div className="bg-white border border-emerald-200 rounded-2xl shadow-sm overflow-hidden">
@@ -912,11 +980,32 @@ export default function IDScanHire() {
                   <span className="text-xl">📋</span>
                   <div>
                     <h3 className="font-semibold text-gray-900">Extracted Data — Review &amp; Edit</h3>
-                    <p className="text-xs text-gray-500">Correct any OCR errors before adding to queue</p>
+                    <p className="text-xs text-gray-500">All fields are editable — correct any OCR errors before adding to queue</p>
                   </div>
                 </div>
                 <ConfidenceBadge value={reviewed._confidence} />
               </div>
+
+              {/* Inline OCR notices — softer than blocking warnings */}
+              {warnings.length > 0 && (
+                <div className="px-5 pt-3">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm">
+                    <p className="font-medium text-amber-800 mb-1">Some fields need your attention:</p>
+                    {warnings.map((w, i) => (
+                      <p key={i} className="text-amber-700 flex gap-1.5 items-start">
+                        <span className="mt-0.5">•</span>
+                        <span>{w.replace('⚠️','').trim()}</span>
+                      </p>
+                    ))}
+                    <p className="text-amber-600 text-xs mt-2">
+                      {!hintCountry
+                        ? '💡 Tip: Select a country above before scanning — this significantly improves accuracy.'
+                        : '💡 Tip: Check the image quality and try re-scanning, or fill in the missing fields manually below.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
 
               <div className="p-5 space-y-4">
                 {/* Name row */}

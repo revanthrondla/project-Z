@@ -127,11 +127,25 @@ function parseMrz(line1, line2) {
 }
 
 // ── Pattern-based field extraction from raw OCR text ────────────────────────
-// Used when Tesseract is the provider — we parse raw text into structured fields.
+// Two-pass approach:
+//   1. Labeled extraction  — regex for "SURNAME: Smith" style labels (accurate when present)
+//   2. Unlabeled heuristics — smart patterns for IDs that don't print field labels
+
+const DOC_NOISE_WORDS = new Set([
+  'PASSPORT','PASSEPORT','REISEPASS','DRIVING','DRIVER','LICENCE','LICENSE','NATIONAL',
+  'IDENTITY','CARD','CARTE','NATIONALE','REPUBLIC','REPUBLIQUE','AUSTRALIA','AUSTRALIAN',
+  'UNITED','KINGDOM','STATES','AMERICA','FRANCE','GERMANY','INDIA','SINGAPORE','CANADA',
+  'ZEALAND','SOUTH','AFRICA','EMIRATES','ARAB','PHILIPPINES','GOVERNMENT','DEPARTMENT',
+  'TRANSPORT','VTROADS','ICROADS','DVLA','NZTA','UIDAI','AADHAAR','PHILSYS',
+  'BUNDESREPUBLIK','DEUTSCHLAND','PERSONALAUSWEIS','AUTHORITY','MINISTRY','BUREAU',
+  'PLACE','OF','BIRTH','DATE','EXPIRY','ISSUE','ISSUED','VALID','THROUGH','UNTIL',
+  'SEX','GENDER','NATIONALITY','SIGNATURE','HEIGHT','EYES','HAIR','WEIGHT','CLASS',
+  'ENDORSEMENTS','RESTRICTIONS','DONOR','ORGAN','VETERAN','VETERAN','FEDERAL',
+]);
 
 function extractFieldsFromText(text) {
   const t = text.replace(/\r/g, '\n');
-  const upper = t.toUpperCase();
+  const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
   const fields = {
     id_type: null, full_name: null, first_name: null, middle_name: null, last_name: null,
     date_of_birth: null, gender: null, id_number: null, expiry_date: null, issue_date: null,
@@ -141,64 +155,155 @@ function extractFieldsFromText(text) {
   };
 
   // ── Detect ID type ──────────────────────────────────────────────────────────
-  if (/PASSPORT|PASSEPORT/i.test(t))               fields.id_type = 'passport';
-  else if (/DRIVER.S\s+LICEN[SC]E|DRIVING\s+LICEN/i.test(t)) fields.id_type = 'drivers_license';
-  else if (/NATIONAL\s+ID|IDENTITY\s+CARD|CARTE\s+NATIONALE/i.test(t)) fields.id_type = 'national_id';
+  if (/PASSPORT|PASSEPORT|REISEPASS/i.test(t))          fields.id_type = 'passport';
+  else if (/DRIVER.S?\s+LICEN[SC]E|DRIVING\s+LICEN/i.test(t)) fields.id_type = 'drivers_license';
+  else if (/NATIONAL\s+ID|IDENTITY\s+CARD|CARTE\s+NATIONALE|NRIC|AADHAAR|PHILSYS|EMIRATES\s+ID|PERSONALAUSWEIS/i.test(t)) fields.id_type = 'national_id';
   else if (/RESIDENCE\s+CARD|RESIDENT\s+ALIEN|GREEN\s+CARD/i.test(t)) fields.id_type = 'residence_card';
   else fields.id_type = 'other';
 
-  // ── MRZ lines (40+ chars of mostly uppercase + < chars) ─────────────────────
+  // ── MRZ lines (30–44 chars of uppercase + < chars) ──────────────────────────
   const mrzRe = /^[A-Z0-9<]{30,44}$/;
-  const mrzCandidates = t.split('\n').map(l => l.trim()).filter(l => mrzRe.test(l));
+  const mrzCandidates = lines.filter(l => mrzRe.test(l));
   if (mrzCandidates.length >= 2) {
     fields.mrz_line1 = mrzCandidates[0];
     fields.mrz_line2 = mrzCandidates[1];
     const mrzParsed = parseMrz(mrzCandidates[0], mrzCandidates[1]);
     if (mrzParsed) {
-      return { ...fields, ...mrzParsed };   // MRZ is authoritative — use it
+      return { ...fields, ...mrzParsed };   // MRZ is authoritative
     }
   }
 
-  // ── Surname / Given name labels ──────────────────────────────────────────────
-  const surnameMatch  = t.match(/(?:SURNAME|LAST\s+NAME|FAMILY\s+NAME)[:\s]+([A-Za-z\s\-']+)/i);
-  const givenMatch    = t.match(/(?:GIVEN\s+NAMES?|FIRST\s+NAME|FORENAME|PRENOM)[:\s]+([A-Za-z\s\-']+)/i);
-  if (surnameMatch) fields.last_name  = surnameMatch[1].trim().split('\n')[0];
-  if (givenMatch)  fields.first_name = givenMatch[1].trim().split('\n')[0];
+  // ── PASS 1: Labeled field extraction ─────────────────────────────────────────
+  const surnameMatch  = t.match(/(?:SURNAME|LAST\s+NAME|FAMILY\s+NAME|NOM(?!\s+DE\s+NAISSANCE)|NACHNAME)[:\s]+([A-Za-zÀ-ÿ\s\-']+)/i);
+  const givenMatch    = t.match(/(?:GIVEN\s+NAMES?|FIRST\s+NAME|FORENAMES?|PRENOM|VORNAME)[:\s]+([A-Za-zÀ-ÿ\s\-']+)/i);
+  const fullNameMatch = t.match(/(?:^|\n)NAME[:\s]+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s\-']+)(?:\n|$)/im);
+
+  if (surnameMatch) fields.last_name  = surnameMatch[1].trim().split('\n')[0].replace(/\s+/g,' ');
+  if (givenMatch)   fields.first_name = givenMatch[1].trim().split('\n')[0].replace(/\s+/g,' ');
+  if (fullNameMatch && !fields.last_name && !fields.first_name) {
+    fields.full_name = fullNameMatch[1].trim().replace(/\s+/g,' ');
+  }
   if (fields.first_name || fields.last_name) {
     fields.full_name = [fields.first_name, fields.last_name].filter(Boolean).join(' ');
   }
 
-  // ── Date of Birth ────────────────────────────────────────────────────────────
-  const dobMatch = t.match(/(?:DATE\s+OF\s+BIRTH|DOB|BIRTH\s+DATE|BORN|NAISS|NACIMIENTO)[:\s]+([0-9A-Za-z\/\-\. ]+)/i);
-  if (dobMatch) fields.date_of_birth = normaliseDate(dobMatch[1].trim().split('\n')[0].split(' ').slice(0,3).join(' '));
+  // ── Labeled dates ────────────────────────────────────────────────────────────
+  const dobMatch = t.match(/(?:DATE\s+OF\s+BIRTH|D\.?O\.?B\.?|BIRTH\s+DATE|BORN|NÉ\(?E?\)?[\s,]+LE|DATE\s+DE\s+NAISSANCE|GEBURTSDATUM)[:\s]+([0-9A-Za-z\/\-\. ]+)/i);
+  const expMatch = t.match(/(?:EXPIR(?:Y|ATION|ES?)|VALID\s+(?:UNTIL|THRU?|TO)|DATE\s+D.EXPIR|GÜLTIG\s+BIS|VALIDE)[:\s]+([0-9A-Za-z\/\-\. ]+)/i);
+  const issMatch = t.match(/(?:DATE\s+OF\s+ISSUE|DATE\s+ISSUED|ISSUED\s+ON|DATE\s+D.ÉMISSION|AUSSTELLUNGSDATUM)[:\s]+([0-9A-Za-z\/\-\. ]+)/i);
 
-  // ── Expiry date ──────────────────────────────────────────────────────────────
-  const expMatch = t.match(/(?:EXPIRY|EXPIRATION|EXPIRES?|VALID\s+UNTIL|DATE\s+D.EXPIRATION)[:\s]+([0-9A-Za-z\/\-\. ]+)/i);
-  if (expMatch) fields.expiry_date = normaliseDate(expMatch[1].trim().split('\n')[0].split(' ').slice(0,3).join(' '));
+  if (dobMatch) fields.date_of_birth = normaliseDate(dobMatch[1].trim().split('\n')[0].replace(/\s+/g,' ').split(' ').slice(0,3).join(' '));
+  if (expMatch) fields.expiry_date   = normaliseDate(expMatch[1].trim().split('\n')[0].replace(/\s+/g,' ').split(' ').slice(0,3).join(' '));
+  if (issMatch) fields.issue_date    = normaliseDate(issMatch[1].trim().split('\n')[0].replace(/\s+/g,' ').split(' ').slice(0,3).join(' '));
 
-  // ── Issue date ───────────────────────────────────────────────────────────────
-  const issMatch = t.match(/(?:DATE\s+OF\s+ISSUE|ISSUED\s+ON|DATE\s+ISSUED|DATE\s+D.EMISSION)[:\s]+([0-9A-Za-z\/\-\. ]+)/i);
-  if (issMatch) fields.issue_date = normaliseDate(issMatch[1].trim().split('\n')[0].split(' ').slice(0,3).join(' '));
+  // ── Labeled doc number ───────────────────────────────────────────────────────
+  const numMatch = t.match(/(?:PASSPORT\s+NO\.?|DOCUMENT\s+NO\.?|LICENCE\s+NO\.?|DL\s*(?:#|NO\.?)|ID\s+NO\.?|NO\.?\s*)[:\s]+([A-Z0-9]{5,20})/i);
+  if (numMatch) fields.id_number = numMatch[1];
 
-  // ── Gender ───────────────────────────────────────────────────────────────────
-  const genderMatch = t.match(/(?:SEX|GENDER|SEXE)[:\s]+([MFX])/i);
+  // ── Labeled gender ────────────────────────────────────────────────────────────
+  const genderMatch = t.match(/(?:SEX|GENDER|SEXE|GESCHLECHT)[:\s]+([MFX])\b/i);
   if (genderMatch) {
     const g = genderMatch[1].toUpperCase();
     fields.gender = g === 'M' ? 'male' : g === 'F' ? 'female' : 'other';
+  } else if (/\bMALE\b/i.test(t) && !/\bFEMALE\b/i.test(t)) {
+    fields.gender = 'male';
+  } else if (/\bFEMALE\b/i.test(t)) {
+    fields.gender = 'female';
   }
 
-  // ── Document number ──────────────────────────────────────────────────────────
-  const numMatch = t.match(/(?:PASSPORT\s+NO\.?|DOCUMENT\s+NO\.?|LICENCE\s+NO\.?|ID\s+NO\.?|NO\.?\s+)[:\s]+([A-Z0-9]{6,20})/i);
-  if (numMatch) fields.id_number = numMatch[1];
+  // ── PASS 2: Unlabeled heuristics (for IDs without field labels) ──────────────
+  // Collect ALL date-looking strings from the entire text
+  const ALL_DATE_PATTERNS = [
+    /\b(\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4})\b/g,   // DD/MM/YYYY or MM/DD/YYYY
+    /\b(\d{4}[\/\-]\d{2}[\/\-]\d{2})\b/g,         // YYYY-MM-DD
+    /\b(\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\s+\d{4})\b/ig,
+    /\b(\d{2}[\/\.]\d{2}[\/\.]\d{2})\b/g,         // DD/MM/YY
+  ];
+  const foundDates = [];
+  for (const re of ALL_DATE_PATTERNS) {
+    let m;
+    while ((m = re.exec(t)) !== null) {
+      const norm = normaliseDate(m[1]);
+      if (norm && !foundDates.includes(norm)) foundDates.push(norm);
+    }
+  }
+
+  // Assign unlabeled dates by plausibility
+  // DOB: should be ≥18 years ago and ≤120 years ago
+  const now = new Date();
+  const dobCandidates = foundDates.filter(d => {
+    const diff = (now - new Date(d)) / (365.25 * 24 * 3600 * 1000);
+    return diff >= 16 && diff <= 120;
+  });
+  const futureOrRecent = foundDates.filter(d => new Date(d) >= new Date(now.getFullYear() - 2, 0, 1));
+
+  if (!fields.date_of_birth && dobCandidates.length > 0) {
+    fields.date_of_birth = dobCandidates[0];
+  }
+  if (!fields.expiry_date && futureOrRecent.length > 0) {
+    // prefer expiry to be most-future date
+    fields.expiry_date = futureOrRecent.sort().reverse()[0];
+  }
+
+  // ── Unlabeled name heuristics ─────────────────────────────────────────────────
+  // Find lines that look like a person's name: 2-4 words, all alpha, Title Case or ALL CAPS,
+  // no doc-noise words, length 4–40 chars per word
+  if (!fields.full_name) {
+    const nameCandidates = lines.filter(line => {
+      const words = line.split(/\s+/);
+      if (words.length < 2 || words.length > 5) return false;
+      // All words should be alphabetic (allow hyphens, apostrophes)
+      if (!words.every(w => /^[A-ZÀ-Ÿa-zà-ÿ][A-ZÀ-Ÿa-zà-ÿ\-']{1,30}$/.test(w))) return false;
+      // No doc-noise words
+      if (words.some(w => DOC_NOISE_WORDS.has(w.toUpperCase()))) return false;
+      // Must be either all-caps or title case (not mixed-digit)
+      if (!/[A-Za-zÀ-ÿ]/.test(line)) return false;
+      // Should not look like an address (contains numbers)
+      if (/\d/.test(line)) return false;
+      return true;
+    });
+
+    if (nameCandidates.length > 0) {
+      // Prefer lines near the top (after doc type) and that are longer
+      const best = nameCandidates[0];
+      fields.full_name = best.replace(/\s+/g, ' ').trim();
+      const parts = fields.full_name.split(' ');
+      if (parts.length >= 2) {
+        // Normalise to Title Case
+        const toTitle = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+        fields.first_name = toTitle(parts[0]);
+        fields.last_name  = toTitle(parts[parts.length - 1]);
+        if (parts.length > 2) {
+          fields.middle_name = parts.slice(1, -1).map(toTitle).join(' ');
+        }
+        fields.full_name = parts.map(toTitle).join(' ');
+      }
+    }
+  }
+
+  // ── Unlabeled doc number heuristics ──────────────────────────────────────────
+  if (!fields.id_number) {
+    // Passport: one letter + 7–8 digits
+    const passportNo = t.match(/\b([A-Z]\d{7,8})\b/);
+    if (passportNo && fields.id_type === 'passport') {
+      fields.id_number = passportNo[1];
+    }
+    // Generic alphanumeric code 6–12 chars on its own line
+    if (!fields.id_number) {
+      const standalone = lines.find(l => /^[A-Z0-9]{6,15}$/.test(l) && !/^[A-Z]{2,4}$/.test(l));
+      if (standalone) fields.id_number = standalone;
+    }
+  }
 
   // ── Nationality ──────────────────────────────────────────────────────────────
-  const natMatch = t.match(/(?:NATIONALITY|NATIONALITE)[:\s]+([A-Za-z ]+)/i);
-  if (natMatch) fields.nationality = natMatch[1].trim().split('\n')[0];
+  const natMatch = t.match(/(?:NATIONALITY|NATIONALITÉ|STAATSANGEHÖRIGKEIT)[:\s]+([A-Za-zÀ-ÿ ]+)/i);
+  if (natMatch) fields.nationality = natMatch[1].trim().split('\n')[0].replace(/\s+/g,' ');
 
   // ── Address ──────────────────────────────────────────────────────────────────
   const addrMatch = t.match(/(?:ADDRESS|ADRESSE|DOMICILE|RESIDENCE)[:\s]+([^\n]+)/i);
   if (addrMatch) fields.address_line1 = addrMatch[1].trim();
-  const postcodeMatch = t.match(/\b([A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}|\d{4,6})\b/);
+  // UK/AU postcode or US ZIP
+  const postcodeMatch = t.match(/\b([A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}|\d{4,5}(?:-\d{4})?)\b/);
   if (postcodeMatch) fields.postcode = postcodeMatch[1];
 
   return fields;
@@ -307,95 +412,115 @@ async function preprocessImageForOcr(fileBuffer) {
   }
 }
 
-/** 4. Tesseract.js — local OCR with Sharp preprocessing + country-aware templates */
-async function extractWithTesseract(fileBuffer, mimeType) {
+/**
+ * 4. Tesseract.js — local OCR with Sharp preprocessing + country-aware templates
+ *
+ * @param {Buffer}  fileBuffer
+ * @param {string}  mimeType
+ * @param {object}  [hints]             — { countryCode, idType } from the frontend picker
+ */
+async function extractWithTesseract(fileBuffer, mimeType, hints = {}) {
   if (mimeType === 'application/pdf') {
     throw new Error('Tesseract mode does not support PDFs directly. Please upload a JPEG or PNG image.');
   }
 
   const { createWorker } = require('tesseract.js');
 
-  // ── Step 1: Preprocess image for better OCR quality ──────────────────────────
+  // ── Step 1: Preprocess image ──────────────────────────────────────────────────
   const preprocessed = await preprocessImageForOcr(fileBuffer);
 
-  // ── Step 2: Initial pass with English to detect country / ID type ─────────────
+  // ── Step 2: Determine initial Tesseract language ──────────────────────────────
+  // If a country hint was provided, skip initial detection pass and use its lang.
+  const hintedLang = hints.countryCode ? getTessLang(hints.countryCode) : 'eng';
+  const startLang  = hintedLang !== 'eng' ? `eng+${hintedLang}` : 'eng';
+
   let rawText = '';
   let tessConfidence = 0;
-  const workerEng = await createWorker('eng', 1, { logger: () => {} });
   try {
-    const { data } = await workerEng.recognize(preprocessed);
-    rawText       = data.text;
-    tessConfidence = data.confidence;
-  } finally {
-    await workerEng.terminate();
-  }
-
-  console.log(`[id-scan/tesseract] Initial pass confidence: ${tessConfidence.toFixed(1)}%`);
-
-  // ── Step 3: Detect country + ID type template ─────────────────────────────────
-  const templateMatch = detectTemplate(rawText);
-  if (templateMatch) {
-    console.log(`[id-scan/tesseract] Detected template: ${templateMatch.countryCode} / ${templateMatch.idType}`);
-  } else {
-    console.log('[id-scan/tesseract] No country template matched — using generic extraction');
-  }
-
-  // ── Step 4: Re-run Tesseract with country-specific language (if different) ─────
-  const tessLang = templateMatch ? templateMatch.tessLang : 'eng';
-  let finalText = rawText;
-  if (tessLang !== 'eng') {
+    const worker = await createWorker(startLang, 1, { logger: () => {} });
     try {
-      const workerLang = await createWorker(tessLang, 1, { logger: () => {} });
-      try {
-        const { data } = await workerLang.recognize(preprocessed);
-        if (data.confidence > tessConfidence) {
-          finalText      = data.text;
-          tessConfidence = data.confidence;
-          console.log(`[id-scan/tesseract] Language-specific pass (${tessLang}) improved confidence to ${tessConfidence.toFixed(1)}%`);
-        }
-      } finally {
-        await workerLang.terminate();
-      }
-    } catch (langErr) {
-      console.warn(`[id-scan/tesseract] Language ${tessLang} not available, sticking with eng:`, langErr.message);
+      const { data } = await worker.recognize(preprocessed);
+      rawText        = data.text;
+      tessConfidence = data.confidence;
+    } finally {
+      await worker.terminate();
+    }
+  } catch {
+    // startLang may not be installed — fall back to eng
+    const worker = await createWorker('eng', 1, { logger: () => {} });
+    try {
+      const { data } = await worker.recognize(preprocessed);
+      rawText        = data.text;
+      tessConfidence = data.confidence;
+    } finally {
+      await worker.terminate();
     }
   }
 
-  // ── Step 5: Apply template or generic extraction ──────────────────────────────
+  console.log(`[id-scan/tesseract] Initial pass (${startLang}) confidence: ${tessConfidence.toFixed(1)}%`);
+
+  // ── Step 3: Template detection ────────────────────────────────────────────────
+  // Use frontend hint if provided — otherwise auto-detect from OCR text.
+  let templateMatch;
+  if (hints.countryCode) {
+    const { TEMPLATES } = require('../services/idTemplates');
+    const country = TEMPLATES[hints.countryCode.toUpperCase()];
+    if (country) {
+      const idType = hints.idType && country.idTypes[hints.idType]
+        ? hints.idType
+        : Object.keys(country.idTypes)[0];
+      templateMatch = {
+        countryCode: hints.countryCode.toUpperCase(),
+        idType,
+        template:   country.idTypes[idType],
+        tessLang:   country.tessLang,
+      };
+      console.log(`[id-scan/tesseract] Using hinted template: ${templateMatch.countryCode} / ${templateMatch.idType}`);
+    }
+  }
+  if (!templateMatch) {
+    templateMatch = detectTemplate(rawText);
+    if (templateMatch) {
+      console.log(`[id-scan/tesseract] Auto-detected template: ${templateMatch.countryCode} / ${templateMatch.idType}`);
+    } else {
+      console.log('[id-scan/tesseract] No template matched — using generic extraction');
+    }
+  }
+
+  const finalText = rawText;
+
+  // ── Step 4: Apply template or generic extraction ──────────────────────────────
   let fields;
   if (templateMatch) {
-    // Template-driven extraction — country-specific regexes with correct date formats
     const templateFields = applyTemplate(finalText, templateMatch);
-
-    // Normalise dates using the template's declared format
     const dateFormat = templateFields._dateFormat || 'DD/MM/YYYY';
-    for (const dateKey of ['date_of_birth', 'expiry_date', 'issue_date']) {
-      if (templateFields[dateKey]) {
-        templateFields[dateKey] = normaliseDateWithFormat(templateFields[dateKey], dateFormat);
+    for (const dk of ['date_of_birth', 'expiry_date', 'issue_date']) {
+      if (templateFields[dk]) {
+        templateFields[dk] = normaliseDateWithFormat(templateFields[dk], dateFormat);
       }
     }
 
-    // Run generic extraction as a fallback to fill any null fields
+    // Generic extraction fills in any fields the template missed
     const genericFields = extractFieldsFromText(finalText);
 
-    // Merge: template wins, generic fills gaps
+    // Merge: template wins over generic, but generic fills nulls
     fields = {
       ...genericFields,
       ...Object.fromEntries(Object.entries(templateFields).filter(([, v]) => v !== null && v !== undefined)),
     };
-
-    // Clean up internal template metadata fields
     delete fields._dateFormat;
     delete fields._hasMrz;
 
-    // Boost confidence because template matched
     const normalised = Math.round((tessConfidence / 100) * 0.85 * 100) / 100;
-    fields.confidence = Math.max(normalised, 0.6);  // template match implies at least 0.6
-
+    fields.confidence = Math.max(normalised, 0.6);
   } else {
-    // No template — fall back to generic regex extraction
     fields = extractFieldsFromText(finalText);
     fields.confidence = Math.round((tessConfidence / 100) * 0.75 * 100) / 100;
+  }
+
+  // Override id_type from hint if the template/generic detection still left it as 'other'
+  if (hints.idType && (!fields.id_type || fields.id_type === 'other')) {
+    fields.id_type = hints.idType;
   }
 
   return fields;
@@ -495,7 +620,10 @@ async function extractWithOpenAI(apiKey, fileBuffer, mimeType) {
 
 // ── Provider resolution ───────────────────────────────────────────────────────
 
-async function resolveOcr(db, fileBuffer, mimeType) {
+/**
+ * @param {object} [hints] — { countryCode, idType } forwarded from frontend picker
+ */
+async function resolveOcr(db, fileBuffer, mimeType, hints = {}) {
   const ollamaModel = process.env.OLLAMA_VISION_MODEL || 'llama3.2-vision';
 
   // 1. Ollama (open-source, self-hosted) — best quality, zero cost
@@ -511,8 +639,7 @@ async function resolveOcr(db, fileBuffer, mimeType) {
     }
   } catch { /* ai_settings may not exist yet */ }
 
-  // 2. Anthropic Claude Vision — far more accurate than Tesseract for ID docs
-  //    Check env var first, then tenant settings, then platform config
+  // 2. Anthropic Claude Vision
   try {
     const anthropicKey = await getCloudKey(db, 'anthropic');
     if (anthropicKey) {
@@ -535,12 +662,11 @@ async function resolveOcr(db, fileBuffer, mimeType) {
   }
 
   // 4. Tesseract.js — local OCR with Sharp preprocessing + country ID templates
-  //    Much better than raw Tesseract, but still less accurate than vision AI for
-  //    poor-quality photos. Always available for image uploads with no API cost.
   if (mimeType.startsWith('image/')) {
-    console.log('[id-scan] Using Tesseract.js with Sharp preprocessing + country templates');
+    console.log('[id-scan] Using Tesseract.js with Sharp preprocessing + country templates'
+      + (hints.countryCode ? ` (hint: ${hints.countryCode}/${hints.idType || 'auto'})` : ''));
     try {
-      return await extractWithTesseract(fileBuffer, mimeType);
+      return await extractWithTesseract(fileBuffer, mimeType, hints);
     } catch (tessErr) {
       console.warn('[id-scan] Tesseract failed:', tessErr.message);
     }
@@ -576,9 +702,15 @@ router.post('/extract', requireAdmin, upload.single('id_image'), async (req, res
       return res.status(400).json({ error: 'No file uploaded. Send an image or PDF as field "id_image".' });
     }
 
+    // Optional hints from the frontend document-type picker
+    const hints = {
+      countryCode: (req.body?.country_hint || '').trim().toUpperCase() || null,
+      idType:      (req.body?.id_type_hint || '').trim().toLowerCase() || null,
+    };
+
     let extracted;
     try {
-      extracted = await resolveOcr(db, req.file.buffer, req.file.mimetype);
+      extracted = await resolveOcr(db, req.file.buffer, req.file.mimetype, hints);
     } catch (ocrErr) {
       const logRes = await db.query(
         `INSERT INTO id_scan_logs (scanned_by, outcome, error_message) VALUES ($1,'failed',$2) RETURNING id`,
